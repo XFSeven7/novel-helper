@@ -6,6 +6,8 @@ export type BookMeta = {
   title: string;
   createdAt: string;
   synopsis?: string;
+  abandoned?: boolean;
+  abandonedAt?: string;
 };
 
 function normalizeBookMeta(parsed: BookMeta, slugFallback: string): BookMeta {
@@ -13,7 +15,9 @@ function normalizeBookMeta(parsed: BookMeta, slugFallback: string): BookMeta {
     slug: parsed.slug ?? slugFallback,
     title: parsed.title ?? slugFallback,
     createdAt: parsed.createdAt ?? new Date(0).toISOString(),
-    synopsis: typeof parsed.synopsis === "string" ? parsed.synopsis : ""
+    synopsis: typeof parsed.synopsis === "string" ? parsed.synopsis : "",
+    abandoned: Boolean((parsed as any).abandoned),
+    abandonedAt: typeof (parsed as any).abandonedAt === "string" ? (parsed as any).abandonedAt : ""
   };
 }
 
@@ -55,6 +59,34 @@ export type StoryFile = {
   tags?: string[];
 };
 
+export type AuditRun = {
+  chapter: {
+    filename: string;
+    id: string;
+    title: string;
+    wordCount: number;
+    auditedAt: string;
+  };
+  gistL1: string;
+  entities: {
+    characters: Array<{
+      name: string;
+      newOrExisting: "new" | "existing" | "unknown";
+      role?: string;
+      tags?: string[];
+      state?: Record<string, any>;
+      evidenceQuotes?: string[];
+    }>;
+    events: Array<Record<string, any>>;
+  };
+  consistencyChecks: Array<Record<string, any>>;
+  causalAnchors: { setups: any[]; payoffs: any[] };
+  impactAnalysis: Array<{ item: string; impactScore: number; why: string; futureImplications: string[] }>;
+  compression: { l2Pruning: any; mergeCandidates: any };
+  ledgerUpdates: { openLoops: any[]; closedLoops: any[] };
+  uiInjection: { spotlightCharacters: string[]; spotlightTags: string[] };
+};
+
 async function exists(p: string) {
   try {
     await fs.access(p);
@@ -62,6 +94,73 @@ async function exists(p: string) {
   } catch {
     return false;
   }
+}
+
+function auditDir(dataDir: string, novelSlug: string) {
+  return path.join(dataDir, novelSlug, "meta", "audit");
+}
+
+export async function writeAuditRun(dataDir: string, novelSlug: string, chapterFilename: string, run: AuditRun) {
+  const dir = path.join(auditDir(dataDir, novelSlug), "auditRuns");
+  await ensureDir(dir);
+  const p = path.join(dir, `${chapterFilename}.json`);
+  await fs.writeFile(p, JSON.stringify(run, null, 2), "utf8");
+}
+
+export async function readAuditRun(dataDir: string, novelSlug: string, chapterFilename: string): Promise<AuditRun | null> {
+  const p = path.join(auditDir(dataDir, novelSlug), "auditRuns", `${chapterFilename}.json`);
+  if (!(await exists(p))) return null;
+  const raw = await fs.readFile(p, "utf8");
+  return JSON.parse(raw) as AuditRun;
+}
+
+export async function readAuditLedger(dataDir: string, novelSlug: string): Promise<any> {
+  const p = path.join(auditDir(dataDir, novelSlug), "karmaLedger.json");
+  if (!(await exists(p))) return { openLoops: [], closedLoops: [], updatedAt: "" };
+  return JSON.parse(await fs.readFile(p, "utf8"));
+}
+
+export async function writeAuditLedger(dataDir: string, novelSlug: string, ledger: any) {
+  const dir = auditDir(dataDir, novelSlug);
+  await ensureDir(dir);
+  const p = path.join(dir, "karmaLedger.json");
+  await fs.writeFile(p, JSON.stringify(ledger, null, 2), "utf8");
+}
+
+export async function readAuditCharactersIndex(dataDir: string, novelSlug: string): Promise<any> {
+  const p = path.join(auditDir(dataDir, novelSlug), "charactersIndex.json");
+  if (!(await exists(p))) return { characters: [], updatedAt: "" };
+  return JSON.parse(await fs.readFile(p, "utf8"));
+}
+
+export async function writeAuditCharactersIndex(dataDir: string, novelSlug: string, idx: any) {
+  const dir = auditDir(dataDir, novelSlug);
+  await ensureDir(dir);
+  const p = path.join(dir, "charactersIndex.json");
+  await fs.writeFile(p, JSON.stringify(idx, null, 2), "utf8");
+}
+
+export async function deleteBook(dataDir: string, slug: string): Promise<void> {
+  // 兼容旧接口：改为“废弃书籍”
+  const dir = path.join(dataDir, slug);
+  const metaPath = path.join(dir, "meta.json");
+  if (!(await exists(metaPath))) throw new Error("Not found");
+  const raw = await fs.readFile(metaPath, "utf8");
+  const parsed = JSON.parse(raw) as BookMeta;
+  const meta = normalizeBookMeta(parsed, slug);
+  const next: BookMeta = { ...meta, abandoned: true, abandonedAt: new Date().toISOString() };
+  await fs.writeFile(metaPath, JSON.stringify(next, null, 2), "utf8");
+}
+
+export async function restoreBook(dataDir: string, slug: string): Promise<void> {
+  const dir = path.join(dataDir, slug);
+  const metaPath = path.join(dir, "meta.json");
+  if (!(await exists(metaPath))) throw new Error("Not found");
+  const raw = await fs.readFile(metaPath, "utf8");
+  const parsed = JSON.parse(raw) as BookMeta;
+  const meta = normalizeBookMeta(parsed, slug);
+  const next: BookMeta = { ...meta, abandoned: false, abandonedAt: "" };
+  await fs.writeFile(metaPath, JSON.stringify(next, null, 2), "utf8");
 }
 
 /** 章节正文文件：`0001_章节名.md`（序号递增；列表展示标题为下划线后的部分） */
@@ -263,6 +362,7 @@ export async function listBooks(dataDir: string): Promise<BookSummary[]> {
       const raw = await fs.readFile(metaPath, "utf8");
       const parsed = JSON.parse(raw) as BookMeta;
       const meta = normalizeBookMeta(parsed, slug);
+      if (meta.abandoned) continue;
       const bookDir = path.join(dataDir, slug);
       const chapterCount = await countChapterMarkdownFiles(bookDir);
       const missingChapterIndexes = await missingChapterIndexesFromDir(bookDir);

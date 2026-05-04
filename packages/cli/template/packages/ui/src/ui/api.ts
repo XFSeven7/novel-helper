@@ -63,6 +63,14 @@ export async function patchBookSynopsis(slug: string, synopsis: string) {
   });
 }
 
+export async function deleteBook(slug: string) {
+  return await http<{ ok: true }>(`/api/books/${encodeURIComponent(slug)}`, { method: "DELETE" });
+}
+
+export async function restoreBook(slug: string) {
+  return await http<{ ok: true }>(`/api/books/${encodeURIComponent(slug)}/restore`, { method: "POST" });
+}
+
 export async function listChapters(slug: string) {
   return await http<{ chapters: ChapterMeta[] }>(`/api/books/${encodeURIComponent(slug)}/chapters`);
 }
@@ -102,6 +110,48 @@ export async function deleteChapter(slug: string, filename: string) {
     `/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}`,
     { method: "DELETE" }
   );
+}
+
+export type ModelProviderId = "openai" | "deepseek" | "gemini" | "qwen" | "ollama" | "custom";
+export type ModelConfig = {
+  id: string;
+  label: string;
+  provider: ModelProviderId;
+  baseUrl: string;
+  apiKey: string;
+  testUrl: string;
+  model?: string;
+  extraHeadersJson?: string;
+  lastTestOk?: boolean;
+  lastModels?: string[];
+};
+
+export async function putModelConfigs(input: { configs: ModelConfig[]; activeId: string | null }) {
+  return await http<{ ok: true }>(`/api/settings/model-configs`, {
+    method: "PUT",
+    body: JSON.stringify({ configs: input.configs, activeId: input.activeId })
+  });
+}
+
+export async function auditChapter(slug: string, filename: string, modelConfigId: string | null) {
+  return await http<{ run: any }>(`/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}/audit`, {
+    method: "POST",
+    body: JSON.stringify({ modelConfigId })
+  });
+}
+
+export async function getAuditLatest(slug: string, chapterFilename: string) {
+  return await http<{ run: any }>(
+    `/api/books/${encodeURIComponent(slug)}/audit/latest?chapter=${encodeURIComponent(chapterFilename)}`
+  );
+}
+
+export async function getAuditLedger(slug: string) {
+  return await http<{ ledger: any }>(`/api/books/${encodeURIComponent(slug)}/audit/ledger`);
+}
+
+export async function getAuditCharacters(slug: string) {
+  return await http<{ index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/characters`);
 }
 
 export async function listStory(slug: string) {

@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   ChapterMeta,
   BookMeta,
@@ -6,7 +8,6 @@ import {
   createChapter,
   createBook,
   createCharacter,
-  deleteChapter,
   listChapters,
   listBooks,
   listStory,
@@ -15,7 +16,14 @@ import {
   renameChapter,
   updateChapter,
   updateStoryFile,
-  patchBookSynopsis
+  patchBookSynopsis,
+  deleteBook,
+  restoreBook,
+  putModelConfigs,
+  auditChapter,
+  getAuditLatest,
+  getAuditLedger,
+  getAuditCharacters
 } from "./api";
 
 type SelectedChapter = { bookSlug: string; filename: string } | null;
@@ -54,8 +62,96 @@ const THEME_OPTIONS: Array<{ id: ThemePreference; label: string }> = [
 const CHARACTER_ROLE_OPTIONS = ["主角", "配角", "反派", "盟友", "路人", "其他"] as const;
 type CharacterRole = (typeof CHARACTER_ROLE_OPTIONS)[number];
 
+function auditCharacterRoleClass(role: string): string {
+  switch (role) {
+    case "主角":
+      return "auditCharRole auditCharRoleProtagonist";
+    case "反派":
+      return "auditCharRole auditCharRoleVillain";
+    case "盟友":
+      return "auditCharRole auditCharRoleAlly";
+    case "配角":
+      return "auditCharRole auditCharRoleSupporting";
+    case "路人":
+      return "auditCharRole auditCharRoleExtra";
+    default:
+      return "auditCharRole auditCharRoleOther";
+  }
+}
+
+function auditCharacterNewBadgeClass(v: string): string {
+  const t = (v || "").toLowerCase();
+  if (t === "new") return "auditCharMeta auditCharMetaNew";
+  if (t === "existing") return "auditCharMeta auditCharMetaExisting";
+  return "auditCharMeta auditCharMetaUnknown";
+}
+
+function formatAuditCharField(v: unknown): string {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "string") return v.trim();
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  if (Array.isArray(v)) {
+    const parts = v.map((x) => formatAuditCharField(x)).filter(Boolean);
+    return parts.join("；");
+  }
+  if (typeof v === "object") {
+    try {
+      return JSON.stringify(v);
+    } catch {
+      return String(v);
+    }
+  }
+  return String(v);
+}
+
+function friendlyAuditFieldKey(k: string): string {
+  const map: Record<string, string> = {
+    personality: "性格",
+    motivation: "动机",
+    speechStyle: "说话风格",
+    relationships: "关系",
+    appearance: "外貌",
+    contrast: "反差",
+    known: "已知信息",
+    unknown: "未知 / 伏笔",
+    summary: "概要",
+    notes: "备注",
+    currentScene: "当前戏份",
+    emotion: "情绪",
+    arcHint: "弧线提示",
+    goal: "目标",
+    faction: "阵营",
+    age: "年龄",
+    aliases: "别名"
+  };
+  return map[k] ?? k;
+}
+
+function auditCharStateExtraRows(st: Record<string, unknown>): Array<[string, string]> {
+  const skip = new Set(["location", "injuries", "items", "moneyChange"]);
+  const rows: Array<[string, string]> = [];
+  for (const [k, v] of Object.entries(st)) {
+    if (skip.has(k)) continue;
+    const val = formatAuditCharField(v);
+    if (!val) continue;
+    rows.push([friendlyAuditFieldKey(k), val]);
+  }
+  return rows;
+}
+
+function auditCharTopExtraRows(c: Record<string, unknown>): Array<[string, string]> {
+  const skip = new Set(["name", "role", "tags", "newOrExisting", "state", "evidenceQuotes"]);
+  const rows: Array<[string, string]> = [];
+  for (const [k, v] of Object.entries(c)) {
+    if (skip.has(k)) continue;
+    const val = formatAuditCharField(v);
+    if (!val) continue;
+    rows.push([friendlyAuditFieldKey(k), val]);
+  }
+  return rows;
+}
+
 const CHARACTER_TAG_OPTIONS = ["盟友", "敌对", "家人", "同事", "组织", "阵营"] as const;
-type CharacterTag = (typeof CHARACTER_TAG_OPTIONS)[number];
 
 type ModelProviderId = "openai" | "deepseek" | "gemini" | "qwen" | "ollama" | "custom";
 
@@ -70,6 +166,8 @@ type ModelConfig = {
   extraHeadersJson?: string;
   /** 最近一次测试是否通过（仅用于 UI 展示） */
   lastTestOk?: boolean;
+  /** 仅部分 provider 可提供：最近一次测试拿到的模型列表（如 Ollama /api/tags） */
+  lastModels?: string[];
 };
 
 const BUILTIN_MODEL_PROVIDERS: Array<{ id: ModelProviderId; label: string }> = [
@@ -254,6 +352,8 @@ export function App() {
   const [chapterGapModalDraftTitle, setChapterGapModalDraftTitle] = useState("");
   const [modalNewTitle, setModalNewTitle] = useState("");
   const [modalNewSynopsis, setModalNewSynopsis] = useState("");
+  const [deleteBookModalOpen, setDeleteBookModalOpen] = useState(false);
+  const [deleteBookTarget, setDeleteBookTarget] = useState<BookMeta | null>(null);
   const [shelfPeekSlug, setShelfPeekSlug] = useState<string | null>(null);
   const [shelfPeekDraft, setShelfPeekDraft] = useState("");
   const [shelfPeekSaving, setShelfPeekSaving] = useState(false);
@@ -268,12 +368,10 @@ export function App() {
   const [chapterContent, setChapterContent] = useState("");
   const [cardContent, setCardContent] = useState("");
   const [storyFiles, setStoryFiles] = useState<StoryFile[]>([]);
-  const [charFiles, setCharFiles] = useState<StoryFile[]>([]);
-  const [rightTab, setRightTab] = useState<"characters" | "story" | "places" | "orgs" | "timeline">(
-    "characters"
-  );
-  const [characterRoleFilter, setCharacterRoleFilter] = useState<"全部" | CharacterRole>("全部");
-  const [characterTagFilter, setCharacterTagFilter] = useState<CharacterTag[]>([]);
+  const [rightTab, setRightTab] = useState<
+    "chapterSummary" | "auditCharacters" | "story" | "places" | "orgs" | "timeline"
+  >("chapterSummary");
+  const [expandedAuditCharIds, setExpandedAuditCharIds] = useState<Record<string, boolean>>({});
   const [status, setStatus] = useState<string>("");
   const [busy, setBusy] = useState(false);
 
@@ -373,35 +471,6 @@ export function App() {
       next: i + 1 < displayedChapters.length ? displayedChapters[i + 1] : null
     };
   }, [displayedChapters, selectedChapter?.filename]);
-
-  const filteredCharFiles = useMemo(() => {
-    const roleFiltered = charFiles.filter((f) => {
-      const r = (f.role || "配角") as CharacterRole;
-      if (characterRoleFilter === "全部") return true;
-      return r === characterRoleFilter;
-    });
-    if (characterTagFilter.length === 0) return roleFiltered;
-    return roleFiltered.filter((f) => {
-      const tags = new Set((f.tags ?? []) as string[]);
-      return characterTagFilter.every((t) => tags.has(t));
-    });
-  }, [charFiles, characterRoleFilter, characterTagFilter]);
-
-  const groupedCharFiles = useMemo(() => {
-    const groups = new Map<CharacterRole, StoryFile[]>();
-    for (const r of CHARACTER_ROLE_OPTIONS) groups.set(r, []);
-    groups.set("其他", []);
-    for (const f of filteredCharFiles) {
-      const r = (f.role || "配角") as CharacterRole;
-      const key = CHARACTER_ROLE_OPTIONS.includes(r) ? r : "其他";
-      groups.get(key)!.push(f);
-    }
-    for (const [k, arr] of groups) {
-      arr.sort((a, b) => a.title.localeCompare(b.title, "zh-Hans-CN"));
-      if (arr.length === 0) groups.delete(k);
-    }
-    return [...groups.entries()];
-  }, [filteredCharFiles]);
 
   const canRenameChapterFilename = useMemo(() => {
     if (!selectedChapter?.filename) return false;
@@ -535,9 +604,8 @@ export function App() {
   }
 
   async function refreshStory(bookSlug: string) {
-    const { storyFiles, charFiles } = await listStory(bookSlug);
+    const { storyFiles } = await listStory(bookSlug);
     setStoryFiles(storyFiles);
-    setCharFiles(charFiles);
   }
 
   useEffect(() => {
@@ -627,6 +695,154 @@ export function App() {
       // ignore
     }
   }, [modelConfigs, activeModelId]);
+
+  useEffect(() => {
+    // 同步到服务端供审计调用（失败不影响前端使用）
+    void putModelConfigs({ configs: modelConfigs as any, activeId: activeModelId ?? null }).catch(() => {});
+  }, [modelConfigs, activeModelId]);
+
+  const [auditRun, setAuditRun] = useState<any | null>(null);
+  const [auditLedger, setAuditLedger] = useState<any | null>(null);
+  const [auditCharactersIndex, setAuditCharactersIndex] = useState<any | null>(null);
+  const [auditBusy, setAuditBusy] = useState(false);
+  const okModelConfigs = useMemo(() => modelConfigs.filter((c) => c.lastTestOk), [modelConfigs]);
+  const [auditModelPickerOpen, setAuditModelPickerOpen] = useState(false);
+  const [auditModelSearch, setAuditModelSearch] = useState("");
+  const [auditStreamOpen, setAuditStreamOpen] = useState(false);
+  type AuditStreamPhase = "idle" | "running" | "done" | "error";
+  const [auditStreamPhase, setAuditStreamPhase] = useState<AuditStreamPhase>("idle");
+  const [auditStreamText, setAuditStreamText] = useState("");
+  const auditStreamRef = useRef<HTMLDivElement | null>(null);
+  /** SSE 收到的完整思考缓冲（服务端可能一次推一大块）；界面用 RAF 逐段追上 */
+  const auditThinkingBufferRef = useRef("");
+  const auditDisplayedLenRef = useRef(0);
+  const auditRevealRafRef = useRef<number | null>(null);
+
+  const flushAuditThinkingReveal = useCallback(() => {
+    auditRevealRafRef.current = null;
+    const full = auditThinkingBufferRef.current;
+    let len = auditDisplayedLenRef.current;
+    if (len >= full.length) return;
+    const backlog = full.length - len;
+    const stride =
+      backlog > 2500 ? 20 : backlog > 1000 ? 10 : backlog > 400 ? 4 : backlog > 150 ? 2 : 1;
+    len = Math.min(len + stride, full.length);
+    auditDisplayedLenRef.current = len;
+    setAuditStreamText(full.slice(0, len));
+    if (len < full.length) {
+      auditRevealRafRef.current = requestAnimationFrame(flushAuditThinkingReveal);
+    }
+  }, []);
+
+  const appendAuditThinkingDelta = useCallback(
+    (delta: string) => {
+      const d = delta ?? "";
+      if (!d) return;
+      auditThinkingBufferRef.current += d;
+      if (auditRevealRafRef.current == null) {
+        auditRevealRafRef.current = requestAnimationFrame(flushAuditThinkingReveal);
+      }
+    },
+    [flushAuditThinkingReveal]
+  );
+
+  const resetAuditThinkingReveal = useCallback(() => {
+    if (auditRevealRafRef.current != null) {
+      cancelAnimationFrame(auditRevealRafRef.current);
+      auditRevealRafRef.current = null;
+    }
+    auditThinkingBufferRef.current = "";
+    auditDisplayedLenRef.current = 0;
+    setAuditStreamText("");
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (auditRevealRafRef.current != null) cancelAnimationFrame(auditRevealRafRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!auditStreamOpen) return;
+    const el = auditStreamRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, [auditStreamText, auditStreamOpen]);
+
+  useEffect(() => {
+    // 只允许选择“连接成功”的配置；如果当前 active 不在成功列表，自动回落
+    if (!okModelConfigs.length) return;
+    if (activeModelId && okModelConfigs.some((c) => c.id === activeModelId)) return;
+    setModelState((prev) => ({ ...prev, activeId: okModelConfigs[0].id }));
+  }, [okModelConfigs, activeModelId]);
+
+  const activeModelLabel = useMemo(() => {
+    const c = okModelConfigs.find((x) => x.id === activeModelId) ?? okModelConfigs[0];
+    if (!c) return "暂无可用模型";
+    const name = (c.model ?? "").trim();
+    return name ? `${c.label} · ${name}` : c.label;
+  }, [okModelConfigs, activeModelId]);
+
+  const okModelGroups = useMemo(() => {
+    type Item =
+      | { kind: "config"; id: string; configId: string; label: string }
+      | { kind: "ollamaModel"; id: string; configId: string; label: string; modelName: string };
+
+    const toItems = (c: ModelConfig): Item[] => {
+      if (c.provider === "ollama" && Array.isArray(c.lastModels) && c.lastModels.length) {
+        const uniq = [...new Set(c.lastModels.map((x) => String(x).trim()).filter(Boolean))].slice(0, 200);
+        uniq.sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+        return uniq.map((name) => ({
+          kind: "ollamaModel",
+          id: `${c.id}::${name}`,
+          configId: c.id,
+          label: name,
+          modelName: name
+        }));
+      }
+      const label = (c.model ?? "").trim() || c.label;
+      return [{ kind: "config", id: c.id, configId: c.id, label }];
+    };
+
+    const byProvider = new Map<ModelProviderId, Item[]>();
+    for (const c of okModelConfigs) {
+      const arr = byProvider.get(c.provider) ?? [];
+      arr.push(...toItems(c));
+      byProvider.set(c.provider, arr);
+    }
+    const labelOf = (p: ModelProviderId) => BUILTIN_MODEL_PROVIDERS.find((x) => x.id === p)?.label ?? p;
+    return BUILTIN_MODEL_PROVIDERS.map((p) => ({ id: p.id, label: labelOf(p.id), items: byProvider.get(p.id) ?? [] }));
+  }, [okModelConfigs]);
+
+  const okModelGroupsFiltered = useMemo(() => {
+    const q = auditModelSearch.trim().toLowerCase();
+    if (!q) return okModelGroups.filter((g) => g.items.length);
+    return okModelGroups
+      .map((g) => ({
+        ...g,
+        items: g.items.filter((it: any) => {
+          const s = `${g.label} ${it.label} ${it.kind ?? ""}`.toLowerCase();
+          return s.includes(q);
+        })
+      }))
+      .filter((g) => g.items.length);
+  }, [okModelGroups, auditModelSearch]);
+
+  async function goModelConfigList() {
+    try {
+      await flushSynopsisSave();
+      await flushChapterSave();
+    } catch {
+      // ignore
+    }
+    setAuditModelPickerOpen(false);
+    setAuditModelSearch("");
+    setNavHome(true);
+    setHomeCenterTab("model");
+    setActiveBook("");
+    setSelectedChapter(null);
+    setSelectedCard(null);
+  }
 
   useEffect(() => {
     if (!activeBook) return;
@@ -785,23 +1001,36 @@ export function App() {
     }
   }
 
-  async function onDeleteChapter() {
-    if (!activeBook || !selectedChapter || !selectedChapterMeta) return;
-    const label = selectedChapterMeta.id;
-    if (!window.confirm(`确定删除章节「${label}」？本地 Markdown 文件将永久删除。`)) return;
-    clearChapterTimer();
+  function openDeleteBookModal(b: BookMeta) {
+    setDeleteBookTarget(b);
+    setDeleteBookModalOpen(true);
+  }
+
+  function closeDeleteBookModal() {
+    setDeleteBookModalOpen(false);
+    setDeleteBookTarget(null);
+  }
+
+  async function confirmDeleteBook() {
+    const b = deleteBookTarget;
+    if (!b) return;
     setBusy(true);
     setStatus("");
     try {
-      await deleteChapter(activeBook, selectedChapter.filename);
-      setSelectedChapter(null);
-      setChapterContent("");
-      chapterBaselineRef.current = "";
-      setChapterAutosaveHint("");
-      setChapterTitleEditing(false);
-      await refreshChapters(activeBook);
+      await deleteBook(b.slug);
+      closeDeleteBookModal();
+      setShelfPeekSlug(null);
       await refreshBooks();
-      setStatus("已删除章节。");
+      if (activeBookRef.current === b.slug) {
+        setNavHome(true);
+        setHomeCenterTab("welcome");
+        setActiveBook("");
+        setSelectedChapter(null);
+        setSelectedCard(null);
+        setChapterContent("");
+        setCardContent("");
+      }
+      setStatus(`已废弃书籍：《${b.title}》`);
     } catch (e: any) {
       setStatus(e?.message || String(e));
     } finally {
@@ -919,10 +1148,103 @@ export function App() {
       setChapterContent(content);
       chapterBaselineRef.current = content;
       queueMicrotask(() => scrollChapterToTop());
+      void loadAuditArtifacts(activeBook, c.filename);
+      resetAuditThinkingReveal();
+      setAuditStreamPhase("idle");
     } catch (e: any) {
       setStatus(e?.message || String(e));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function loadAuditArtifacts(slug: string, chapterFilename: string) {
+    try {
+      const [{ run }, { ledger }, { index }] = await Promise.all([
+        getAuditLatest(slug, chapterFilename).catch(() => ({ run: null })),
+        getAuditLedger(slug).catch(() => ({ ledger: null })),
+        getAuditCharacters(slug).catch(() => ({ index: null }))
+      ]);
+      setAuditRun(run);
+      setAuditLedger(ledger);
+      setAuditCharactersIndex(index);
+    } catch {
+      // ignore
+    }
+  }
+
+  async function onAuditSelectedChapter() {
+    if (!activeBook || !selectedChapter) return;
+    if (!okModelConfigs.length) {
+      setStatus("没有可用模型：请先在「模型配置」里测试连接，连接成功后再分析。");
+      return;
+    }
+    setAuditBusy(true);
+    setStatus("");
+    setAuditStreamPhase("running");
+    resetAuditThinkingReveal();
+    try {
+      // 先尽力同步一次（避免服务端没有最新配置）
+      await putModelConfigs({ configs: modelConfigs as any, activeId: activeModelId ?? null }).catch(() => {});
+
+      const res = await fetch(
+        `${(import.meta as any).env?.VITE_API_BASE || "http://127.0.0.1:3177"}/api/books/${encodeURIComponent(
+          activeBook
+        )}/chapters/${encodeURIComponent(selectedChapter.filename)}/audit/stream`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ modelConfigId: activeModelId ?? null })
+        }
+      );
+      if (!res.ok || !res.body) {
+        const t = await res.text().catch(() => "");
+        throw new Error(t || `HTTP ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buf = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf("\n\n")) >= 0) {
+          const chunk = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          const line = chunk
+            .split("\n")
+            .map((l) => l.trimEnd())
+            .find((l) => l.startsWith("data:"));
+          if (!line) continue;
+          const payloadText = line.replace(/^data:\s?/, "");
+          try {
+            const payload = JSON.parse(payloadText) as any;
+            // 只展示“思考过程”：优先消费 reasoning
+            if (payload.type === "reasoning") {
+              appendAuditThinkingDelta(payload.textDelta ?? "");
+            }
+            // 兼容：服务端可能仍发送 log（不展示或可切换为展示）
+            if (payload.type === "done") {
+              if (payload.run) setAuditRun(payload.run);
+              await loadAuditArtifacts(activeBook, selectedChapter.filename);
+              setAuditStreamPhase("done");
+            }
+            if (payload.type === "error") {
+              throw new Error(payload.message || "分析失败");
+            }
+          } catch (e: any) {
+            // 如果不是 JSON，就直接当日志
+            // 不再展示（避免把最终 JSON 混进“思考过程”）
+          }
+        }
+      }
+    } catch (e: any) {
+      setAuditStreamPhase("error");
+      setStatus(e?.message || String(e));
+    } finally {
+      setAuditBusy(false);
     }
   }
 
@@ -1065,6 +1387,7 @@ export function App() {
       const res = await fetch(cfg.testUrl, { method: "GET", headers });
       const text = await res.text().catch(() => "");
       let suffix = text ? ` · ${text.slice(0, 120)}` : "";
+      let lastModels: string[] | undefined = undefined;
       if (cfg.provider === "ollama" || cfg.testUrl.includes("/api/tags")) {
         try {
           const j = JSON.parse(text) as any;
@@ -1075,6 +1398,9 @@ export function App() {
             const preview = names.slice(0, 6).join("、");
             suffix = ` · 共 ${names.length} 个模型：${preview}${names.length > 6 ? "…" : ""}`;
           }
+          // 存一份供“当前模型选择器”使用
+          setModelEditorDraft((prev) => (prev ? { ...prev, lastModels: names } : prev));
+          lastModels = names;
         } catch {
           // ignore
         }
@@ -1083,7 +1409,9 @@ export function App() {
       setModelEditorDraft((prev) => (prev ? { ...prev, lastTestOk: ok } : prev));
       setModelState((prev) => ({
         ...prev,
-        configs: prev.configs.map((c) => (c.id === cfg.id ? { ...c, lastTestOk: ok } : c))
+        configs: prev.configs.map((c) =>
+          c.id === cfg.id ? { ...c, lastTestOk: ok, lastModels: lastModels ?? c.lastModels } : c
+        )
       }));
       setModelTestStatus(`HTTP ${res.status}${suffix}`);
     } catch (e: any) {
@@ -1209,6 +1537,16 @@ export function App() {
                                     </button>
                                   </div>
                                 )}
+                                <div className="bookShelfDangerRow">
+                                  <button
+                                    type="button"
+                                    className="btnDanger"
+                                    disabled={busy}
+                                    onClick={() => openDeleteBookModal(b)}
+                                  >
+                                    废弃书籍
+                                  </button>
+                                </div>
                               </div>
                             ) : null}
                           </div>
@@ -1491,11 +1829,16 @@ export function App() {
             {selectedChapter ? (
               <button
                 type="button"
-                className="btnDeleteChapter"
+                className={`btnAuditChapter ${auditStreamOpen ? "active" : ""}`}
                 disabled={busy}
-                onClick={() => void onDeleteChapter()}
+                onClick={() => setAuditStreamOpen((v) => !v)}
+                title={
+                  auditStreamOpen
+                    ? "收起右侧分析面板"
+                    : "打开分析面板（可在面板内开始本章分析）"
+                }
               >
-                删除章节
+                {auditBusy ? "分析中…" : auditStreamOpen ? "收起分析" : "分析面板"}
               </button>
             ) : null}
           </div>
@@ -1669,228 +2012,450 @@ export function App() {
               </div>
             </div>
           ) : (
-            <textarea
-              ref={chapterTextareaRef}
-              value={chapterContent}
-              onChange={(e) => setChapterContent(e.target.value)}
-              disabled={busy || !selectedChapter}
-              placeholder="在左侧选择章节或新建章节后开始写作…"
-            />
+            <div className={`chapterSplit ${auditStreamOpen ? "open" : ""}`}>
+              <div className="chapterSplitLeft">
+                <textarea
+                  ref={chapterTextareaRef}
+                  value={chapterContent}
+                  onChange={(e) => setChapterContent(e.target.value)}
+                  disabled={busy || !selectedChapter}
+                  placeholder="在左侧选择章节或新建章节后开始写作…"
+                />
+              </div>
+              {auditStreamOpen ? (
+                <div className="chapterSplitRight" aria-label="分析流式输出">
+                  <div className="chapterSplitRightHeader">
+                    <div className="chapterSplitRightTitle">
+                      {auditStreamPhase === "running"
+                        ? "分析中"
+                        : auditStreamPhase === "error"
+                          ? "分析失败"
+                          : auditStreamText.trim()
+                            ? "分析完成"
+                            : "分析面板"}
+                    </div>
+                    <div className="row">
+                      <button
+                        type="button"
+                        className="btnSort"
+                        onClick={() => {
+                          try {
+                            void navigator.clipboard.writeText(
+                              auditThinkingBufferRef.current || auditStreamText || ""
+                            );
+                            setStatus("已复制分析正文。");
+                          } catch {
+                            setStatus("复制失败。");
+                          }
+                        }}
+                        disabled={!auditStreamText}
+                        title="复制 Markdown 原文"
+                      >
+                        复制
+                      </button>
+                      <button
+                        type="button"
+                        className="btnSort"
+                        onClick={() => {
+                          setAuditStreamOpen(false);
+                          setAuditStreamPhase("idle");
+                        }}
+                      >
+                        关闭
+                      </button>
+                    </div>
+                  </div>
+                  <div ref={auditStreamRef} className="auditStream auditStreamMd">
+                    {auditStreamText.trim() ? (
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{auditStreamText}</ReactMarkdown>
+                    ) : auditBusy ? (
+                      <span className="muted">请稍候…</span>
+                    ) : (
+                      <div className="auditStreamEmpty">
+                        <button
+                          type="button"
+                          className="btnAuditStartChapter"
+                          disabled={busy || auditBusy || !okModelConfigs.length}
+                          onClick={() => void onAuditSelectedChapter()}
+                          title={
+                            !okModelConfigs.length
+                              ? "请先在「模型配置」里测试连接，连接成功后再分析"
+                              : "调用当前模型分析本章（摘要与右侧内容整理将一并更新）"
+                          }
+                        >
+                          开始分析
+                        </button>
+                        {!okModelConfigs.length ? (
+                          <div className="muted auditStreamEmptyHint">
+                            暂无连接成功的模型，请先到「模型配置」测试连接。
+                          </div>
+                        ) : (
+                          <div className="muted auditStreamEmptyHint">
+                            使用右侧所选模型梳理本章要点。
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
           )}
           {status ? <div className="status">{status}</div> : null}
         </main>
 
         <aside className="right">
           <section className="panel">
-            <div className="panelTitle">卡片</div>
-            <div className="rightTabs" role="tablist" aria-label="右侧卡片页签">
-              <button
-                type="button"
-                role="tab"
-                className={`rightTab ${rightTab === "characters" ? "active" : ""}`}
-                aria-selected={rightTab === "characters"}
-                onClick={() => setRightTab("characters")}
-                disabled={busy}
-              >
-                角色
-              </button>
-              <button
-                type="button"
-                role="tab"
-                className={`rightTab ${rightTab === "story" ? "active" : ""}`}
-                aria-selected={rightTab === "story"}
-                onClick={() => setRightTab("story")}
-                disabled={busy}
-              >
-                资料
-              </button>
-              <button
-                type="button"
-                role="tab"
-                className={`rightTab ${rightTab === "places" ? "active" : ""}`}
-                aria-selected={rightTab === "places"}
-                onClick={() => setRightTab("places")}
-                disabled={busy}
-              >
-                地点
-              </button>
-              <button
-                type="button"
-                role="tab"
-                className={`rightTab ${rightTab === "orgs" ? "active" : ""}`}
-                aria-selected={rightTab === "orgs"}
-                onClick={() => setRightTab("orgs")}
-                disabled={busy}
-              >
-                组织
-              </button>
-              <button
-                type="button"
-                role="tab"
-                className={`rightTab ${rightTab === "timeline" ? "active" : ""}`}
-                aria-selected={rightTab === "timeline"}
-                onClick={() => setRightTab("timeline")}
-                disabled={busy}
-              >
-                时间线
-              </button>
+            <div className="contentOrganizeHeader">
+              <div className="panelTitle contentOrganizeTitle">内容整理</div>
+              <div className="auditModelPicker auditModelPickerHeader">
+                <button
+                  type="button"
+                  className="auditModelBtn"
+                  disabled={busy || okModelConfigs.length === 0}
+                  onClick={() => setAuditModelPickerOpen((v) => !v)}
+                  title={
+                    okModelConfigs.length === 0
+                      ? "暂无连接成功的模型，请先去「模型配置」里测试连接"
+                      : "选择具体模型（仅显示连接成功的）"
+                  }
+                >
+                  <span className="auditModelBtnText">{activeModelLabel}</span>
+                  <span className="auditModelBtnCaret">▾</span>
+                </button>
+
+                {auditModelPickerOpen ? (
+                  <div className="auditModelPopover" role="listbox" aria-label="选择模型">
+                    <input
+                      className="auditModelSearch"
+                      placeholder="搜索模型..."
+                      value={auditModelSearch}
+                      onChange={(e) => setAuditModelSearch(e.target.value)}
+                      disabled={busy}
+                      autoFocus
+                    />
+                    <div className="auditModelList">
+                      {okModelGroupsFiltered.length ? (
+                        okModelGroupsFiltered.map((g) => (
+                          <div key={g.id} className="auditModelGroup">
+                            <div className="auditModelGroupTitle">{g.label}</div>
+                            {g.items.map((it: any) => {
+                              const text = it.label;
+                              const checked =
+                                it.configId === activeModelId &&
+                                (it.kind !== "ollamaModel" ||
+                                  text === (okModelConfigs.find((x) => x.id === activeModelId)?.model ?? "").trim());
+                              return (
+                                <button
+                                  key={it.id}
+                                  type="button"
+                                  className={`auditModelItem ${checked ? "active" : ""}`}
+                                  role="option"
+                                  aria-selected={checked}
+                                  onClick={() => {
+                                    setModelState((prev) => ({
+                                      ...prev,
+                                      activeId: it.configId,
+                                      configs:
+                                        it.kind === "ollamaModel"
+                                          ? prev.configs.map((c) =>
+                                              c.id === it.configId ? { ...c, model: it.modelName } : c
+                                            )
+                                          : prev.configs
+                                    }));
+                                    setAuditModelPickerOpen(false);
+                                    setAuditModelSearch("");
+                                  }}
+                                  disabled={busy}
+                                >
+                                  <span className="auditModelItemText">{text}</span>
+                                  {checked ? <span className="auditModelItemCheck">✓</span> : null}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="auditModelEmpty muted">没有匹配的模型。</div>
+                      )}
+                    </div>
+                    <button type="button" className="auditModelManage" onClick={() => void goModelConfigList()}>
+                      模型配置
+                    </button>
+                  </div>
+                ) : null}
+              </div>
             </div>
 
-            {rightTab === "characters" ? (
+            {!activeBook ? (
+              <div className="rightNeedBook muted">请选择一本书</div>
+            ) : (
               <>
-                <div className="row">
-                  <button
-                    type="button"
-                    className="btnNewCharacter"
-                    onClick={() => {
-                      if (busy || !activeBook) return;
-                      setCreateCharacterModalOpen(true);
-                      setModalCharacterName("");
-                      setModalCharacterRole("配角");
-                      setModalCharacterTags([]);
-                      setModalCharacterTagDraft("");
-                    }}
-                    disabled={busy || !activeBook}
-                  >
-                    新增角色
-                  </button>
+                <div className="browserTabsBar" role="tablist" aria-label="内容整理页签">
+                  <div className="browserTabsStrip">
+                    <button
+                      type="button"
+                      role="tab"
+                      className={`browserTab ${rightTab === "chapterSummary" ? "active" : ""}`}
+                      aria-selected={rightTab === "chapterSummary"}
+                      onClick={() => setRightTab("chapterSummary")}
+                      disabled={busy}
+                    >
+                      本章摘要
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      className={`browserTab ${rightTab === "auditCharacters" ? "active" : ""}`}
+                      aria-selected={rightTab === "auditCharacters"}
+                      onClick={() => setRightTab("auditCharacters")}
+                      disabled={busy}
+                    >
+                      角色
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      className={`browserTab ${rightTab === "story" ? "active" : ""}`}
+                      aria-selected={rightTab === "story"}
+                      onClick={() => setRightTab("story")}
+                      disabled={busy}
+                    >
+                      资料
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      className={`browserTab ${rightTab === "places" ? "active" : ""}`}
+                      aria-selected={rightTab === "places"}
+                      onClick={() => setRightTab("places")}
+                      disabled={busy}
+                    >
+                      地点
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      className={`browserTab ${rightTab === "orgs" ? "active" : ""}`}
+                      aria-selected={rightTab === "orgs"}
+                      onClick={() => setRightTab("orgs")}
+                      disabled={busy}
+                    >
+                      组织
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      className={`browserTab ${rightTab === "timeline" ? "active" : ""}`}
+                      aria-selected={rightTab === "timeline"}
+                      onClick={() => setRightTab("timeline")}
+                      disabled={busy}
+                    >
+                      时间线
+                    </button>
+                  </div>
                 </div>
-                <div className="characterFilters">
-                  <div className="filterRow">
-                    <div className="filterLabel muted">身份</div>
-                    <div className="chips">
-                      <button
-                        type="button"
-                        className={`chip ${characterRoleFilter === "全部" ? "active" : ""}`}
-                        onClick={() => setCharacterRoleFilter("全部")}
-                        disabled={busy}
-                      >
-                        全部
-                      </button>
-                      {CHARACTER_ROLE_OPTIONS.map((r) => (
+
+                <div className="organizeTabScroll">
+                  {rightTab === "chapterSummary" ? (
+                    <div className="auditPanel">
+                      {auditRun ? (
+                        <div className="auditPanelBody">
+                          <div className="auditPanelTitle">本章摘要</div>
+                          <div className="auditPanelMuted muted">
+                            {auditRun?.chapter?.filename ? `来源：${auditRun.chapter.filename}` : "未选择章节"}
+                          </div>
+                          {typeof auditRun?.gistL1 === "string" && auditRun.gistL1.trim() ? (
+                            <div className="auditGist">{auditRun.gistL1}</div>
+                          ) : null}
+                          {Array.isArray(auditRun?.impactAnalysis) && auditRun.impactAnalysis.length ? (
+                            <div className="auditImpacts">
+                              {(auditRun.impactAnalysis as any[]).slice(0, 12).map((it, idx) => (
+                                <div key={idx} className="auditImpactItem">
+                                  <div className="auditImpactTop">
+                                    <span className="auditImpactScore">{it?.impactScore ?? 0}</span>
+                                    <span className="auditImpactText">{it?.item ?? ""}</span>
+                                  </div>
+                                  {it?.why ? <div className="muted auditImpactWhy">{it.why}</div> : null}
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                          {Array.isArray(auditRun?.consistencyChecks) && auditRun.consistencyChecks.length ? (
+                            <div className="auditChecks">
+                              <div className="auditPanelTitle">一致性问题</div>
+                              {(auditRun.consistencyChecks as any[]).slice(0, 12).map((c, idx) => (
+                                <div key={idx} className="auditCheckItem">
+                                  <div className="auditCheckIssue">{c?.issue ?? ""}</div>
+                                  {c?.suggestion ? <div className="muted auditCheckSug">{c.suggestion}</div> : null}
+                                </div>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : (
+                        <div className="muted auditPanelEmpty">暂无分析结果。选中章节后点击「分析」。</div>
+                      )}
+                    </div>
+                  ) : rightTab === "auditCharacters" ? (
+                    <>
+                      <div className="auditCharList">
+                        {Array.isArray(auditRun?.entities?.characters) &&
+                        (auditRun.entities.characters as any[]).length ? (
+                          (auditRun.entities.characters as any[]).map((c: any, idx: number) => {
+                            const name = String(c?.name ?? "").trim() || "未命名";
+                            const id = `${idx}-${name}`;
+                            const open = !!expandedAuditCharIds[id];
+                            const roleStr =
+                              typeof c?.role === "string" && c.role.trim() ? c.role.trim() : "";
+                            const neo = String(c?.newOrExisting ?? "").trim() || "unknown";
+                            const neoNorm = neo.toLowerCase();
+                            const neoLabel =
+                              neoNorm === "new"
+                                ? "本章新增"
+                                : neoNorm === "existing"
+                                  ? "已有设定"
+                                  : neoNorm === "unknown"
+                                    ? "待确认"
+                                    : neo;
+                            const st = c?.state && typeof c.state === "object" ? c.state : {};
+                            const loc = String((st as any).location ?? "").trim();
+                            const inj = String((st as any).injuries ?? "").trim();
+                            const items = Array.isArray((st as any).items)
+                              ? ((st as any).items as unknown[]).map((x) => String(x)).filter(Boolean)
+                              : [];
+                            const money = (st as any).moneyChange;
+                            const quotes = Array.isArray(c?.evidenceQuotes)
+                              ? (c.evidenceQuotes as unknown[]).map((x) => String(x)).filter(Boolean)
+                              : [];
+                            const tagArr = Array.isArray(c?.tags)
+                              ? (c.tags as unknown[]).map((x) => String(x)).filter(Boolean)
+                              : [];
+
+                            return (
+                              <div key={id} className="auditCharCard">
+                                <button
+                                  type="button"
+                                  className="auditCharCardHead"
+                                  aria-expanded={open}
+                                  onClick={() =>
+                                    setExpandedAuditCharIds((prev) => ({ ...prev, [id]: !prev[id] }))
+                                  }
+                                  disabled={busy}
+                                >
+                                  <span className="auditCharIcon" aria-hidden>
+                                    ◎
+                                  </span>
+                                  <span className="auditCharName">{name}</span>
+                                  <span className="auditCharBadges">
+                                    <span className={auditCharacterNewBadgeClass(neoNorm)}>{neoLabel}</span>
+                                    {roleStr ? (
+                                      <span className={auditCharacterRoleClass(roleStr)}>{roleStr}</span>
+                                    ) : null}
+                                  </span>
+                                  <span className={`auditCharChevron ${open ? "open" : ""}`} aria-hidden>
+                                    ›
+                                  </span>
+                                </button>
+                                {open ? (
+                                  <div className="auditCharCardBody">
+                                    <div className="auditCharDetailRow">
+                                      <div className="auditCharDetailLabel">判定</div>
+                                      <div className="auditCharDetailValue">
+                                        {neoLabel}
+                                        {neo &&
+                                        !["new", "existing", "unknown"].includes(neoNorm)
+                                          ? `（原始字段：${neo}）`
+                                          : ""}
+                                      </div>
+                                    </div>
+                                    <div className="auditCharDetailRow">
+                                      <div className="auditCharDetailLabel">身份</div>
+                                      <div className="auditCharDetailValue">{roleStr || "—"}</div>
+                                    </div>
+                                    <div className="auditCharDetailRow">
+                                      <div className="auditCharDetailLabel">标签</div>
+                                      <div className="auditCharDetailValue">
+                                        {tagArr.length ? tagArr.join("、") : "—"}
+                                      </div>
+                                    </div>
+                                    <div className="auditCharDetailRow">
+                                      <div className="auditCharDetailLabel">地点</div>
+                                      <div className="auditCharDetailValue">{loc || "—"}</div>
+                                    </div>
+                                    <div className="auditCharDetailRow">
+                                      <div className="auditCharDetailLabel">伤势与状态</div>
+                                      <div className="auditCharDetailValue">{inj || "—"}</div>
+                                    </div>
+                                    <div className="auditCharDetailRow">
+                                      <div className="auditCharDetailLabel">随身物品</div>
+                                      <div className="auditCharDetailValue">
+                                        {items.length ? items.join("、") : "—"}
+                                      </div>
+                                    </div>
+                                    <div className="auditCharDetailRow">
+                                      <div className="auditCharDetailLabel">金钱变动</div>
+                                      <div className="auditCharDetailValue">
+                                        {money !== undefined && money !== null && money !== ""
+                                          ? String(money)
+                                          : "—"}
+                                      </div>
+                                    </div>
+                                    {auditCharStateExtraRows(st as Record<string, unknown>).map(([lk, lv], ri) => (
+                                      <div key={`st-${lk}-${ri}`} className="auditCharDetailRow">
+                                        <div className="auditCharDetailLabel">{lk}</div>
+                                        <div className="auditCharDetailValue">{lv}</div>
+                                      </div>
+                                    ))}
+                                    {auditCharTopExtraRows(c as Record<string, unknown>).map(([lk, lv], ri) => (
+                                      <div key={`ex-${lk}-${ri}`} className="auditCharDetailRow">
+                                        <div className="auditCharDetailLabel">{lk}</div>
+                                        <div className="auditCharDetailValue">{lv}</div>
+                                      </div>
+                                    ))}
+                                    <div className="auditCharQuotes">
+                                      <div className="auditCharDetailLabel">原文摘录</div>
+                                      {quotes.length ? (
+                                        <ul className="auditCharQuoteList">
+                                          {quotes.map((q, qi) => (
+                                            <li key={qi}>{q}</li>
+                                          ))}
+                                        </ul>
+                                      ) : (
+                                        <div className="auditCharDetailEmpty">—</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ) : null}
+                              </div>
+                            );
+                          })
+                        ) : (
+                          <div className="muted auditPanelEmpty">
+                            暂无本章角色梳理。选中章节并点击「分析」后，模型抽取的角色会显示在这里。
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  ) : rightTab === "story" ? (
+                    <div className="list">
+                      {storyFiles.map((f) => (
                         <button
-                          key={r}
-                          type="button"
-                          className={`chip ${characterRoleFilter === r ? "active" : ""}`}
-                          onClick={() => setCharacterRoleFilter(r)}
+                          key={f.path}
+                          className={`item ${selectedCard?.path === f.path ? "active" : ""}`}
+                          onClick={() => onOpenCard(f)}
                           disabled={busy}
                         >
-                          {r}
+                          {f.title}
                         </button>
                       ))}
                     </div>
-                  </div>
-                  <div className="filterRow">
-                    <div className="filterLabel muted">标签</div>
-                    <div className="chips">
-                      {CHARACTER_TAG_OPTIONS.map((t) => {
-                        const active = characterTagFilter.includes(t);
-                        return (
-                          <button
-                            key={t}
-                            type="button"
-                            className={`chip ${active ? "active" : ""}`}
-                            onClick={() =>
-                              setCharacterTagFilter((prev) =>
-                                active ? prev.filter((x) => x !== t) : [...prev, t]
-                              )
-                            }
-                            disabled={busy}
-                            aria-pressed={active}
-                          >
-                            {t}
-                          </button>
-                        );
-                      })}
-                      {characterTagFilter.length > 0 ? (
-                        <button
-                          type="button"
-                          className="chip chipClear"
-                          onClick={() => setCharacterTagFilter([])}
-                          disabled={busy}
-                          title="清空标签筛选"
-                        >
-                          清空
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="characterGroups">
-                  {groupedCharFiles.length === 0 ? (
-                    <div className="empty">没有匹配的角色。</div>
                   ) : (
-                    groupedCharFiles.map(([role, files]) => (
-                      <div key={role} className="characterGroup">
-                        <div className="characterGroupTitle">
-                          {role} <span className="muted">({files.length})</span>
-                        </div>
-                        <div className="list">
-                          {files.map((f) => (
-                            <button
-                              key={f.path}
-                              className={`item ${selectedCard?.path === f.path ? "active" : ""}`}
-                              onClick={() => onOpenCard(f)}
-                              disabled={busy}
-                              title={[
-                                f.role ? `身份：${f.role}` : null,
-                                (f.tags && f.tags.length) ? `标签：${f.tags.join("、")}` : null
-                              ]
-                                .filter(Boolean)
-                                .join("\n")}
-                            >
-                              <span className="itemMain">
-                                <span className="itemTitle">{f.title}</span>
-                                <span className="itemBadges">
-                                  {f.role ? <span className="badge badgeRole">{f.role}</span> : null}
-                                  {(f.tags ?? []).slice(0, 3).map((tg) => (
-                                    <span key={tg} className="badge">
-                                      {tg}
-                                    </span>
-                                  ))}
-                                </span>
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ))
+                    <div className="empty">该页签后续完善。</div>
                   )}
                 </div>
               </>
-            ) : rightTab === "story" ? (
-              <div className="list">
-                {storyFiles.map((f) => (
-                  <button
-                    key={f.path}
-                    className={`item ${selectedCard?.path === f.path ? "active" : ""}`}
-                    onClick={() => onOpenCard(f)}
-                    disabled={busy}
-                  >
-                    {f.title}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div className="empty">该页签后续完善。</div>
             )}
-            <div className="cardEditorTop">
-              <div className="muted">{selectedCard ? selectedCard.path : "未选择卡片"}</div>
-              <div
-                className={`autosaveHint ${cardAutosaveHint === "保存失败" ? "autosaveErr" : ""}`}
-                title="编辑停顿约 1 秒后写入磁盘"
-              >
-                {cardAutosaveHint}
-              </div>
-            </div>
-            <textarea
-              className="cardEditor"
-              value={cardContent}
-              onChange={(e) => setCardContent(e.target.value)}
-              disabled={busy || !selectedCard}
-              placeholder="选择一张卡片进行编辑…"
-            />
           </section>
         </aside>
       </div>
@@ -2024,6 +2589,44 @@ export function App() {
                 onClick={() => void confirmChapterGapFill()}
               >
                 补齐第 {chapterGapModalIndexes[0]} 章
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {deleteBookModalOpen && deleteBookTarget ? (
+        <div
+          className="modalBackdrop"
+          role="presentation"
+          onClick={() => {
+            if (!busy) closeDeleteBookModal();
+          }}
+        >
+          <div
+            className="modalPanel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-delete-book-heading"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="modal-delete-book-heading" className="modalHeading">
+              废弃书籍
+            </h2>
+            <p className="modalChapterGapBody">
+              确定废弃《{deleteBookTarget.title}》吗？不会删除任何本地内容，但书架将不再展示该书。
+            </p>
+            <div className="modalActions">
+              <button type="button" className="btnModalSecondary" disabled={busy} onClick={() => closeDeleteBookModal()}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="btnModalPrimary"
+                disabled={busy}
+                onClick={() => void confirmDeleteBook()}
+              >
+                确认废弃
               </button>
             </div>
           </div>
