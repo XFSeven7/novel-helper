@@ -1,15 +1,27 @@
 # Dependencies
 node_modules/
 
-# Build outputs
+# pnpm  content-addressable store（若曾在项目目录内生成）
+.pnpm-store/
+
+# Build outputs（任意层级）
 dist/
 build/
+out/
 *.tsbuildinfo
 
 # Environment & secrets
 .env
 .env.*
 !.env.example
+.envrc
+
+# 凭证与密钥（额外保险）
+*.pem
+*.p12
+*.key
+credentials.json
+secrets.json
 
 # Logs & debug
 logs/
@@ -22,15 +34,36 @@ yarn-error.log*
 # OS
 .DS_Store
 Thumbs.db
+Desktop.ini
+
+# IDE / 编辑器（个人与本机配置）
+.idea/
+*.iml
+.project
+.classpath
+.settings/
 
 # Test / coverage
 coverage/
 .nyc_output/
 
-# Vite / tooling cache
+# Vite / 前端工具缓存
 .vite/
 .cache/
 
-# Optional: local novel data written by the app (uncomment if you never commit books)
-.novel-helper/
-book/
+# 临时与备份
+*.tmp
+*.temp
+*.bak
+*~
+
+# 部署产物（若将来使用）
+.vercel/
+.netlify/
+
+# —— 本应用运行时写入的本地数据（默认数据目录见 packages/server paths）——
+# 仅忽略仓库根目录的 book/，勿用裸 book/，否则会误忽略 cli 模板下的 template/book/
+/book/
+
+# novel-helper 历史/备用数据目录（若在仓库根）
+/.novel-helper/

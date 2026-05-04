@@ -1,0 +1,29 @@
+{
+  "name": "novel-helper",
+  "version": "1.0.0",
+  "bin": {
+    "novel-helper": "./dist/index.js"
+  },
+  "description": "Local web novel writing helper (CLI)",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc -p tsconfig.json"
+  },
+  "files": [
+    "dist",
+    "template"
+  ],
+  "dependencies": {
+    "execa": "^9.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.8.3"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

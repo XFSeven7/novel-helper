@@ -1,0 +1,14 @@
+{
+  "name": "novel-helper",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local web novel writing helper (pnpm workspace)",
+  "scripts": {
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.11.0"
+}
