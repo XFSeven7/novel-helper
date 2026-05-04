@@ -167,7 +167,9 @@ export async function listBooks(dataDir: string): Promise<BookSummary[]> {
   return metas;
 }
 
-export async function createBook(dataDir: string, slug: string, title: string) {
+const MAX_SYNOPSIS_LEN = 20000;
+
+export async function createBook(dataDir: string, slug: string, title: string, synopsis?: string) {
   await ensureDir(dataDir);
   const bookDir = path.join(dataDir, slug);
   const metaPath = path.join(bookDir, "meta.json");
@@ -180,7 +182,9 @@ export async function createBook(dataDir: string, slug: string, title: string) {
   await ensureDir(chaptersDir);
   await ensureDir(charactersDir);
 
-  const meta: BookMeta = { slug, title, createdAt: new Date().toISOString(), synopsis: "" };
+  const syn =
+    typeof synopsis === "string" ? synopsis.trim().slice(0, MAX_SYNOPSIS_LEN) : "";
+  const meta: BookMeta = { slug, title, createdAt: new Date().toISOString(), synopsis: syn };
   await fs.writeFile(metaPath, JSON.stringify(meta, null, 2), "utf8");
 
   const defaults: Array<{ rel: string; content: string }> = [
@@ -212,7 +216,7 @@ export async function updateBookSynopsis(dataDir: string, slug: string, synopsis
   const raw = await fs.readFile(metaPath, "utf8");
   const parsed = JSON.parse(raw) as BookMeta;
   const meta = normalizeBookMeta(parsed, slug);
-  const next: BookMeta = { ...meta, synopsis };
+  const next: BookMeta = { ...meta, synopsis: synopsis.slice(0, MAX_SYNOPSIS_LEN) };
   await fs.writeFile(metaPath, JSON.stringify(next, null, 2), "utf8");
   const chapterCount = await countChapterMarkdownFiles(bookDir);
   return bookSummaryFromMeta(next, chapterCount);

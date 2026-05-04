@@ -363,6 +363,177 @@ button:disabled {
   line-height: 1.25;
 }
 
+.navShelfHint {
+  font-size: 11px;
+  line-height: 1.35;
+  margin-bottom: 8px;
+}
+
+.navNewBookRow {
+  margin-bottom: 10px;
+}
+
+.btnNewBookFull {
+  width: 100%;
+}
+
+.tree.navListDense .bookShelfItem {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.tree.navListDense .bookShelfItem:last-child {
+  border-bottom: none;
+}
+
+.tree.navListDense .bookShelfItem .treeChild.bookShelfRow {
+  border-bottom: none;
+}
+
+.bookShelfTitleToggle {
+  cursor: pointer;
+  color: color-mix(in srgb, var(--text) 92%, rgba(167, 139, 250, 0.95));
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+}
+
+.bookShelfPeek {
+  padding: 0 10px 8px 10px;
+  background: rgba(0, 0, 0, 0.12);
+}
+
+.bookShelfPeekText {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--text) 88%, transparent);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bookShelfPeekEdit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.bookShelfPeekInput {
+  width: 100%;
+  resize: vertical;
+  min-height: 56px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.45;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  outline: none;
+  font-family: ui-serif, "PingFang SC", "Noto Serif SC", serif;
+}
+
+.btnPeekSave {
+  align-self: flex-start;
+  padding: 5px 12px;
+  font-size: 11px;
+  border-radius: 8px;
+}
+
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.modalPanel {
+  width: min(440px, 100%);
+  max-height: min(90vh, 560px);
+  overflow: auto;
+  padding: 18px 20px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+}
+
+.modalHeading {
+  margin: 0 0 14px;
+  font-size: 16px;
+  font-weight: 650;
+}
+
+.modalField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.modalLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--text) 88%, transparent);
+}
+
+.modalReq {
+  margin-left: 4px;
+  color: color-mix(in srgb, #f97373 75%, var(--text));
+}
+
+.modalOptional {
+  margin-left: 4px;
+  font-weight: 400;
+  color: color-mix(in srgb, var(--muted) 92%, transparent);
+}
+
+.modalInput {
+  width: 100%;
+}
+
+.modalTextarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 96px;
+  padding: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  outline: none;
+  font-family: ui-serif, "PingFang SC", "Noto Serif SC", serif;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.btnModalSecondary {
+  padding: 8px 14px;
+  font-size: 13px;
+}
+
+.btnModalPrimary {
+  padding: 8px 14px;
+  font-size: 13px;
+  border-color: rgba(139, 92, 246, 0.45);
+  background: rgba(139, 92, 246, 0.22);
+}
+
+.btnModalPrimary:hover:not(:disabled) {
+  background: rgba(139, 92, 246, 0.32);
+}
+
 .navSortBar {
   display: flex;
   justify-content: flex-end;

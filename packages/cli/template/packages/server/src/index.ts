@@ -33,12 +33,16 @@ app.get("/api/books", async () => {
 });
 
 app.post("/api/books", async (req, reply) => {
-  const bodySchema = z.object({ title: z.string().min(1), slug: z.string().optional() });
+  const bodySchema = z.object({
+    title: z.string().min(1),
+    slug: z.string().optional(),
+    synopsis: z.string().max(20000).optional()
+  });
   const body = bodySchema.parse((req as any).body);
   const slug = safeSlug(body.slug?.trim() || body.title);
   if (!slug) return reply.code(400).send({ message: "Invalid slug/title" });
   try {
-    const book = await createBook(dataDir, slug, body.title);
+    const book = await createBook(dataDir, slug, body.title, body.synopsis);
     return { book: bookSummaryFromMeta(book, 0) };
   } catch (e: any) {
     return reply.code(409).send({ message: e?.message || "Conflict" });

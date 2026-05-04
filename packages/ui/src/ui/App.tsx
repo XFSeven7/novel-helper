@@ -106,7 +106,13 @@ export function App() {
   const [selectedChapter, setSelectedChapter] = useState<SelectedChapter>(null);
   const [selectedCard, setSelectedCard] = useState<SelectedCard>(null);
 
-  const [bookTitle, setBookTitle] = useState("");
+  const [createBookModalOpen, setCreateBookModalOpen] = useState(false);
+  const [modalNewTitle, setModalNewTitle] = useState("");
+  const [modalNewSynopsis, setModalNewSynopsis] = useState("");
+  const [shelfPeekSlug, setShelfPeekSlug] = useState<string | null>(null);
+  const [shelfPeekDraft, setShelfPeekDraft] = useState("");
+  const [shelfPeekSaving, setShelfPeekSaving] = useState(false);
+
   const [chapterTitle, setChapterTitle] = useState("");
   const [characterName, setCharacterName] = useState("");
 
@@ -129,6 +135,7 @@ export function App() {
   const [chapterTitleEditing, setChapterTitleEditing] = useState(false);
 
   const chapterTitleInputRef = useRef<HTMLInputElement>(null);
+  const createBookTitleInputRef = useRef<HTMLInputElement>(null);
   const chapterTitleSkipBlurRef = useRef(false);
 
   const selectedChapterRef = useRef<SelectedChapter>(null);
@@ -322,6 +329,34 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    if (!shelfPeekSlug) {
+      setShelfPeekDraft("");
+      return;
+    }
+    const m = books.find((b) => b.slug === shelfPeekSlug);
+    setShelfPeekDraft(m?.synopsis ?? "");
+    // 仅在切换展开的书籍时对齐服务端简介；不在 books 刷新时重置，避免覆盖正在输入的内容
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shelfPeekSlug]);
+
+  useEffect(() => {
+    if (!createBookModalOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (!busy) setCreateBookModalOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [createBookModalOpen, busy]);
+
+  useEffect(() => {
+    if (!createBookModalOpen) return;
+    queueMicrotask(() => createBookTitleInputRef.current?.focus());
+  }, [createBookModalOpen]);
+
+  useEffect(() => {
     try {
       localStorage.setItem(THEME_STORAGE_KEY, theme);
     } catch {
@@ -442,21 +477,46 @@ export function App() {
     setChapterTitleEditing(false);
   }
 
-  async function onCreateBook() {
-    if (!bookTitle.trim()) return;
+  function openCreateBookModal() {
+    setModalNewTitle("");
+    setModalNewSynopsis("");
+    setCreateBookModalOpen(true);
+  }
+
+  async function submitCreateBookModal() {
+    const t = modalNewTitle.trim();
+    if (!t) return;
     setBusy(true);
     setStatus("");
     try {
-      const { book } = await createBook({ title: bookTitle.trim() });
-      setBookTitle("");
+      const syn = modalNewSynopsis.trim();
+      const { book } = await createBook({ title: t, synopsis: syn || undefined });
+      setCreateBookModalOpen(false);
+      setModalNewTitle("");
+      setModalNewSynopsis("");
       await refreshBooks();
       setActiveBook(book.slug);
       setNavHome(false);
+      setShelfPeekSlug(null);
       setStatus(`已创建书籍：${book.title}`);
     } catch (e: any) {
       setStatus(e?.message || String(e));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function saveShelfPeekSynopsis(slug: string) {
+    setShelfPeekSaving(true);
+    setStatus("");
+    try {
+      const { book } = await patchBookSynopsis(slug, shelfPeekDraft.trim());
+      setBooks((prev) => prev.map((b) => (b.slug === slug ? book : b)));
+      setStatus("简介已保存。");
+    } catch (e: any) {
+      setStatus(e?.message || String(e));
+    } finally {
+      setShelfPeekSaving(false);
     }
   }
 
@@ -635,21 +695,10 @@ export function App() {
             {navHome ? (
               <>
                 <div className="navTitle">书架</div>
-                <div className="row">
-                  <input
-                    value={bookTitle}
-                    onChange={(e) => setBookTitle(e.target.value)}
-                    placeholder="新书标题"
-                    disabled={busy}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        void onCreateBook();
-                      }
-                    }}
-                  />
-                  <button onClick={() => void onCreateBook()} disabled={busy || !bookTitle.trim()}>
-                    新建
+                <div className="navShelfHint muted">点击书名可展开简介；点此新建书籍。</div>
+                <div className="navNewBookRow">
+                  <button type="button" className="btnNewBookFull" onClick={() => openCreateBookModal()} disabled={busy}>
+                    新建书籍
                   </button>
                 </div>
                 <div className="navSortBar">
@@ -668,19 +717,66 @@ export function App() {
                     <div className="empty">还没有书，先新建一本。</div>
                   ) : (
                     displayedBooks.map((b) => (
-                      <button
-                        key={b.slug}
-                        type="button"
-                        className="treeChild bookShelfRow"
-                        onClick={() => void openBookFromShelf(b)}
-                        disabled={busy}
-                        title={`${b.slug}\n创建：${formatBookCreatedAt(b.createdAt)}\n${b.status} · ${b.chapterCount}章`}
-                      >
-                        <span className="bookShelfTitle">《{b.title}》</span>
-                        <span className="bookShelfMeta">
-                          {formatBookCreatedAt(b.createdAt)} · {b.status} · {b.chapterCount}章
-                        </span>
-                      </button>
+                      <div key={b.slug} className="bookShelfItem">
+                        <div
+                          role="button"
+                          tabIndex={busy ? -1 : 0}
+                          className="treeChild bookShelfRow"
+                          onClick={() => {
+                            if (busy) return;
+                            void openBookFromShelf(b);
+                          }}
+                          onKeyDown={(e) => {
+                            if (busy) return;
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              void openBookFromShelf(b);
+                            }
+                          }}
+                          title={`打开全书 · ${b.slug}\n创建：${formatBookCreatedAt(b.createdAt)}\n${b.status} · ${b.chapterCount}章`}
+                        >
+                          <span
+                            className="bookShelfTitle bookShelfTitleToggle"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setShelfPeekSlug((prev) => (prev === b.slug ? null : b.slug));
+                            }}
+                            title="展开或收起简介"
+                          >
+                            《{b.title}》
+                          </span>
+                          <span className="bookShelfMeta">
+                            {formatBookCreatedAt(b.createdAt)} · {b.status} · {b.chapterCount}章
+                          </span>
+                        </div>
+                        {shelfPeekSlug === b.slug ? (
+                          <div className="bookShelfPeek">
+                            {b.synopsis?.trim() ? (
+                              <p className="bookShelfPeekText">{b.synopsis}</p>
+                            ) : (
+                              <div className="bookShelfPeekEdit">
+                                <textarea
+                                  className="bookShelfPeekInput"
+                                  value={shelfPeekDraft}
+                                  onChange={(e) => setShelfPeekDraft(e.target.value)}
+                                  placeholder="暂无简介，在此输入…"
+                                  disabled={shelfPeekSaving}
+                                  rows={3}
+                                  aria-label="书籍简介"
+                                />
+                                <button
+                                  type="button"
+                                  className="btnPeekSave"
+                                  disabled={shelfPeekSaving || busy}
+                                  onClick={() => void saveShelfPeekSynopsis(b.slug)}
+                                >
+                                  {shelfPeekSaving ? "保存中…" : "保存简介"}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
                     ))
                   )}
                 </div>
@@ -1020,6 +1116,75 @@ export function App() {
           </section>
         </aside>
       </div>
+
+      {createBookModalOpen ? (
+        <div
+          className="modalBackdrop"
+          role="presentation"
+          onClick={() => {
+            if (!busy) setCreateBookModalOpen(false);
+          }}
+        >
+          <div
+            className="modalPanel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-create-book-heading"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="modal-create-book-heading" className="modalHeading">
+              新建书籍
+            </h2>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-book-title">
+                书名<span className="modalReq">*</span>
+              </label>
+              <input
+                id="modal-book-title"
+                ref={createBookTitleInputRef}
+                className="modalInput"
+                value={modalNewTitle}
+                onChange={(e) => setModalNewTitle(e.target.value)}
+                placeholder="必填"
+                disabled={busy}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && modalNewTitle.trim() && !busy) {
+                    e.preventDefault();
+                    void submitCreateBookModal();
+                  }
+                }}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-book-synopsis">
+                简介<span className="modalOptional">（选填）</span>
+              </label>
+              <textarea
+                id="modal-book-synopsis"
+                className="modalTextarea"
+                value={modalNewSynopsis}
+                onChange={(e) => setModalNewSynopsis(e.target.value)}
+                placeholder="可留空，创建后再补充"
+                disabled={busy}
+                rows={4}
+              />
+            </div>
+            <div className="modalActions">
+              <button type="button" className="btnModalSecondary" disabled={busy} onClick={() => setCreateBookModalOpen(false)}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="btnModalPrimary"
+                disabled={busy || !modalNewTitle.trim()}
+                onClick={() => void submitCreateBookModal()}
+              >
+                创建
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

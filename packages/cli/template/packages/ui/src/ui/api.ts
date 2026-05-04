@@ -41,7 +41,7 @@ export async function listBooks() {
   return await http<{ books: BookMeta[] }>("/api/books");
 }
 
-export async function createBook(input: { title: string; slug?: string }) {
+export async function createBook(input: { title: string; slug?: string; synopsis?: string }) {
   return await http<{ book: BookMeta }>("/api/books", {
     method: "POST",
     body: JSON.stringify(input)
