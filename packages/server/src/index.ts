@@ -160,11 +160,15 @@ app.get("/api/books/:slug/story", async (req) => {
 
 app.post("/api/books/:slug/story/characters", async (req, reply) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
-  const bodySchema = z.object({ name: z.string().min(1) });
+  const bodySchema = z.object({
+    name: z.string().min(1),
+    role: z.string().min(1).optional(),
+    tags: z.array(z.string().min(1)).max(30).optional()
+  });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
   try {
-    const out = await createCharacterCard(dataDir, params.slug, body.name);
+    const out = await createCharacterCard(dataDir, params.slug, body.name, { role: body.role, tags: body.tags });
     return { character: out };
   } catch (e: any) {
     return reply.code(409).send({ message: e?.message || "Conflict" });

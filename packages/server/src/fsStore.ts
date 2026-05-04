@@ -54,6 +54,10 @@ export type StoryFile = {
   kind: "story" | "character";
   path: string; // 相对 book/<slug>/ 的路径，例如 story/timeline.md 或 story/characters/主角.md
   title: string;
+  /** 仅角色卡可能包含（来自 markdown 顶部 frontmatter） */
+  role?: string;
+  /** 仅角色卡可能包含（来自 markdown 顶部 frontmatter） */
+  tags?: string[];
 };
 
 async function exists(p: string) {
@@ -67,6 +71,77 @@ async function exists(p: string) {
 
 /** 章节正文文件：`0001_章节名.md`（序号递增；列表展示标题为下划线后的部分） */
 const CHAPTER_FILENAME_RE = /^(\d+)_(.+)\.md$/;
+
+function parseCharacterFrontmatter(raw: string): { role?: string; tags?: string[] } {
+  // 仅解析极简 YAML frontmatter：
+  // ---
+  // role: 配角
+  // tags: [盟友, 敌对]
+  // ---
+  if (!raw.startsWith("---")) return {};
+  const start = raw.indexOf("\n");
+  if (start < 0) return {};
+  const end = raw.indexOf("\n---", start);
+  if (end < 0) return {};
+  const block = raw.slice(start + 1, end).replace(/\r/g, "");
+  const lines = block.split("\n");
+
+  const out: { role?: string; tags?: string[] } = {};
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (!line || line.startsWith("#")) {
+      i += 1;
+      continue;
+    }
+
+    if (line.startsWith("role:")) {
+      const v = line.slice("role:".length).trim();
+      if (v) out.role = v.replace(/^["']|["']$/g, "");
+      i += 1;
+      continue;
+    }
+
+    if (line.startsWith("tags:")) {
+      const rest = line.slice("tags:".length).trim();
+      // tags: [a, b]
+      if (rest.startsWith("[") && rest.endsWith("]")) {
+        const inside = rest.slice(1, -1).trim();
+        out.tags = inside
+          ? inside
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : [];
+        i += 1;
+        continue;
+      }
+      // tags:
+      // - a
+      // - b
+      const tags: string[] = [];
+      i += 1;
+      while (i < lines.length) {
+        const t = lines[i].trim();
+        if (!t) {
+          i += 1;
+          continue;
+        }
+        if (!t.startsWith("-")) break;
+        const val = t.slice(1).trim();
+        if (val) tags.push(val.replace(/^["']|["']$/g, ""));
+        i += 1;
+      }
+      out.tags = tags;
+      continue;
+    }
+
+    i += 1;
+  }
+
+  if (out.tags) out.tags = [...new Set(out.tags)].filter(Boolean);
+  return out;
+}
 
 function sanitizeChapterStem(raw: string): string {
   const cleaned = raw
@@ -260,7 +335,7 @@ export async function createNovel(dataDir: string, slug: string, title: string, 
     },
     {
       rel: "story/characters/主角.md",
-      content: `# 主角\n\n- 目标：\n- 动机：\n- 弱点：\n- 外貌：\n- 关系：\n`
+      content: `---\nrole: 主角\ntags: []\n---\n# 主角\n\n- 目标：\n- 动机：\n- 弱点：\n- 外貌：\n- 关系：\n`
     }
   ];
 
@@ -439,14 +514,27 @@ export async function listStoryFiles(dataDir: string, novelSlug: string) {
     .sort((a, b) => a.path.localeCompare(b.path, "zh-Hans-CN"));
 
   const charEntries = await fs.readdir(charactersDir, { withFileTypes: true });
-  const charFiles: StoryFile[] = charEntries
-    .filter((e) => e.isFile() && e.name.endsWith(".md"))
-    .map((e) => ({
+  const charNames = charEntries.filter((e) => e.isFile() && e.name.endsWith(".md")).map((e) => e.name);
+  const charFiles: StoryFile[] = [];
+  for (const name of charNames) {
+    const relPath = `story/characters/${name}`;
+    const absPath = path.join(dataDir, novelSlug, relPath);
+    let meta: { role?: string; tags?: string[] } = {};
+    try {
+      const raw = await fs.readFile(absPath, "utf8");
+      meta = parseCharacterFrontmatter(raw);
+    } catch {
+      // ignore
+    }
+    charFiles.push({
       kind: "character" as const,
-      path: `story/characters/${e.name}`,
-      title: e.name.replace(/\.md$/, "")
-    }))
-    .sort((a, b) => a.path.localeCompare(b.path, "zh-Hans-CN"));
+      path: relPath,
+      title: name.replace(/\.md$/, ""),
+      role: meta.role,
+      tags: meta.tags
+    });
+  }
+  charFiles.sort((a, b) => a.path.localeCompare(b.path, "zh-Hans-CN"));
 
   return { storyFiles, charFiles };
 }
@@ -463,13 +551,21 @@ export async function updateStoryFile(dataDir: string, novelSlug: string, relPat
   await fs.writeFile(filePath, content, "utf8");
 }
 
-export async function createCharacterCard(dataDir: string, novelSlug: string, name: string) {
+export async function createCharacterCard(
+  dataDir: string,
+  novelSlug: string,
+  name: string,
+  opts?: { role?: string; tags?: string[] }
+) {
   const safeName = name.trim() || "未命名角色";
   const relPath = `story/characters/${safeName}.md`;
   const filePath = path.join(dataDir, novelSlug, relPath);
   if (await exists(filePath)) throw new Error("Character already exists");
   await ensureDir(path.dirname(filePath));
-  const body = `# ${safeName}\n\n- 目标：\n- 动机：\n- 弱点：\n- 外貌：\n- 关系：\n`;
+  const role = (opts?.role || "配角").trim() || "配角";
+  const tags = [...new Set((opts?.tags ?? []).map((t) => String(t).trim()).filter(Boolean))].slice(0, 30);
+  const tagsYaml = tags.length ? `[${tags.join(", ")}]` : "[]";
+  const body = `---\nrole: ${role}\ntags: ${tagsYaml}\n---\n# ${safeName}\n\n- 目标：\n- 动机：\n- 弱点：\n- 外貌：\n- 关系：\n`;
   await fs.writeFile(filePath, body, "utf8");
   return { relPath };
 }

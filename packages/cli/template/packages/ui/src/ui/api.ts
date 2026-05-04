@@ -20,6 +20,8 @@ export type StoryFile = {
   kind: "story" | "character";
   path: string;
   title: string;
+  role?: string;
+  tags?: string[];
 };
 
 const API_BASE = (import.meta as any).env?.VITE_API_BASE || "http://127.0.0.1:3177";
@@ -121,10 +123,13 @@ export async function updateStoryFile(slug: string, relPath: string, content: st
   });
 }
 
-export async function createCharacter(slug: string, name: string) {
+export async function createCharacter(
+  slug: string,
+  input: { name: string; role?: string; tags?: string[] }
+) {
   return await http<{ character: { relPath: string } }>(
     `/api/books/${encodeURIComponent(slug)}/story/characters`,
-    { method: "POST", body: JSON.stringify({ name }) }
+    { method: "POST", body: JSON.stringify(input) }
   );
 }
 

@@ -49,6 +49,12 @@ const THEME_OPTIONS: Array<{ id: ThemePreference; label: string }> = [
   { id: "dark", label: "黑夜" }
 ];
 
+const CHARACTER_ROLE_OPTIONS = ["主角", "配角", "反派", "盟友", "路人", "其他"] as const;
+type CharacterRole = (typeof CHARACTER_ROLE_OPTIONS)[number];
+
+const CHARACTER_TAG_OPTIONS = ["盟友", "敌对", "家人", "同事", "组织", "阵营"] as const;
+type CharacterTag = (typeof CHARACTER_TAG_OPTIONS)[number];
+
 function migrateLegacyTheme(raw: string | null): ThemePreference {
   if (raw === "system" || raw === "light" || raw === "dark") return raw;
   if (!raw) return "system";
@@ -143,12 +149,21 @@ export function App() {
   const [shelfPeekSaving, setShelfPeekSaving] = useState(false);
 
   const [chapterTitle, setChapterTitle] = useState("");
-  const [characterName, setCharacterName] = useState("");
+  const [createCharacterModalOpen, setCreateCharacterModalOpen] = useState(false);
+  const [modalCharacterName, setModalCharacterName] = useState("");
+  const [modalCharacterRole, setModalCharacterRole] = useState<CharacterRole>("配角");
+  const [modalCharacterTags, setModalCharacterTags] = useState<string[]>([]);
+  const [modalCharacterTagDraft, setModalCharacterTagDraft] = useState("");
 
   const [chapterContent, setChapterContent] = useState("");
   const [cardContent, setCardContent] = useState("");
   const [storyFiles, setStoryFiles] = useState<StoryFile[]>([]);
   const [charFiles, setCharFiles] = useState<StoryFile[]>([]);
+  const [rightTab, setRightTab] = useState<"characters" | "story" | "places" | "orgs" | "timeline">(
+    "characters"
+  );
+  const [characterRoleFilter, setCharacterRoleFilter] = useState<"全部" | CharacterRole>("全部");
+  const [characterTagFilter, setCharacterTagFilter] = useState<CharacterTag[]>([]);
   const [status, setStatus] = useState<string>("");
   const [busy, setBusy] = useState(false);
 
@@ -241,6 +256,35 @@ export function App() {
       next: i + 1 < displayedChapters.length ? displayedChapters[i + 1] : null
     };
   }, [displayedChapters, selectedChapter?.filename]);
+
+  const filteredCharFiles = useMemo(() => {
+    const roleFiltered = charFiles.filter((f) => {
+      const r = (f.role || "配角") as CharacterRole;
+      if (characterRoleFilter === "全部") return true;
+      return r === characterRoleFilter;
+    });
+    if (characterTagFilter.length === 0) return roleFiltered;
+    return roleFiltered.filter((f) => {
+      const tags = new Set((f.tags ?? []) as string[]);
+      return characterTagFilter.every((t) => tags.has(t));
+    });
+  }, [charFiles, characterRoleFilter, characterTagFilter]);
+
+  const groupedCharFiles = useMemo(() => {
+    const groups = new Map<CharacterRole, StoryFile[]>();
+    for (const r of CHARACTER_ROLE_OPTIONS) groups.set(r, []);
+    groups.set("其他", []);
+    for (const f of filteredCharFiles) {
+      const r = (f.role || "配角") as CharacterRole;
+      const key = CHARACTER_ROLE_OPTIONS.includes(r) ? r : "其他";
+      groups.get(key)!.push(f);
+    }
+    for (const [k, arr] of groups) {
+      arr.sort((a, b) => a.title.localeCompare(b.title, "zh-Hans-CN"));
+      if (arr.length === 0) groups.delete(k);
+    }
+    return [...groups.entries()];
+  }, [filteredCharFiles]);
 
   const canRenameChapterFilename = useMemo(() => {
     if (!selectedChapter?.filename) return false;
@@ -814,13 +858,26 @@ export function App() {
 
   async function onCreateCharacter() {
     if (!activeBook) return;
-    if (!characterName.trim()) return;
+    const name = modalCharacterName.trim();
+    if (!name) return;
     setBusy(true);
     setStatus("");
     try {
-      await createCharacter(activeBook, characterName.trim());
-      setCharacterName("");
+      const tags = [...new Set(modalCharacterTags.map((t) => t.trim()).filter(Boolean))].slice(0, 30);
+      const { character } = await createCharacter(activeBook, {
+        name,
+        role: modalCharacterRole,
+        tags
+      });
+      setCreateCharacterModalOpen(false);
+      setModalCharacterName("");
+      setModalCharacterRole("配角");
+      setModalCharacterTags([]);
+      setModalCharacterTagDraft("");
       await refreshStory(activeBook);
+      // 直接打开新建的卡片
+      const f: StoryFile = { kind: "character", path: character.relPath, title: name, role: modalCharacterRole, tags };
+      await onOpenCard(f);
       setStatus("已创建角色卡文件。");
     } catch (e: any) {
       setStatus(e?.message || String(e));
@@ -1049,7 +1106,7 @@ export function App() {
           <div className="centerTop">
             <div className="centerTitleBlock">
               <div className="centerTitleRow">
-                {activeBook && !navHome ? (
+                {activeBook || navHome ? (
                   <button
                     type="button"
                     className="btnSidebarToggle"
@@ -1215,11 +1272,6 @@ export function App() {
                     </option>
                   ))}
                 </select>
-                {mobileReading ? (
-                  <div className="centerDeviceMeta" title={mobileViewport.label}>
-                    视口：{mobileViewport.w}×{mobileViewport.h}
-                  </div>
-                ) : null}
               </div>
             ) : null}
             {selectedChapter ? (
@@ -1277,50 +1329,199 @@ export function App() {
 
         <aside className="right">
           <section className="panel">
-            <div className="panelTitle">状态卡 / 角色卡</div>
-            <div className="row">
-              <input
-                value={characterName}
-                onChange={(e) => setCharacterName(e.target.value)}
-                placeholder="新增角色名"
-                disabled={busy || !activeBook}
-              />
-              <button onClick={onCreateCharacter} disabled={busy || !activeBook || !characterName.trim()}>
-                添加
+            <div className="panelTitle">卡片</div>
+            <div className="rightTabs" role="tablist" aria-label="右侧卡片页签">
+              <button
+                type="button"
+                role="tab"
+                className={`rightTab ${rightTab === "characters" ? "active" : ""}`}
+                aria-selected={rightTab === "characters"}
+                onClick={() => setRightTab("characters")}
+                disabled={busy}
+              >
+                角色
+              </button>
+              <button
+                type="button"
+                role="tab"
+                className={`rightTab ${rightTab === "story" ? "active" : ""}`}
+                aria-selected={rightTab === "story"}
+                onClick={() => setRightTab("story")}
+                disabled={busy}
+              >
+                资料
+              </button>
+              <button
+                type="button"
+                role="tab"
+                className={`rightTab ${rightTab === "places" ? "active" : ""}`}
+                aria-selected={rightTab === "places"}
+                onClick={() => setRightTab("places")}
+                disabled={busy}
+              >
+                地点
+              </button>
+              <button
+                type="button"
+                role="tab"
+                className={`rightTab ${rightTab === "orgs" ? "active" : ""}`}
+                aria-selected={rightTab === "orgs"}
+                onClick={() => setRightTab("orgs")}
+                disabled={busy}
+              >
+                组织
+              </button>
+              <button
+                type="button"
+                role="tab"
+                className={`rightTab ${rightTab === "timeline" ? "active" : ""}`}
+                aria-selected={rightTab === "timeline"}
+                onClick={() => setRightTab("timeline")}
+                disabled={busy}
+              >
+                时间线
               </button>
             </div>
-            <div className="cards">
-              <div className="cardsCol">
-                <div className="cardsTitle">资料</div>
-                <div className="list">
-                  {storyFiles.map((f) => (
-                    <button
-                      key={f.path}
-                      className={`item ${selectedCard?.path === f.path ? "active" : ""}`}
-                      onClick={() => onOpenCard(f)}
-                      disabled={busy}
-                    >
-                      {f.title}
-                    </button>
-                  ))}
+
+            {rightTab === "characters" ? (
+              <>
+                <div className="row">
+                  <button
+                    type="button"
+                    className="btnNewCharacter"
+                    onClick={() => {
+                      if (busy || !activeBook) return;
+                      setCreateCharacterModalOpen(true);
+                      setModalCharacterName("");
+                      setModalCharacterRole("配角");
+                      setModalCharacterTags([]);
+                      setModalCharacterTagDraft("");
+                    }}
+                    disabled={busy || !activeBook}
+                  >
+                    新增角色
+                  </button>
                 </div>
-              </div>
-              <div className="cardsCol">
-                <div className="cardsTitle">角色</div>
-                <div className="list">
-                  {charFiles.map((f) => (
-                    <button
-                      key={f.path}
-                      className={`item ${selectedCard?.path === f.path ? "active" : ""}`}
-                      onClick={() => onOpenCard(f)}
-                      disabled={busy}
-                    >
-                      {f.title}
-                    </button>
-                  ))}
+                <div className="characterFilters">
+                  <div className="filterRow">
+                    <div className="filterLabel muted">身份</div>
+                    <div className="chips">
+                      <button
+                        type="button"
+                        className={`chip ${characterRoleFilter === "全部" ? "active" : ""}`}
+                        onClick={() => setCharacterRoleFilter("全部")}
+                        disabled={busy}
+                      >
+                        全部
+                      </button>
+                      {CHARACTER_ROLE_OPTIONS.map((r) => (
+                        <button
+                          key={r}
+                          type="button"
+                          className={`chip ${characterRoleFilter === r ? "active" : ""}`}
+                          onClick={() => setCharacterRoleFilter(r)}
+                          disabled={busy}
+                        >
+                          {r}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="filterRow">
+                    <div className="filterLabel muted">标签</div>
+                    <div className="chips">
+                      {CHARACTER_TAG_OPTIONS.map((t) => {
+                        const active = characterTagFilter.includes(t);
+                        return (
+                          <button
+                            key={t}
+                            type="button"
+                            className={`chip ${active ? "active" : ""}`}
+                            onClick={() =>
+                              setCharacterTagFilter((prev) =>
+                                active ? prev.filter((x) => x !== t) : [...prev, t]
+                              )
+                            }
+                            disabled={busy}
+                            aria-pressed={active}
+                          >
+                            {t}
+                          </button>
+                        );
+                      })}
+                      {characterTagFilter.length > 0 ? (
+                        <button
+                          type="button"
+                          className="chip chipClear"
+                          onClick={() => setCharacterTagFilter([])}
+                          disabled={busy}
+                          title="清空标签筛选"
+                        >
+                          清空
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
                 </div>
+
+                <div className="characterGroups">
+                  {groupedCharFiles.length === 0 ? (
+                    <div className="empty">没有匹配的角色。</div>
+                  ) : (
+                    groupedCharFiles.map(([role, files]) => (
+                      <div key={role} className="characterGroup">
+                        <div className="characterGroupTitle">
+                          {role} <span className="muted">({files.length})</span>
+                        </div>
+                        <div className="list">
+                          {files.map((f) => (
+                            <button
+                              key={f.path}
+                              className={`item ${selectedCard?.path === f.path ? "active" : ""}`}
+                              onClick={() => onOpenCard(f)}
+                              disabled={busy}
+                              title={[
+                                f.role ? `身份：${f.role}` : null,
+                                (f.tags && f.tags.length) ? `标签：${f.tags.join("、")}` : null
+                              ]
+                                .filter(Boolean)
+                                .join("\n")}
+                            >
+                              <span className="itemMain">
+                                <span className="itemTitle">{f.title}</span>
+                                <span className="itemBadges">
+                                  {f.role ? <span className="badge badgeRole">{f.role}</span> : null}
+                                  {(f.tags ?? []).slice(0, 3).map((tg) => (
+                                    <span key={tg} className="badge">
+                                      {tg}
+                                    </span>
+                                  ))}
+                                </span>
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            ) : rightTab === "story" ? (
+              <div className="list">
+                {storyFiles.map((f) => (
+                  <button
+                    key={f.path}
+                    className={`item ${selectedCard?.path === f.path ? "active" : ""}`}
+                    onClick={() => onOpenCard(f)}
+                    disabled={busy}
+                  >
+                    {f.title}
+                  </button>
+                ))}
               </div>
-            </div>
+            ) : (
+              <div className="empty">该页签后续完善。</div>
+            )}
             <div className="cardEditorTop">
               <div className="muted">{selectedCard ? selectedCard.path : "未选择卡片"}</div>
               <div
@@ -1470,6 +1671,145 @@ export function App() {
                 onClick={() => void confirmChapterGapFill()}
               >
                 补齐第 {chapterGapModalIndexes[0]} 章
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {createCharacterModalOpen ? (
+        <div
+          className="modalBackdrop"
+          role="presentation"
+          onClick={() => {
+            if (!busy) setCreateCharacterModalOpen(false);
+          }}
+        >
+          <div
+            className="modalPanel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-create-character-heading"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="modal-create-character-heading" className="modalHeading">
+              新增角色
+            </h2>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-character-name">
+                角色名<span className="modalReq">*</span>
+              </label>
+              <input
+                id="modal-character-name"
+                className="modalInput"
+                value={modalCharacterName}
+                onChange={(e) => setModalCharacterName(e.target.value)}
+                placeholder="必填"
+                disabled={busy || !activeBook}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-character-role">
+                身份
+              </label>
+              <select
+                id="modal-character-role"
+                className="select"
+                value={modalCharacterRole}
+                onChange={(e) => setModalCharacterRole(e.target.value as CharacterRole)}
+                disabled={busy || !activeBook}
+              >
+                {CHARACTER_ROLE_OPTIONS.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="modalField">
+              <div className="modalLabel">标签</div>
+              <div className="chips">
+                {CHARACTER_TAG_OPTIONS.map((t) => {
+                  const active = modalCharacterTags.includes(t);
+                  return (
+                    <button
+                      key={t}
+                      type="button"
+                      className={`chip ${active ? "active" : ""}`}
+                      onClick={() =>
+                        setModalCharacterTags((prev) =>
+                          active ? prev.filter((x) => x !== t) : [...prev, t]
+                        )
+                      }
+                      disabled={busy || !activeBook}
+                      aria-pressed={active}
+                    >
+                      {t}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="row" style={{ marginTop: 10 }}>
+                <input
+                  value={modalCharacterTagDraft}
+                  onChange={(e) => setModalCharacterTagDraft(e.target.value)}
+                  placeholder="输入自定义标签，回车添加"
+                  disabled={busy || !activeBook}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter") return;
+                    e.preventDefault();
+                    const t = modalCharacterTagDraft.trim();
+                    if (!t) return;
+                    setModalCharacterTags((prev) => (prev.includes(t) ? prev : [...prev, t]));
+                    setModalCharacterTagDraft("");
+                  }}
+                />
+                <button
+                  type="button"
+                  disabled={busy || !activeBook || !modalCharacterTagDraft.trim()}
+                  onClick={() => {
+                    const t = modalCharacterTagDraft.trim();
+                    if (!t) return;
+                    setModalCharacterTags((prev) => (prev.includes(t) ? prev : [...prev, t]));
+                    setModalCharacterTagDraft("");
+                  }}
+                >
+                  添加标签
+                </button>
+              </div>
+              {modalCharacterTags.length ? (
+                <div className="chips" style={{ marginTop: 10 }}>
+                  {modalCharacterTags.map((t) => (
+                    <button
+                      key={t}
+                      type="button"
+                      className="chip active"
+                      onClick={() => setModalCharacterTags((prev) => prev.filter((x) => x !== t))}
+                      disabled={busy || !activeBook}
+                      title="点击移除"
+                    >
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            <div className="modalActions">
+              <button
+                type="button"
+                className="btnModalSecondary"
+                disabled={busy}
+                onClick={() => setCreateCharacterModalOpen(false)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="btnModalPrimary"
+                disabled={busy || !activeBook || !modalCharacterName.trim()}
+                onClick={() => void onCreateCharacter()}
+              >
+                创建
               </button>
             </div>
           </div>

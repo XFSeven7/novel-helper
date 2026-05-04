@@ -42,6 +42,8 @@ export type StoryFile = {
   kind: "story" | "character";
   path: string;
   title: string;
+  role?: string;
+  tags?: string[];
 };
 
 export async function listBooks() {
@@ -122,10 +124,13 @@ export async function updateStoryFile(slug: string, relPath: string, content: st
   });
 }
 
-export async function createCharacter(slug: string, name: string) {
+export async function createCharacter(
+  slug: string,
+  input: { name: string; role?: string; tags?: string[] }
+) {
   return await http<{ character: { relPath: string } }>(
     `/api/books/${encodeURIComponent(slug)}/story/characters`,
-    { method: "POST", body: JSON.stringify({ name }) }
+    { method: "POST", body: JSON.stringify(input) }
   );
 }
 

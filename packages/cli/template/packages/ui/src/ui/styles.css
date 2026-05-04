@@ -634,11 +634,139 @@ button:disabled {
   margin-bottom: 10px;
 }
 
+.rightTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -2px 0 10px;
+}
+
+.rightTab {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  color: color-mix(in srgb, var(--text) 88%, transparent);
+}
+
+.rightTab:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--panel) 100%, transparent);
+  color: var(--text);
+}
+
+.rightTab.active {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel));
+  color: var(--text);
+}
+
 .row {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 8px;
   margin-bottom: 10px;
+}
+
+.characterFilters {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 2px 0 10px;
+}
+
+.filterRow {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.filterLabel {
+  width: 34px;
+  padding-top: 6px;
+  flex-shrink: 0;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  color: color-mix(in srgb, var(--text) 88%, transparent);
+}
+
+.chip:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--panel) 100%, transparent);
+  color: var(--text);
+}
+
+.chip.active {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: color-mix(in srgb, var(--accent) 16%, var(--panel));
+  color: var(--text);
+}
+
+.chipClear {
+  border-color: color-mix(in srgb, #f97373 38%, var(--border));
+  color: color-mix(in srgb, #f97373 72%, var(--text));
+}
+
+.characterGroups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.characterGroupTitle {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 4px 0 6px;
+}
+
+.itemMain {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.itemTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.itemBadges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.badge {
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  color: color-mix(in srgb, var(--text) 86%, transparent);
+}
+
+.badgeRole {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  color: var(--text);
 }
 
 .tree,
@@ -961,6 +1089,21 @@ button:disabled {
   color: var(--text);
   background: rgba(255, 255, 255, 0.06);
   font-family: ui-serif, "PingFang SC", "Noto Serif SC", "Songti SC", "Source Han Serif SC", serif;
+}
+
+/* 白天主题：阅读模式更接近纸面质感（不影响黑夜主题） */
+:root.theme-light .mobilePhone,
+:root.theme-system .mobilePhone {
+  border-color: rgba(17, 24, 39, 0.16);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 22px 70px rgba(17, 24, 39, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+
+:root.theme-light .mobileTextarea,
+:root.theme-system .mobileTextarea {
+  border-color: rgba(17, 24, 39, 0.14);
+  background: rgba(255, 255, 255, 0.92);
+  color: rgba(17, 24, 39, 0.92);
 }
 
 textarea:not(.mobileTextarea):not(.bookOverviewSynopsis) {
