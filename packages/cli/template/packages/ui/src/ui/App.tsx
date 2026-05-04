@@ -42,6 +42,8 @@ type ThemePreference = "system" | "light" | "dark";
 
 const THEME_STORAGE_KEY = "novel-helper-theme";
 const NAV_COLLAPSED_STORAGE_KEY = "novel-helper-nav-collapsed";
+const MODEL_CONFIGS_STORAGE_KEY = "novel-helper-model-configs";
+const MODEL_ACTIVE_ID_STORAGE_KEY = "novel-helper-model-active-id";
 
 const THEME_OPTIONS: Array<{ id: ThemePreference; label: string }> = [
   { id: "system", label: "跟随系统" },
@@ -54,6 +56,113 @@ type CharacterRole = (typeof CHARACTER_ROLE_OPTIONS)[number];
 
 const CHARACTER_TAG_OPTIONS = ["盟友", "敌对", "家人", "同事", "组织", "阵营"] as const;
 type CharacterTag = (typeof CHARACTER_TAG_OPTIONS)[number];
+
+type ModelProviderId = "openai" | "deepseek" | "gemini" | "qwen" | "ollama" | "custom";
+
+type ModelConfig = {
+  id: string;
+  label: string;
+  provider: ModelProviderId;
+  baseUrl: string;
+  apiKey: string;
+  testUrl: string;
+  model?: string;
+  extraHeadersJson?: string;
+  lastTestOk?: boolean;
+};
+
+const BUILTIN_MODEL_PROVIDERS: Array<{ id: ModelProviderId; label: string }> = [
+  { id: "openai", label: "OpenAI" },
+  { id: "deepseek", label: "DeepSeek" },
+  { id: "gemini", label: "Gemini" },
+  { id: "qwen", label: "千问（通义千问）" },
+  { id: "ollama", label: "Ollama（本地）" },
+  { id: "custom", label: "自定义服务" }
+];
+
+function defaultConfigFor(provider: ModelProviderId): ModelConfig {
+  const id = `${provider}-${Date.now()}`;
+  if (provider === "openai")
+    return {
+      id,
+      label: "OpenAI",
+      provider,
+      baseUrl: "https://api.openai.com/v1",
+      apiKey: "",
+      testUrl: "https://api.openai.com/v1/models",
+      model: "gpt-4.1-mini"
+    };
+  if (provider === "deepseek")
+    return {
+      id,
+      label: "DeepSeek",
+      provider,
+      baseUrl: "https://api.deepseek.com/v1",
+      apiKey: "",
+      testUrl: "https://api.deepseek.com/v1/models",
+      model: "deepseek-chat"
+    };
+  if (provider === "gemini")
+    return {
+      id,
+      label: "Gemini",
+      provider,
+      baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+      apiKey: "",
+      testUrl: "https://generativelanguage.googleapis.com/v1beta/models",
+      model: "gemini-1.5-flash"
+    };
+  if (provider === "qwen")
+    return {
+      id,
+      label: "千问",
+      provider,
+      baseUrl: "https://dashscope.aliyuncs.com/api/v1",
+      apiKey: "",
+      testUrl: "https://dashscope.aliyuncs.com/api/v1/models",
+      model: "qwen-plus"
+    };
+  if (provider === "ollama")
+    return {
+      id,
+      label: "Ollama（本地）",
+      provider,
+      baseUrl: "http://127.0.0.1:11434",
+      apiKey: "",
+      testUrl: "http://127.0.0.1:11434/api/tags",
+      model: ""
+    };
+  return {
+    id,
+    label: "自定义",
+    provider: "custom",
+    baseUrl: "",
+    apiKey: "",
+    testUrl: "",
+    model: "",
+    extraHeadersJson: "{}"
+  };
+}
+
+function loadModelConfigs(): { configs: ModelConfig[]; activeId: string | null } {
+  try {
+    const raw = localStorage.getItem(MODEL_CONFIGS_STORAGE_KEY);
+    const activeId = localStorage.getItem(MODEL_ACTIVE_ID_STORAGE_KEY);
+    const parsed = raw ? (JSON.parse(raw) as ModelConfig[]) : [];
+    const byProvider = new Map<ModelProviderId, ModelConfig>();
+    if (Array.isArray(parsed)) {
+      for (const c of parsed) {
+        if (!c?.provider) continue;
+        if (!byProvider.has(c.provider)) byProvider.set(c.provider, c);
+      }
+    }
+    const configs = BUILTIN_MODEL_PROVIDERS.map((p) => byProvider.get(p.id) ?? defaultConfigFor(p.id));
+    return { configs, activeId: activeId || configs[0]?.id || null };
+  } catch {
+    const configs = BUILTIN_MODEL_PROVIDERS.map((p) => defaultConfigFor(p.id));
+    return { configs, activeId: configs[0]?.id || null };
+  }
+}
 
 function migrateLegacyTheme(raw: string | null): ThemePreference {
   if (raw === "system" || raw === "light" || raw === "dark") return raw;
@@ -162,6 +271,13 @@ export function App() {
   const [mobileReading, setMobileReading] = useState(false);
   const [mobilePreset, setMobilePreset] = useState<MobilePresetId>("iphone-14");
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => loadThemePreference());
+  const [{ configs: modelConfigs, activeId: activeModelId }, setModelState] = useState(() =>
+    loadModelConfigs()
+  );
+  const [modelConfigEditorId, setModelConfigEditorId] = useState<string | null>(null);
+  const [modelEditorDraft, setModelEditorDraft] = useState<ModelConfig | null>(null);
+  const [modelTestStatus, setModelTestStatus] = useState<string>("");
+  const [homeCenterTab, setHomeCenterTab] = useState<"welcome" | "model">("welcome");
   const [navCollapsed, setNavCollapsed] = useState<boolean>(() => {
     try {
       return localStorage.getItem(NAV_COLLAPSED_STORAGE_KEY) === "1";
@@ -494,6 +610,15 @@ export function App() {
   }, [navCollapsed]);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(MODEL_CONFIGS_STORAGE_KEY, JSON.stringify(modelConfigs));
+      if (activeModelId) localStorage.setItem(MODEL_ACTIVE_ID_STORAGE_KEY, activeModelId);
+    } catch {
+      // ignore
+    }
+  }, [modelConfigs, activeModelId]);
+
+  useEffect(() => {
     if (!activeBook) return;
     refreshChapters(activeBook).catch((e) => setStatus(String(e?.message || e)));
     refreshStory(activeBook).catch((e) => setStatus(String(e?.message || e)));
@@ -576,6 +701,7 @@ export function App() {
     await flushCardSave();
     await flushSynopsisSave();
     setNavHome(true);
+    setHomeCenterTab("welcome");
     setActiveBook("");
     setSelectedChapter(null);
     setSelectedCard(null);
@@ -875,6 +1001,83 @@ export function App() {
     }
   }
 
+  function openModelConfigEditor(id: string) {
+    const cfg = modelConfigs.find((c) => c.id === id);
+    if (!cfg) return;
+    setModelConfigEditorId(id);
+    setModelEditorDraft({ ...cfg });
+    setModelTestStatus("");
+  }
+
+  function saveModelConfigDraft() {
+    if (!modelEditorDraft) return;
+    setModelState((prev) => ({
+      ...prev,
+      configs: prev.configs.map((c) => (c.id === modelEditorDraft.id ? modelEditorDraft : c))
+    }));
+    setStatus("已保存模型配置。");
+  }
+
+  async function testModelConfigDraft() {
+    if (!modelEditorDraft) return;
+    const cfg = modelEditorDraft;
+    if (!cfg.testUrl.trim()) {
+      setModelTestStatus("请先填写测试地址。");
+      return;
+    }
+    setModelTestStatus("测试中…");
+    try {
+      const headers: Record<string, string> = {};
+      if (cfg.provider === "openai" || cfg.provider === "deepseek" || cfg.provider === "qwen") {
+        if (cfg.apiKey.trim()) headers.Authorization = `Bearer ${cfg.apiKey.trim()}`;
+      }
+      if (cfg.provider === "gemini") {
+        if (cfg.apiKey.trim() && !cfg.testUrl.includes("key=")) {
+          const u = new URL(cfg.testUrl);
+          u.searchParams.set("key", cfg.apiKey.trim());
+          const next = u.toString();
+          setModelEditorDraft({ ...cfg, testUrl: next });
+          cfg.testUrl = next;
+        }
+      }
+      if (cfg.extraHeadersJson?.trim()) {
+        try {
+          const extra = JSON.parse(cfg.extraHeadersJson) as Record<string, string>;
+          for (const [k, v] of Object.entries(extra)) headers[k] = String(v);
+        } catch {
+          setModelTestStatus("extraHeadersJson 不是合法 JSON。");
+          return;
+        }
+      }
+      const res = await fetch(cfg.testUrl, { method: "GET", headers });
+      const text = await res.text().catch(() => "");
+      let suffix = text ? ` · ${text.slice(0, 120)}` : "";
+      if (cfg.provider === "ollama" || cfg.testUrl.includes("/api/tags")) {
+        try {
+          const j = JSON.parse(text) as any;
+          const names: string[] = Array.isArray(j?.models)
+            ? j.models.map((m: any) => String(m?.name || m?.model || "")).filter(Boolean)
+            : [];
+          if (names.length) {
+            const preview = names.slice(0, 6).join("、");
+            suffix = ` · 共 ${names.length} 个模型：${preview}${names.length > 6 ? "…" : ""}`;
+          }
+        } catch {
+          // ignore
+        }
+      }
+      const ok = res.status >= 200 && res.status < 300;
+      setModelEditorDraft((prev) => (prev ? { ...prev, lastTestOk: ok } : prev));
+      setModelState((prev) => ({
+        ...prev,
+        configs: prev.configs.map((c) => (c.id === cfg.id ? { ...c, lastTestOk: ok } : c))
+      }));
+      setModelTestStatus(`HTTP ${res.status}${suffix}`);
+    } catch (e: any) {
+      setModelTestStatus(e?.message || String(e));
+    }
+  }
+
   return (
     <div className="app">
       <header className="topbar">
@@ -1087,10 +1290,19 @@ export function App() {
           </div>
           )}
 
-          <div className="panel">
-            <div className="navTitle">AI 代理设置</div>
-            <div className="empty">先预留位置：后续可放模型、提示词、工具等配置。</div>
-          </div>
+          {navHome ? (
+            <div className="panel navModelConfigSection">
+              <button
+                type="button"
+                className="btnModelConfig"
+                disabled={busy}
+                title="在中间配置模型与 API Key"
+                onClick={() => setHomeCenterTab("model")}
+              >
+                模型配置
+              </button>
+            </div>
+          ) : null}
         </aside>
 
         <main className="center">
@@ -1277,7 +1489,146 @@ export function App() {
             ) : null}
           </div>
           {!activeBook ? (
-            <div className="empty centerBodyHint">从左侧书架选择一本书开始。</div>
+            homeCenterTab === "model" ? (
+              <div className="homeModelConfig">
+                <div className="homeModelHeader">
+                  <div className="centerMeta">模型配置</div>
+                </div>
+
+                {modelConfigEditorId && modelEditorDraft ? (
+                  <div className="homeModelEditor">
+                    <div className="row">
+                      <button
+                        type="button"
+                        className="btnBack"
+                        onClick={() => {
+                          setModelConfigEditorId(null);
+                          setModelEditorDraft(null);
+                          setModelTestStatus("");
+                        }}
+                        disabled={busy}
+                      >
+                        返回列表
+                      </button>
+                      <button
+                        type="button"
+                        className="btnSort"
+                        onClick={() => {
+                          setModelState((prev) => ({ ...prev, activeId: modelEditorDraft.id }));
+                          setStatus("已设为当前模型配置。");
+                        }}
+                        disabled={busy}
+                      >
+                        设为当前
+                      </button>
+                    </div>
+
+                    <div className="modelField">
+                      <div className="navSubtitle">名称</div>
+                      <input
+                        value={modelEditorDraft.label}
+                        onChange={(e) => setModelEditorDraft({ ...modelEditorDraft, label: e.target.value })}
+                        disabled={busy}
+                      />
+                    </div>
+                    <div className="modelField">
+                      <div className="navSubtitle">API Key</div>
+                      <input
+                        value={modelEditorDraft.apiKey}
+                        onChange={(e) => setModelEditorDraft({ ...modelEditorDraft, apiKey: e.target.value })}
+                        placeholder="可留空（如 Ollama）"
+                        disabled={busy}
+                      />
+                    </div>
+                    <div className="modelField">
+                      <div className="navSubtitle">测试地址</div>
+                      <input
+                        value={modelEditorDraft.testUrl}
+                        onChange={(e) => setModelEditorDraft({ ...modelEditorDraft, testUrl: e.target.value })}
+                        placeholder="例如 https://api.openai.com/v1/models"
+                        disabled={busy}
+                      />
+                    </div>
+                    <div className="modelField">
+                      <div className="navSubtitle">模型名（可选）</div>
+                      <input
+                        value={modelEditorDraft.model ?? ""}
+                        onChange={(e) => setModelEditorDraft({ ...modelEditorDraft, model: e.target.value })}
+                        placeholder="例如 gpt-4.1-mini / deepseek-chat / gemini-1.5-flash"
+                        disabled={busy}
+                      />
+                    </div>
+                    {modelEditorDraft.provider === "custom" ? (
+                      <div className="modelField">
+                        <div className="navSubtitle">额外 Headers（JSON，可选）</div>
+                        <textarea
+                          className="modelHeadersTextarea"
+                          value={modelEditorDraft.extraHeadersJson ?? ""}
+                          onChange={(e) =>
+                            setModelEditorDraft({ ...modelEditorDraft, extraHeadersJson: e.target.value })
+                          }
+                          placeholder='例如 {"X-My-Header":"123"}'
+                          disabled={busy}
+                          rows={3}
+                        />
+                      </div>
+                    ) : null}
+
+                    <div className="row">
+                      <button type="button" className="btnSort" onClick={() => void testModelConfigDraft()} disabled={busy}>
+                        测试连接
+                      </button>
+                      <button
+                        type="button"
+                        className="btnModalPrimary"
+                        onClick={() => saveModelConfigDraft()}
+                        disabled={busy || !modelEditorDraft.label.trim()}
+                      >
+                        保存
+                      </button>
+                    </div>
+                    {modelTestStatus ? <div className="empty">{modelTestStatus}</div> : null}
+                  </div>
+                ) : (
+                  <div className="homeModelList">
+                    <div className="modelProviderGrid">
+                      {BUILTIN_MODEL_PROVIDERS.map((p) => {
+                        const c = modelConfigs.find((x) => x.provider === p.id) ?? defaultConfigFor(p.id);
+                        const configured =
+                          p.id === "ollama"
+                            ? Boolean(c.baseUrl?.trim())
+                            : p.id === "custom"
+                              ? Boolean(c.testUrl?.trim() || c.baseUrl?.trim())
+                              : Boolean(c.apiKey?.trim());
+                        const statusText = c.lastTestOk ? "已连接" : configured ? "已配置" : "未配置";
+                        return (
+                          <button
+                            key={p.id}
+                            type="button"
+                            className={`modelProviderCard ${c.id === activeModelId ? "active" : ""}`}
+                            onClick={() => openModelConfigEditor(c.id)}
+                            disabled={busy}
+                            title="点击配置"
+                          >
+                            <div className="modelProviderTop">
+                              <div className="modelProviderName">{p.label}</div>
+                              <span
+                                className={`modelProviderDot ${
+                                  c.lastTestOk ? "ok" : configured ? "warn" : "off"
+                                }`}
+                              />
+                            </div>
+                            <div className="modelProviderStatus">{statusText}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="empty centerBodyHint">从左侧书架选择一本书开始。</div>
+            )
           ) : showBookOverview ? (
             <div className="bookOverview">
               <div className="bookOverviewSynopsisLabel">简介</div>

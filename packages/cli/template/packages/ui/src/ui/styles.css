@@ -634,6 +634,105 @@ button:disabled {
   margin-bottom: 10px;
 }
 
+.modelProviderGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.modelProviderCard {
+  text-align: left;
+  padding: 14px 14px 12px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+
+.modelProviderCard:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--panel) 100%, transparent);
+}
+
+.modelProviderCard.active {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+
+.modelProviderTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.modelProviderName {
+  font-weight: 650;
+  color: var(--text);
+}
+
+.modelProviderStatus {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.modelProviderDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.7);
+  flex-shrink: 0;
+}
+
+.modelProviderDot.ok {
+  background: rgba(16, 185, 129, 0.9);
+}
+
+.modelProviderDot.warn {
+  background: rgba(148, 163, 184, 0.9);
+}
+
+.modelProviderDot.off {
+  background: rgba(148, 163, 184, 0.55);
+}
+
+.modelField {
+  margin-bottom: 10px;
+}
+
+.modelHeadersTextarea {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  outline: none;
+  padding: 10px 10px;
+  resize: vertical;
+}
+
+.btnBack {
+  padding: 3px 10px;
+  font-size: 11px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  background: transparent;
+  color: color-mix(in srgb, var(--muted) 95%, var(--text));
+  cursor: pointer;
+}
+
+.btnBack:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+}
+
+.navModelConfigSection {
+  padding: 10px;
+}
+
+.btnModelConfig {
+  width: 100%;
+}
+
 .rightTabs {
   display: flex;
   flex-wrap: wrap;
@@ -821,6 +920,26 @@ button:disabled {
   row-gap: 10px;
   border-bottom: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.04);
+}
+
+.homeModelConfig {
+  padding: 14px;
+}
+
+.homeModelHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.homeModelEditor,
+.homeModelList {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
 }
 
 .centerReading {
