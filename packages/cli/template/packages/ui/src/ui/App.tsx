@@ -306,6 +306,93 @@ function SidebarToggleIcon({ mirrored }: { mirrored: boolean }) {
   );
 }
 
+function getFullscreenElement(): Element | null {
+  const d = document as Document & {
+    webkitFullscreenElement?: Element | null;
+    mozFullScreenElement?: Element | null;
+    msFullscreenElement?: Element | null;
+  };
+  return (
+    document.fullscreenElement ??
+    d.webkitFullscreenElement ??
+    d.mozFullScreenElement ??
+    d.msFullscreenElement ??
+    null
+  );
+}
+
+async function toggleDocumentFullscreen(): Promise<void> {
+  const doc = document as Document & {
+    webkitExitFullscreen?: () => Promise<void> | void;
+    mozCancelFullScreen?: () => Promise<void> | void;
+    msExitFullscreen?: () => Promise<void> | void;
+  };
+  const root = document.documentElement as HTMLElement & {
+    webkitRequestFullscreen?: () => Promise<void> | void;
+    mozRequestFullScreen?: () => Promise<void> | void;
+    msRequestFullscreen?: () => Promise<void> | void;
+  };
+
+  if (getFullscreenElement()) {
+    if (document.exitFullscreen) await document.exitFullscreen();
+    else if (doc.webkitExitFullscreen) await Promise.resolve(doc.webkitExitFullscreen());
+    else if (doc.mozCancelFullScreen) await Promise.resolve(doc.mozCancelFullScreen());
+    else if (doc.msExitFullscreen) await Promise.resolve(doc.msExitFullscreen());
+    return;
+  }
+
+  if (root.requestFullscreen) await root.requestFullscreen();
+  else if (root.webkitRequestFullscreen) await Promise.resolve(root.webkitRequestFullscreen());
+  else if (root.mozRequestFullScreen) await Promise.resolve(root.mozRequestFullScreen());
+  else if (root.msRequestFullscreen) await Promise.resolve(root.msRequestFullscreen());
+}
+
+function IconFullscreenEnter(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={20}
+      height={20}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
+      <polyline points="15 3 21 3 21 9" />
+      <polyline points="9 21 3 21 3 15" />
+      <line x1="21" y1="3" x2="14" y2="10" />
+      <line x1="3" y1="21" x2="10" y2="14" />
+    </svg>
+  );
+}
+
+function IconFullscreenExit(props: React.SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={20}
+      height={20}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      {...props}
+    >
+      <polyline points="4 14 10 14 10 20" />
+      <polyline points="20 10 14 10 14 4" />
+      <line x1="14" y1="10" x2="21" y2="3" />
+      <line x1="10" y1="14" x2="3" y2="21" />
+    </svg>
+  );
+}
+
 const AUTOSAVE_DEBOUNCE_MS = 900;
 
 const CHAPTER_TITLE_RENAME_FILE_RE = /^(\d+)_.+\.md$/;
@@ -368,6 +455,7 @@ export function App() {
   const [mobileReading, setMobileReading] = useState(false);
   const [mobilePreset, setMobilePreset] = useState<MobilePresetId>("iphone-14");
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => loadThemePreference());
+  const [fullscreenOn, setFullscreenOn] = useState(false);
   const [{ configs: modelConfigs, activeId: activeModelId }, setModelState] = useState(() =>
     loadModelConfigs()
   );
@@ -667,6 +755,21 @@ export function App() {
       // ignore
     }
   }, [themePreference]);
+
+  useEffect(() => {
+    const sync = () => setFullscreenOn(Boolean(getFullscreenElement()));
+    sync();
+    document.addEventListener("fullscreenchange", sync);
+    document.addEventListener("webkitfullscreenchange", sync as EventListener);
+    document.addEventListener("mozfullscreenchange", sync);
+    document.addEventListener("MSFullscreenChange", sync);
+    return () => {
+      document.removeEventListener("fullscreenchange", sync);
+      document.removeEventListener("webkitfullscreenchange", sync as EventListener);
+      document.removeEventListener("mozfullscreenchange", sync);
+      document.removeEventListener("MSFullscreenChange", sync);
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -1415,6 +1518,20 @@ export function App() {
               </option>
             ))}
           </select>
+          <button
+            type="button"
+            className={`btnFullscreenToggle ${fullscreenOn ? "active" : ""}`}
+            onClick={() =>
+              void toggleDocumentFullscreen().catch(() =>
+                setStatus("无法切换全屏：浏览器不支持或权限被拒绝。")
+              )
+            }
+            title={fullscreenOn ? "退出全屏（Esc）" : "全屏显示"}
+            aria-label={fullscreenOn ? "退出全屏" : "全屏"}
+            aria-pressed={fullscreenOn}
+          >
+            {fullscreenOn ? <IconFullscreenExit /> : <IconFullscreenEnter />}
+          </button>
         </div>
       </header>
 

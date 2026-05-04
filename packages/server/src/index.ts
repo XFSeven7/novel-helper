@@ -6,7 +6,6 @@ import path from "node:path";
 import { generateText, streamText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { ollama } from "ollama-ai-provider-v2";
 import {
   createChapter,
   createNovel,
@@ -287,8 +286,15 @@ function createAiSdkModel(cfg: ModelConfig): { model: any; providerOptions: any 
     } as any);
     model = (client as any)(modelName);
   } else if (provider === "ollama") {
-    model = ollama(modelName);
-    providerOptions = { ollama: { think: true } };
+    // 不用 ollama-ai-provider：AI SDK 5 对其内部 ollama.responses（v3 spec）会报错；
+    // Ollama 内置 OpenAI 兼容 /v1/chat/completions，走 openai-compatible（v2）即可。
+    const client = createOpenAICompatible({
+      name: "ollama",
+      apiKey: cfg.apiKey?.trim() || "ollama",
+      baseURL: normalizeBaseUrlForOpenAICompatible(cfg.baseUrl)
+    } as any);
+    model = (client as any)(modelName);
+    providerOptions = undefined;
   } else {
     throw new Error(`暂不支持 provider: ${provider}`);
   }
@@ -311,7 +317,7 @@ async function streamThinkingTraceWithAiSdk(input: {
   const result = await streamText({
     model,
     prompt,
-    reasoning: "high",
+    ...(cfg.provider === "ollama" ? {} : { reasoning: "high" as const }),
     providerOptions
   } as any);
 
@@ -376,7 +382,7 @@ async function generateAuditJsonWithAiSdk(input: { cfg: ModelConfig; prompt: str
     model,
     prompt,
     temperature: 0.2,
-    reasoning: "medium",
+    ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
     providerOptions
   } as any);
 

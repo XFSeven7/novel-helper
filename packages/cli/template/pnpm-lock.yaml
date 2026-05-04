@@ -25,9 +25,6 @@ importers:
       fastify:
         specifier: ^5.3.2
         version: 5.8.5
-      ollama-ai-provider-v2:
-        specifier: ^2.0.0
-        version: 2.0.0(ai@5.0.184(zod@4.4.3))(zod@4.4.3)
       zod:
         specifier: ^4.0.0
         version: 4.4.3
@@ -99,18 +96,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/provider-utils@4.0.26':
-    resolution: {integrity: sha512-CsKNLKsOpvPujRlIYvoz+Ybw+kGn7J4/fIZa/58+R7iWLLfwn6ifE2G6Yq8K9XvH/I/3bzaDAJ3NhRwEMsLBKQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
   '@ai-sdk/provider@2.0.3':
     resolution: {integrity: sha512-h88OPkavHTiN9tMn2l5awAznGB0lXzjcLhgR1/rvjB2zlLprsNxbM2tt6OJsHUxduLC3klq0/eqaSf6fX5XVww==}
-    engines: {node: '>=18'}
-
-  '@ai-sdk/provider@3.0.10':
-    resolution: {integrity: sha512-Q3BZ27qfpYqnCYGvE3vt+Qi6LGOF9R5Nmzn+9JoM1lCRsD9mYaIhfJLkSunN48nfGXJ6n+XNV0J/XVpqGQl7Dw==}
     engines: {node: '>=18'}
 
   '@babel/code-frame@7.29.0':
@@ -964,13 +951,6 @@ packages:
   obliterator@2.0.5:
     resolution: {integrity: sha512-42CPE9AhahZRsMNslczq0ctAEtqk8Eka26QofnqC346BZdHDySk3LWka23LI7ULIw11NmltpiLagIq8gBozxTw==}
 
-  ollama-ai-provider-v2@2.0.0:
-    resolution: {integrity: sha512-vbLG/xsW0kgGlInrTIa3W8niy294dw7n8nkLFVwjPHlX9EjtBH4bNPgHQEbmQUy60LjV3NF3Y1HtWPxORSb3bQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      ai: ^5.0.0 || ^6.0.0
-      zod: ^4.0.16
-
   on-exit-leak-free@2.1.2:
     resolution: {integrity: sha512-0eJJY6hXLGf1udHwfNftBqH+g73EU4B504nZeKpz1sYRKafAghwxEJunB2O7rDZkL4PGfsMVnTXZ2EjibbqcsA==}
     engines: {node: '>=14.0.0'}
@@ -1256,18 +1236,7 @@ snapshots:
       eventsource-parser: 3.0.8
       zod: 4.4.3
 
-  '@ai-sdk/provider-utils@4.0.26(zod@4.4.3)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.10
-      '@standard-schema/spec': 1.1.0
-      eventsource-parser: 3.0.8
-      zod: 4.4.3
-
   '@ai-sdk/provider@2.0.3':
-    dependencies:
-      json-schema: 0.4.0
-
-  '@ai-sdk/provider@3.0.10':
     dependencies:
       json-schema: 0.4.0
 
@@ -2267,13 +2236,6 @@ snapshots:
   node-releases@2.0.38: {}
 
   obliterator@2.0.5: {}
-
-  ollama-ai-provider-v2@2.0.0(ai@5.0.184(zod@4.4.3))(zod@4.4.3):
-    dependencies:
-      '@ai-sdk/provider': 3.0.10
-      '@ai-sdk/provider-utils': 4.0.26(zod@4.4.3)
-      ai: 5.0.184(zod@4.4.3)
-      zod: 4.4.3
 
   on-exit-leak-free@2.1.2: {}
 

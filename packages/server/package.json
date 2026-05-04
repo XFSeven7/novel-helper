@@ -16,7 +16,6 @@
     "@ai-sdk/openai-compatible": "^1.0.0",
     "ai": "^5.0.0",
     "fastify": "^5.3.2",
-    "ollama-ai-provider-v2": "^2.0.0",
     "zod": "^4.0.0"
   },
   "devDependencies": {
