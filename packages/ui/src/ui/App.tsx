@@ -176,6 +176,7 @@ export function App() {
   const chapterTitleSkipBlurRef = useRef(false);
 
   const selectedChapterRef = useRef<SelectedChapter>(null);
+  const chapterTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const chapterContentRef = useRef("");
   const chapterBaselineRef = useRef("");
   const chapterTimerRef = useRef<number | null>(null);
@@ -196,6 +197,12 @@ export function App() {
   const prevBookSlugRef = useRef("");
 
   selectedChapterRef.current = selectedChapter;
+  function scrollChapterToTop() {
+    const el = chapterTextareaRef.current;
+    if (!el) return;
+    el.scrollTop = 0;
+  }
+
   chapterContentRef.current = chapterContent;
   selectedCardRef.current = selectedCard;
   cardContentRef.current = cardContent;
@@ -223,6 +230,17 @@ export function App() {
     if (!chapterSortDesc) return chapters;
     return [...chapters].reverse();
   }, [chapters, chapterSortDesc]);
+
+  const adjacentChapters = useMemo(() => {
+    const filename = selectedChapter?.filename;
+    if (!filename) return { prev: null as ChapterMeta | null, next: null as ChapterMeta | null };
+    const i = displayedChapters.findIndex((c) => c.filename === filename);
+    if (i < 0) return { prev: null as ChapterMeta | null, next: null as ChapterMeta | null };
+    return {
+      prev: i > 0 ? displayedChapters[i - 1] : null,
+      next: i + 1 < displayedChapters.length ? displayedChapters[i + 1] : null
+    };
+  }, [displayedChapters, selectedChapter?.filename]);
 
   const canRenameChapterFilename = useMemo(() => {
     if (!selectedChapter?.filename) return false;
@@ -729,6 +747,7 @@ export function App() {
       const { content } = await readChapter(activeBook, c.filename);
       setChapterContent(content);
       chapterBaselineRef.current = content;
+      queueMicrotask(() => scrollChapterToTop());
     } catch (e: any) {
       setStatus(e?.message || String(e));
     } finally {
@@ -1156,6 +1175,24 @@ export function App() {
             )}
             {selectedChapter ? (
               <div className="centerReading">
+                <button
+                  type="button"
+                  className="btnReadingNav"
+                  disabled={busy || !adjacentChapters.prev}
+                  onClick={() => adjacentChapters.prev && void onOpenChapter(adjacentChapters.prev)}
+                  title={adjacentChapters.prev ? `上一章：${adjacentChapters.prev.id}` : "没有上一章"}
+                >
+                  上一章
+                </button>
+                <button
+                  type="button"
+                  className="btnReadingNav"
+                  disabled={busy || !adjacentChapters.next}
+                  onClick={() => adjacentChapters.next && void onOpenChapter(adjacentChapters.next)}
+                  title={adjacentChapters.next ? `下一章：${adjacentChapters.next.id}` : "没有下一章"}
+                >
+                  下一章
+                </button>
                 <label className="toggle">
                   <input
                     type="checkbox"
@@ -1218,6 +1255,7 @@ export function App() {
               >
                 <textarea
                   className="mobileTextarea"
+                  ref={chapterTextareaRef}
                   value={chapterContent}
                   onChange={(e) => setChapterContent(e.target.value)}
                   disabled={busy || !selectedChapter}
@@ -1227,6 +1265,7 @@ export function App() {
             </div>
           ) : (
             <textarea
+              ref={chapterTextareaRef}
               value={chapterContent}
               onChange={(e) => setChapterContent(e.target.value)}
               disabled={busy || !selectedChapter}

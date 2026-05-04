@@ -702,6 +702,12 @@ button:disabled {
   flex-wrap: wrap;
 }
 
+.btnReadingNav {
+  padding: 8px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+}
+
 .toggle {
   display: inline-flex;
   align-items: center;
