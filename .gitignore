@@ -32,5 +32,5 @@ coverage/
 .cache/
 
 # Optional: local novel data written by the app (uncomment if you never commit books)
-# .novel-helper/
-# book/
+.novel-helper/
+book/
