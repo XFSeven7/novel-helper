@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   ChapterMeta,
   BookMeta,
@@ -38,20 +38,33 @@ const MOBILE_PRESETS: Array<{ id: MobilePresetId; label: string; w: number; h: n
   { id: "ipad-mini", label: "iPad mini (768×1024)", w: 768, h: 1024 }
 ];
 
-type ThemeId =
-  | "default"
-  | "midnight"
-  | "forest"
-  | "sunset"
-  | "ocean"
-  | "paper"
-  | "sepia"
-  | "village"
-  | "meadow"
-  | "clay"
-  | "loam";
+type ThemePreference = "system" | "light" | "dark";
 
 const THEME_STORAGE_KEY = "novel-helper-theme";
+
+const THEME_OPTIONS: Array<{ id: ThemePreference; label: string }> = [
+  { id: "system", label: "跟随系统" },
+  { id: "light", label: "白天" },
+  { id: "dark", label: "黑夜" }
+];
+
+function migrateLegacyTheme(raw: string | null): ThemePreference {
+  if (raw === "system" || raw === "light" || raw === "dark") return raw;
+  if (!raw) return "system";
+  const darkLegacy = new Set(["default", "midnight", "forest", "sunset", "ocean", "loam"]);
+  const lightLegacy = new Set(["paper", "sepia", "village", "meadow", "clay"]);
+  if (darkLegacy.has(raw)) return "dark";
+  if (lightLegacy.has(raw)) return "light";
+  return "system";
+}
+
+function loadThemePreference(): ThemePreference {
+  try {
+    return migrateLegacyTheme(localStorage.getItem(THEME_STORAGE_KEY));
+  } catch {
+    return "system";
+  }
+}
 
 /** 停止输入约多久后写入磁盘（毫秒） */
 const AUTOSAVE_DEBOUNCE_MS = 900;
@@ -85,31 +98,6 @@ function formatBookCreatedAt(iso: string): string {
   } catch {
     return iso;
   }
-}
-
-const THEME_OPTIONS: Array<{ id: ThemeId; label: string }> = [
-  { id: "default", label: "默认（极光暗色）" },
-  { id: "midnight", label: "午夜（偏紫蓝）" },
-  { id: "forest", label: "森林（偏绿色）" },
-  { id: "sunset", label: "晚霞（偏玫瑰）" },
-  { id: "ocean", label: "深海（偏青蓝）" },
-  { id: "paper", label: "纸张（浅色护眼）" },
-  { id: "sepia", label: "羊皮纸（浅色复古）" },
-  { id: "village", label: "乡村·麻布（低渐变浅色）" },
-  { id: "meadow", label: "乡村·稻田绿（低渐变浅色）" },
-  { id: "clay", label: "乡村·陶土（低渐变浅色）" },
-  { id: "loam", label: "乡村·沃土（低渐变深色）" }
-];
-
-function loadTheme(): ThemeId {
-  try {
-    const raw = localStorage.getItem(THEME_STORAGE_KEY);
-    const allowed = new Set(THEME_OPTIONS.map((t) => t.id));
-    if (raw && allowed.has(raw as ThemeId)) return raw as ThemeId;
-  } catch {
-    // ignore
-  }
-  return "default";
 }
 
 export function App() {
@@ -147,7 +135,7 @@ export function App() {
 
   const [mobileReading, setMobileReading] = useState(false);
   const [mobilePreset, setMobilePreset] = useState<MobilePresetId>("iphone-14");
-  const [theme, setTheme] = useState<ThemeId>(() => loadTheme());
+  const [themePreference, setThemePreference] = useState<ThemePreference>(() => loadThemePreference());
 
   const [chapterAutosaveHint, setChapterAutosaveHint] = useState("");
   const [cardAutosaveHint, setCardAutosaveHint] = useState("");
@@ -404,13 +392,19 @@ export function App() {
     queueMicrotask(() => createBookTitleInputRef.current?.focus());
   }, [createBookModalOpen]);
 
+  useLayoutEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove("theme-system", "theme-light", "theme-dark");
+    root.classList.add(`theme-${themePreference}`);
+  }, [themePreference]);
+
   useEffect(() => {
     try {
-      localStorage.setItem(THEME_STORAGE_KEY, theme);
+      localStorage.setItem(THEME_STORAGE_KEY, themePreference);
     } catch {
       // ignore
     }
-  }, [theme]);
+  }, [themePreference]);
 
   useEffect(() => {
     if (!activeBook) return;
@@ -783,7 +777,7 @@ export function App() {
   }
 
   return (
-    <div className={`app ${theme === "default" ? "" : `theme-${theme}`}`}>
+    <div className="app">
       <header className="topbar">
         <button type="button" className="brand brandButton" onClick={() => void goNavHome()} title="返回书架">
           novel-helper
@@ -792,8 +786,14 @@ export function App() {
           默认写入 <code>book/</code>（可用 <code>NOVEL_HELPER_DATA_DIR</code> 指定根目录）
         </div>
         <div className="topbarRight">
-          <div className="themeLabel">主题</div>
-          <select className="select" value={theme} onChange={(e) => setTheme(e.target.value as ThemeId)} disabled={busy}>
+          <div className="themeLabel">外观</div>
+          <select
+            className="select"
+            value={themePreference}
+            onChange={(e) => setThemePreference(e.target.value as ThemePreference)}
+            disabled={busy}
+            title="跟随系统：随操作系统浅色/深色自动切换"
+          >
             {THEME_OPTIONS.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.label}

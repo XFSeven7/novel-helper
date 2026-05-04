@@ -1,5 +1,5 @@
 :root {
-  color-scheme: light;
+  color-scheme: dark;
   --bg: #0b1020;
   --panel: rgba(255, 255, 255, 0.06);
   --text: rgba(255, 255, 255, 0.92);
@@ -15,47 +15,23 @@
   --scrollbar-corner: var(--scrollbar-track);
 }
 
-.app.theme-midnight {
+:root.theme-dark {
   color-scheme: dark;
-  --bg: #070a14;
-  --panel: rgba(255, 255, 255, 0.055);
+  --bg: #0b1020;
+  --panel: rgba(255, 255, 255, 0.06);
   --text: rgba(255, 255, 255, 0.92);
-  --muted: rgba(255, 255, 255, 0.62);
+  --muted: rgba(255, 255, 255, 0.65);
   --border: rgba(255, 255, 255, 0.12);
-  --accent: #a78bfa;
+  --accent: #8b5cf6;
+  --topbar-bg: rgba(255, 255, 255, 0.06);
+  --mobile-stage-bg: color-mix(in srgb, var(--bg) 94%, var(--accent) 6%);
+  --scrollbar-track: color-mix(in srgb, var(--bg) 92%, transparent);
+  --scrollbar-thumb: color-mix(in srgb, var(--border) 65%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--accent) 35%, var(--scrollbar-thumb));
+  --scrollbar-corner: var(--scrollbar-track);
 }
 
-.app.theme-forest {
-  color-scheme: dark;
-  --bg: #07120f;
-  --panel: rgba(255, 255, 255, 0.055);
-  --text: rgba(255, 255, 255, 0.92);
-  --muted: rgba(255, 255, 255, 0.62);
-  --border: rgba(255, 255, 255, 0.12);
-  --accent: #34d399;
-}
-
-.app.theme-sunset {
-  color-scheme: dark;
-  --bg: #140a10;
-  --panel: rgba(255, 255, 255, 0.055);
-  --text: rgba(255, 255, 255, 0.92);
-  --muted: rgba(255, 255, 255, 0.62);
-  --border: rgba(255, 255, 255, 0.12);
-  --accent: #fb7185;
-}
-
-.app.theme-ocean {
-  color-scheme: dark;
-  --bg: #071018;
-  --panel: rgba(255, 255, 255, 0.055);
-  --text: rgba(255, 255, 255, 0.92);
-  --muted: rgba(255, 255, 255, 0.62);
-  --border: rgba(255, 255, 255, 0.12);
-  --accent: #38bdf8;
-}
-
-.app.theme-paper {
+:root.theme-light {
   color-scheme: light;
   --bg: #f6f2ea;
   --panel: rgba(17, 24, 39, 0.04);
@@ -64,76 +40,45 @@
   --border: rgba(17, 24, 39, 0.12);
   --accent: #7c3aed;
   --topbar-bg: rgba(17, 24, 39, 0.05);
+  --mobile-stage-bg: color-mix(in srgb, var(--bg) 94%, var(--accent) 6%);
   --scrollbar-track: color-mix(in srgb, var(--bg) 94%, transparent);
   --scrollbar-thumb: rgba(17, 24, 39, 0.22);
   --scrollbar-thumb-hover: rgba(124, 58, 237, 0.35);
+  --scrollbar-corner: var(--scrollbar-track);
 }
 
-.app.theme-sepia {
+:root.theme-system {
   color-scheme: light;
-  --bg: #f3ead9;
-  --panel: rgba(55, 48, 40, 0.06);
-  --text: rgba(55, 48, 40, 0.92);
-  --muted: rgba(55, 48, 40, 0.58);
-  --border: rgba(55, 48, 40, 0.14);
-  --accent: #b45309;
-  --topbar-bg: rgba(55, 48, 40, 0.06);
+  --bg: #f6f2ea;
+  --panel: rgba(17, 24, 39, 0.04);
+  --text: rgba(17, 24, 39, 0.92);
+  --muted: rgba(17, 24, 39, 0.58);
+  --border: rgba(17, 24, 39, 0.12);
+  --accent: #7c3aed;
+  --topbar-bg: rgba(17, 24, 39, 0.05);
+  --mobile-stage-bg: color-mix(in srgb, var(--bg) 94%, var(--accent) 6%);
   --scrollbar-track: color-mix(in srgb, var(--bg) 94%, transparent);
-  --scrollbar-thumb: rgba(55, 48, 40, 0.22);
-  --scrollbar-thumb-hover: rgba(180, 83, 9, 0.35);
+  --scrollbar-thumb: rgba(17, 24, 39, 0.22);
+  --scrollbar-thumb-hover: rgba(124, 58, 237, 0.35);
+  --scrollbar-corner: var(--scrollbar-track);
 }
 
-.app.theme-village {
-  color-scheme: light;
-  --bg: #efe9df;
-  --panel: rgba(55, 48, 40, 0.05);
-  --text: rgba(47, 42, 37, 0.92);
-  --muted: rgba(47, 42, 37, 0.58);
-  --border: rgba(47, 42, 37, 0.14);
-  --accent: #6d5e52;
-  --topbar-bg: rgba(47, 42, 37, 0.06);
-  --scrollbar-track: color-mix(in srgb, var(--bg) 94%, transparent);
-  --scrollbar-thumb: rgba(47, 42, 37, 0.22);
-  --scrollbar-thumb-hover: rgba(109, 94, 82, 0.36);
-}
-
-.app.theme-meadow {
-  color-scheme: light;
-  --bg: #eef4ea;
-  --panel: rgba(22, 52, 30, 0.05);
-  --text: rgba(22, 52, 30, 0.92);
-  --muted: rgba(22, 52, 30, 0.58);
-  --border: rgba(22, 52, 30, 0.14);
-  --accent: #3f7f58;
-  --topbar-bg: rgba(22, 52, 30, 0.06);
-  --scrollbar-track: color-mix(in srgb, var(--bg) 94%, transparent);
-  --scrollbar-thumb: rgba(22, 52, 30, 0.22);
-  --scrollbar-thumb-hover: rgba(63, 127, 88, 0.34);
-}
-
-.app.theme-clay {
-  color-scheme: light;
-  --bg: #f2e7dc;
-  --panel: rgba(92, 52, 37, 0.06);
-  --text: rgba(61, 37, 28, 0.92);
-  --muted: rgba(61, 37, 28, 0.58);
-  --border: rgba(61, 37, 28, 0.14);
-  --accent: #b45309;
-  --topbar-bg: rgba(61, 37, 28, 0.06);
-  --scrollbar-track: color-mix(in srgb, var(--bg) 94%, transparent);
-  --scrollbar-thumb: rgba(61, 37, 28, 0.22);
-  --scrollbar-thumb-hover: rgba(180, 83, 9, 0.34);
-}
-
-.app.theme-loam {
-  color-scheme: dark;
-  --bg: #16130f;
-  --panel: rgba(255, 255, 255, 0.055);
-  --text: rgba(246, 240, 231, 0.92);
-  --muted: rgba(246, 240, 231, 0.62);
-  --border: rgba(246, 240, 231, 0.14);
-  --accent: #c49a6c;
-  --topbar-bg: rgba(246, 240, 231, 0.06);
+@media (prefers-color-scheme: dark) {
+  :root.theme-system {
+    color-scheme: dark;
+    --bg: #0b1020;
+    --panel: rgba(255, 255, 255, 0.06);
+    --text: rgba(255, 255, 255, 0.92);
+    --muted: rgba(255, 255, 255, 0.65);
+    --border: rgba(255, 255, 255, 0.12);
+    --accent: #8b5cf6;
+    --topbar-bg: rgba(255, 255, 255, 0.06);
+    --mobile-stage-bg: color-mix(in srgb, var(--bg) 94%, var(--accent) 6%);
+    --scrollbar-track: color-mix(in srgb, var(--bg) 92%, transparent);
+    --scrollbar-thumb: color-mix(in srgb, var(--border) 65%, transparent);
+    --scrollbar-thumb-hover: color-mix(in srgb, var(--accent) 35%, var(--scrollbar-thumb));
+    --scrollbar-corner: var(--scrollbar-track);
+  }
 }
 
 * {
