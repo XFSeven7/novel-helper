@@ -41,6 +41,7 @@ const MOBILE_PRESETS: Array<{ id: MobilePresetId; label: string; w: number; h: n
 type ThemePreference = "system" | "light" | "dark";
 
 const THEME_STORAGE_KEY = "novel-helper-theme";
+const NAV_COLLAPSED_STORAGE_KEY = "novel-helper-nav-collapsed";
 
 const THEME_OPTIONS: Array<{ id: ThemePreference; label: string }> = [
   { id: "system", label: "跟随系统" },
@@ -100,6 +101,24 @@ function formatBookCreatedAt(iso: string): string {
   }
 }
 
+/** 左侧栏展开/收起（收起时令图标水平镜像） */
+function SidebarToggleIcon({ mirrored }: { mirrored: boolean }) {
+  return (
+    <svg
+      className={`sidebarToggleSvg ${mirrored ? "sidebarToggleSvgMirrored" : ""}`}
+      viewBox="0 0 1024 1024"
+      width={20}
+      height={20}
+      aria-hidden
+    >
+      <path
+        fill="currentColor"
+        d="M109.632 673.664h519.68c25.152 0 45.568-22.016 45.568-48.896 0-26.88-20.416-48.896-45.568-48.896h-519.68c-25.216 0-45.632 22.016-45.632 48.896 0 26.88 20.48 48.896 45.632 48.896z m0-228.096h519.68c25.152 0 45.568-21.952 45.568-48.896 0-26.88-20.416-48.896-45.568-48.896h-519.68c-25.216 0-45.632 22.016-45.632 48.896 0 26.88 20.48 48.896 45.632 48.896z m3.264-219.904h795.776c26.88 0 50.56-20.352 51.328-47.168A48.896 48.896 0 0 0 911.104 128H115.328c-26.88 0-50.56 20.416-51.328 47.168a48.896 48.896 0 0 0 48.896 50.56z m619.776 447.232V348.672L960 510.784l-227.328 162.112c0 0.768 0 0.768 0 0z m178.432 122.944H115.328c-26.88 0-50.56 20.48-51.328 47.232a48.896 48.896 0 0 0 48.896 50.496h795.776c26.88 0 50.56-20.416 51.328-47.232a48.896 48.896 0 0 0-48.896-50.496z"
+      />
+    </svg>
+  );
+}
+
 export function App() {
   const [books, setBooks] = useState<BookMeta[]>([]);
   const [activeBook, setActiveBook] = useState<string>("");
@@ -136,6 +155,13 @@ export function App() {
   const [mobileReading, setMobileReading] = useState(false);
   const [mobilePreset, setMobilePreset] = useState<MobilePresetId>("iphone-14");
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => loadThemePreference());
+  const [navCollapsed, setNavCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(NAV_COLLAPSED_STORAGE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
 
   const [chapterAutosaveHint, setChapterAutosaveHint] = useState("");
   const [cardAutosaveHint, setCardAutosaveHint] = useState("");
@@ -405,6 +431,14 @@ export function App() {
       // ignore
     }
   }, [themePreference]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(NAV_COLLAPSED_STORAGE_KEY, navCollapsed ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [navCollapsed]);
 
   useEffect(() => {
     if (!activeBook) return;
@@ -803,188 +837,188 @@ export function App() {
         </div>
       </header>
 
-      <div className="layout3">
+      <div className={`layout3 ${navCollapsed ? "layout3NavCollapsed" : ""}`}>
         <aside className="nav">
-          <div className="navSection navSectionMain">
-            {navHome ? (
-              <>
-                <div className="navTitle">书架</div>
-                <div className="navShelfHint muted">点击书名展开简介；书名下方显示缺失章节数量；点此新建书籍。</div>
-                <div className="navNewBookRow">
-                  <button type="button" className="btnNewBookFull" onClick={() => openCreateBookModal()} disabled={busy}>
-                    新建书籍
-                  </button>
-                </div>
-                <div className="navSortBar">
-                  <button
-                    type="button"
-                    className="btnSort"
-                    disabled={busy || books.length < 2}
-                    title={bookShelfSortDesc ? "切换为正序" : "切换为倒序"}
-                    onClick={() => setBookShelfSortDesc((v) => !v)}
-                  >
-                    {bookShelfSortDesc ? "倒序" : "正序"}
-                  </button>
-                </div>
-                <div className="tree navListDense bookShelfList">
-                  {books.length === 0 ? (
-                    <div className="empty">还没有书，先新建一本。</div>
-                  ) : (
-                    displayedBooks.map((b) => {
-                      const gapCount = normalizeChapterGapList(b.missingChapterIndexes ?? []).length;
-                      return (
-                      <div key={b.slug} className="bookShelfItem">
-                        <div
-                          role="button"
-                          tabIndex={busy ? -1 : 0}
-                          className="treeChild bookShelfRow"
-                          onClick={() => {
-                            if (busy) return;
-                            void openBookFromShelf(b);
-                          }}
-                          onKeyDown={(e) => {
-                            if (busy) return;
-                            if (e.key === "Enter" || e.key === " ") {
-                              e.preventDefault();
-                              void openBookFromShelf(b);
-                            }
-                          }}
-                          title={`打开全书 · ${b.slug}\n创建：${formatBookCreatedAt(b.createdAt)}\n${b.status} · ${b.chapterCount}章${
-                            gapCount ? `\n缺失序号 ${gapCount} 处（进入该书后在左侧书名下处理）` : ""
-                          }`}
-                        >
-                          <span
-                            className="bookShelfTitle bookShelfTitleToggle"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setShelfPeekSlug((prev) => (prev === b.slug ? null : b.slug));
-                            }}
-                            title="展开或收起简介"
-                          >
-                            《{b.title}》
-                          </span>
-                          {gapCount > 0 ? (
-                            <span className="bookShelfGapCount">缺 {gapCount} 章</span>
-                          ) : null}
-                          <span className="bookShelfMeta">
-                            {formatBookCreatedAt(b.createdAt)} · {b.status} · {b.chapterCount}章
-                          </span>
-                        </div>
-                        {shelfPeekSlug === b.slug ? (
-                          <div className="bookShelfPeek">
-                            {b.synopsis?.trim() ? (
-                              <p className="bookShelfPeekText">{b.synopsis}</p>
-                            ) : (
-                              <div className="bookShelfPeekEdit">
-                                <textarea
-                                  className="bookShelfPeekInput"
-                                  value={shelfPeekDraft}
-                                  onChange={(e) => setShelfPeekDraft(e.target.value)}
-                                  placeholder="暂无简介，在此输入…"
-                                  disabled={shelfPeekSaving}
-                                  rows={3}
-                                  aria-label="书籍简介"
-                                />
-                                <button
-                                  type="button"
-                                  className="btnPeekSave"
-                                  disabled={shelfPeekSaving || busy}
-                                  onClick={() => void saveShelfPeekSynopsis(b.slug)}
-                                >
-                                  {shelfPeekSaving ? "保存中…" : "保存简介"}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                    })
-                  )}
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="navChapterHeader">
-                  <div className="navTitle">{activeBookMeta?.title ?? activeBook}</div>
-                  {sortedActiveMissingChapterIndexes.length > 0 && activeBookMeta ? (
+          {navCollapsed ? null : (
+            <div className="navSection navSectionMain">
+              {navHome ? (
+                <>
+                  <div className="navTitle">书架</div>
+                  <div className="navShelfHint muted">点击书名展开简介；书名下方显示缺失章节数量；点此新建书籍。</div>
+                  <div className="navNewBookRow">
+                    <button type="button" className="btnNewBookFull" onClick={() => openCreateBookModal()} disabled={busy}>
+                      新建书籍
+                    </button>
+                  </div>
+                  <div className="navSortBar">
                     <button
                       type="button"
-                      className="navBookGapHint"
-                      disabled={busy}
-                      onClick={() => openShelfChapterGapModal(activeBookMeta)}
-                      title="选择补齐空缺或接在最大序号之后新建"
+                      className="btnSort"
+                      disabled={busy || books.length < 2}
+                      title={bookShelfSortDesc ? "切换为正序" : "切换为倒序"}
+                      onClick={() => setBookShelfSortDesc((v) => !v)}
                     >
-                      空缺：{formatMissingChapterList(sortedActiveMissingChapterIndexes)} · 点此新建
+                      {bookShelfSortDesc ? "倒序" : "正序"}
                     </button>
-                  ) : null}
-                  <div className="navSubtitle">{activeBookMeta?.slug ?? activeBook}</div>
-                  <div className="navHint">点击左上角 novel-helper 返回书架</div>
-                </div>
-                <div className="navOverviewBar">
-                  <button
-                    type="button"
-                    className="btnSort btnOverview"
-                    disabled={busy || !selectedChapter}
-                    title={selectedChapter ? "在中间查看本书信息与简介" : "当前已在书籍概览"}
-                    onClick={() => void goBookOverview()}
-                  >
-                    书籍概览
-                  </button>
-                </div>
-                <div className="navSortBar">
-                  <button
-                    type="button"
-                    className="btnSort"
-                    disabled={busy || chapters.length < 2}
-                    title={chapterSortDesc ? "切换为正序" : "切换为倒序"}
-                    onClick={() => setChapterSortDesc((v) => !v)}
-                  >
-                    {chapterSortDesc ? "倒序" : "正序"}
-                  </button>
-                </div>
-                <div className="navChapterBody">
-                  <div className="chapterNavScroll">
-                    <div className="tree navListDense chapterNavList">
-                      {chapters.length === 0 ? (
-                        <div className="empty">暂无章节，请在下方新建。</div>
-                      ) : (
-                        displayedChapters.map((c) => (
-                          <button
-                            key={c.filename}
-                            type="button"
-                            className={`treeChild chapterNavItem ${selectedChapter?.filename === c.filename ? "active" : ""}`}
-                            onClick={() => void onOpenChapter(c)}
-                            disabled={busy}
-                          >
-                            <span className="chapterNavItemTitle">{c.id}</span>
-                            <span className="chapterNavWordCount">{c.wordCount ?? 0} 字</span>
-                          </button>
-                        ))
-                      )}
+                  </div>
+                  <div className="tree navListDense bookShelfList">
+                    {books.length === 0 ? (
+                      <div className="empty">还没有书，先新建一本。</div>
+                    ) : (
+                      displayedBooks.map((b) => {
+                        const gapCount = normalizeChapterGapList(b.missingChapterIndexes ?? []).length;
+                        return (
+                          <div key={b.slug} className="bookShelfItem">
+                            <div
+                              role="button"
+                              tabIndex={busy ? -1 : 0}
+                              className="treeChild bookShelfRow"
+                              onClick={() => {
+                                if (busy) return;
+                                void openBookFromShelf(b);
+                              }}
+                              onKeyDown={(e) => {
+                                if (busy) return;
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  void openBookFromShelf(b);
+                                }
+                              }}
+                              title={`打开全书 · ${b.slug}\n创建：${formatBookCreatedAt(b.createdAt)}\n${b.status} · ${b.chapterCount}章${
+                                gapCount ? `\n缺失序号 ${gapCount} 处（进入该书后在左侧书名下处理）` : ""
+                              }`}
+                            >
+                              <span
+                                className="bookShelfTitle bookShelfTitleToggle"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShelfPeekSlug((prev) => (prev === b.slug ? null : b.slug));
+                                }}
+                                title="展开或收起简介"
+                              >
+                                《{b.title}》
+                              </span>
+                              {gapCount > 0 ? <span className="bookShelfGapCount">缺 {gapCount} 章</span> : null}
+                              <span className="bookShelfMeta">
+                                {formatBookCreatedAt(b.createdAt)} · {b.status} · {b.chapterCount}章
+                              </span>
+                            </div>
+                            {shelfPeekSlug === b.slug ? (
+                              <div className="bookShelfPeek">
+                                {b.synopsis?.trim() ? (
+                                  <p className="bookShelfPeekText">{b.synopsis}</p>
+                                ) : (
+                                  <div className="bookShelfPeekEdit">
+                                    <textarea
+                                      className="bookShelfPeekInput"
+                                      value={shelfPeekDraft}
+                                      onChange={(e) => setShelfPeekDraft(e.target.value)}
+                                      placeholder="暂无简介，在此输入…"
+                                      disabled={shelfPeekSaving}
+                                      rows={3}
+                                      aria-label="书籍简介"
+                                    />
+                                    <button
+                                      type="button"
+                                      className="btnPeekSave"
+                                      disabled={shelfPeekSaving || busy}
+                                      onClick={() => void saveShelfPeekSynopsis(b.slug)}
+                                    >
+                                      {shelfPeekSaving ? "保存中…" : "保存简介"}
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            ) : null}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="navChapterHeader">
+                    <div className="navTitle">{activeBookMeta?.title ?? activeBook}</div>
+                    {sortedActiveMissingChapterIndexes.length > 0 && activeBookMeta ? (
+                      <button
+                        type="button"
+                        className="navBookGapHint"
+                        disabled={busy}
+                        onClick={() => openShelfChapterGapModal(activeBookMeta)}
+                        title="选择补齐空缺或接在最大序号之后新建"
+                      >
+                        空缺：{formatMissingChapterList(sortedActiveMissingChapterIndexes)} · 点此新建
+                      </button>
+                    ) : null}
+                    <div className="navSubtitle">{activeBookMeta?.slug ?? activeBook}</div>
+                    <div className="navHint">点击左上角 novel-helper 返回书架</div>
+                  </div>
+                  <div className="navOverviewBar">
+                    <button
+                      type="button"
+                      className="btnSort btnOverview"
+                      disabled={busy || !selectedChapter}
+                      title={selectedChapter ? "在中间查看本书信息与简介" : "当前已在书籍概览"}
+                      onClick={() => void goBookOverview()}
+                    >
+                      书籍概览
+                    </button>
+                  </div>
+                  <div className="navSortBar">
+                    <button
+                      type="button"
+                      className="btnSort"
+                      disabled={busy || chapters.length < 2}
+                      title={chapterSortDesc ? "切换为正序" : "切换为倒序"}
+                      onClick={() => setChapterSortDesc((v) => !v)}
+                    >
+                      {chapterSortDesc ? "倒序" : "正序"}
+                    </button>
+                  </div>
+                  <div className="navChapterBody">
+                    <div className="chapterNavScroll">
+                      <div className="tree navListDense chapterNavList">
+                        {chapters.length === 0 ? (
+                          <div className="empty">暂无章节，请在下方新建。</div>
+                        ) : (
+                          displayedChapters.map((c) => (
+                            <button
+                              key={c.filename}
+                              type="button"
+                              className={`treeChild chapterNavItem ${selectedChapter?.filename === c.filename ? "active" : ""}`}
+                              onClick={() => void onOpenChapter(c)}
+                              disabled={busy}
+                            >
+                              <span className="chapterNavItemTitle">{c.id}</span>
+                              <span className="chapterNavWordCount">{c.wordCount ?? 0} 字</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                    <div className="row chapterQuickRow chapterQuickRowSticky">
+                      <input
+                        value={chapterTitle}
+                        onChange={(e) => setChapterTitle(e.target.value)}
+                        placeholder="新章节标题"
+                        disabled={busy}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault();
+                            void onCreateChapter();
+                          }
+                        }}
+                      />
+                      <button onClick={() => void onCreateChapter()} disabled={busy || !chapterTitle.trim()}>
+                        新建章节
+                      </button>
                     </div>
                   </div>
-                  <div className="row chapterQuickRow chapterQuickRowSticky">
-                    <input
-                      value={chapterTitle}
-                      onChange={(e) => setChapterTitle(e.target.value)}
-                      placeholder="新章节标题"
-                      disabled={busy}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault();
-                          void onCreateChapter();
-                        }
-                      }}
-                    />
-                    <button onClick={() => void onCreateChapter()} disabled={busy || !chapterTitle.trim()}>
-                      新建章节
-                    </button>
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+                </>
+              )}
+            </div>
+          )}
 
           <div className="navSection">
             <div className="navTitle">AI 代理设置</div>
@@ -996,6 +1030,19 @@ export function App() {
           <div className="centerTop">
             <div className="centerTitleBlock">
               <div className="centerTitleRow">
+                {activeBook && !navHome ? (
+                  <button
+                    type="button"
+                    className="btnSidebarToggle"
+                    onClick={() => setNavCollapsed((v) => !v)}
+                    disabled={busy}
+                    aria-label={navCollapsed ? "展开左侧栏" : "收起左侧栏"}
+                    aria-pressed={navCollapsed}
+                    title={navCollapsed ? "展开左侧栏" : "收起左侧栏"}
+                  >
+                    <SidebarToggleIcon mirrored={!navCollapsed} />
+                  </button>
+                ) : null}
                 {!activeBook ? (
                   <>
                     <div className="centerTitle">请从书架打开一本书</div>

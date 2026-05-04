@@ -213,6 +213,22 @@ code {
   min-height: 0;
 }
 
+.layout3.layout3NavCollapsed {
+  grid-template-columns: 0 minmax(520px, 1fr) 420px;
+}
+
+.layout3.layout3NavCollapsed > .nav {
+  min-width: 0;
+  overflow: hidden;
+}
+
+@media (min-width: 1001px) {
+  /* nav 列宽为 0 时，grid 的 gap 仍会留出左侧空隙；这里抵消掉 */
+  .layout3.layout3NavCollapsed > .center {
+    margin-left: -14px;
+  }
+}
+
 .nav {
   min-height: 0;
   display: flex;
@@ -714,6 +730,33 @@ code {
   flex-wrap: wrap;
   min-width: 0;
   width: 100%;
+}
+
+.btnSidebarToggle {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  line-height: 0;
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+}
+
+.btnSidebarToggle:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--panel) 100%, transparent);
+}
+
+.sidebarToggleSvg {
+  display: block;
+  transition: transform 0.2s ease;
+}
+
+.sidebarToggleSvgMirrored {
+  transform: scaleX(-1);
 }
 
 .centerTitle {

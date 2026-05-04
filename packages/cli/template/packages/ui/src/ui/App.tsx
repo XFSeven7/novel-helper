@@ -41,6 +41,7 @@ const MOBILE_PRESETS: Array<{ id: MobilePresetId; label: string; w: number; h: n
 type ThemePreference = "system" | "light" | "dark";
 
 const THEME_STORAGE_KEY = "novel-helper-theme";
+const NAV_COLLAPSED_STORAGE_KEY = "novel-helper-nav-collapsed";
 
 const THEME_OPTIONS: Array<{ id: ThemePreference; label: string }> = [
   { id: "system", label: "跟随系统" },
@@ -74,6 +75,23 @@ function formatBookCreatedAt(iso: string): string {
   } catch {
     return iso;
   }
+}
+
+function SidebarToggleIcon({ mirrored }: { mirrored: boolean }) {
+  return (
+    <svg
+      className={`sidebarToggleSvg ${mirrored ? "sidebarToggleSvgMirrored" : ""}`}
+      viewBox="0 0 1024 1024"
+      width={20}
+      height={20}
+      aria-hidden
+    >
+      <path
+        fill="currentColor"
+        d="M109.632 673.664h519.68c25.152 0 45.568-22.016 45.568-48.896 0-26.88-20.416-48.896-45.568-48.896h-519.68c-25.216 0-45.632 22.016-45.632 48.896 0 26.88 20.48 48.896 45.632 48.896z m0-228.096h519.68c25.152 0 45.568-21.952 45.568-48.896 0-26.88-20.416-48.896-45.568-48.896h-519.68c-25.216 0-45.632 22.016-45.632 48.896 0 26.88 20.48 48.896 45.632 48.896z m3.264-219.904h795.776c26.88 0 50.56-20.352 51.328-47.168A48.896 48.896 0 0 0 911.104 128H115.328c-26.88 0-50.56 20.416-51.328 47.168a48.896 48.896 0 0 0 48.896 50.56z m619.776 447.232V348.672L960 510.784l-227.328 162.112c0 0.768 0 0.768 0 0z m178.432 122.944H115.328c-26.88 0-50.56 20.48-51.328 47.232a48.896 48.896 0 0 0 48.896 50.496h795.776c26.88 0 50.56-20.416 51.328-47.232a48.896 48.896 0 0 0-48.896-50.496z"
+      />
+    </svg>
+  );
 }
 
 const AUTOSAVE_DEBOUNCE_MS = 900;
@@ -129,6 +147,13 @@ export function App() {
   const [mobileReading, setMobileReading] = useState(false);
   const [mobilePreset, setMobilePreset] = useState<MobilePresetId>("iphone-14");
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => loadThemePreference());
+  const [navCollapsed, setNavCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(NAV_COLLAPSED_STORAGE_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
 
   const [chapterAutosaveHint, setChapterAutosaveHint] = useState("");
   const [cardAutosaveHint, setCardAutosaveHint] = useState("");
@@ -397,6 +422,14 @@ export function App() {
       // ignore
     }
   }, [themePreference]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(NAV_COLLAPSED_STORAGE_KEY, navCollapsed ? "1" : "0");
+    } catch {
+      // ignore
+    }
+  }, [navCollapsed]);
 
   useEffect(() => {
     if (!activeBook) return;
@@ -793,8 +826,9 @@ export function App() {
         </div>
       </header>
 
-      <div className="layout3">
+      <div className={`layout3 ${navCollapsed ? "layout3NavCollapsed" : ""}`}>
         <aside className="nav">
+          {navCollapsed ? null : (
           <div className="panel navSectionMain">
             {navHome ? (
               <>
@@ -975,6 +1009,7 @@ export function App() {
               </>
             )}
           </div>
+          )}
 
           <div className="panel">
             <div className="navTitle">AI 代理设置</div>
@@ -986,6 +1021,19 @@ export function App() {
           <div className="centerTop">
             <div className="centerTitleBlock">
               <div className="centerTitleRow">
+                {activeBook && !navHome ? (
+                  <button
+                    type="button"
+                    className="btnSidebarToggle"
+                    onClick={() => setNavCollapsed((v) => !v)}
+                    disabled={busy}
+                    aria-label={navCollapsed ? "展开左侧栏" : "收起左侧栏"}
+                    aria-pressed={navCollapsed}
+                    title={navCollapsed ? "展开左侧栏" : "收起左侧栏"}
+                  >
+                    <SidebarToggleIcon mirrored={!navCollapsed} />
+                  </button>
+                ) : null}
                 {!activeBook ? (
                   <>
                     <div className="centerTitle">请从书架打开一本书</div>
