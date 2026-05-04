@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ChapterMeta,
   BookMeta,
@@ -59,6 +59,24 @@ const AUTOSAVE_DEBOUNCE_MS = 900;
 /** 允许在线改标题的文件名：`序号_任意标题.md` */
 const CHAPTER_TITLE_RENAME_FILE_RE = /^(\d+)_.+\.md$/;
 
+/** 与服务端一致的近似字数（列表与编辑器共用） */
+function approximateWordCount(s: string): number {
+  const zh = (s.match(/[\u4e00-\u9fa5]/g) || []).length;
+  const en = (s.replace(/[\u4e00-\u9fa5]/g, " ").match(/[A-Za-z0-9]+/g) || []).length;
+  return zh + en;
+}
+
+function normalizeChapterGapList(raw: number[]): number[] {
+  return [...new Set(raw)].filter((n) => Number.isFinite(n) && n >= 1).sort((a, b) => a - b);
+}
+
+/** 展示用：「第 4 章、第 7 章」 */
+function formatMissingChapterList(gaps: number[]): string {
+  return normalizeChapterGapList(gaps)
+    .map((n) => `第 ${n} 章`)
+    .join("、");
+}
+
 function formatBookCreatedAt(iso: string): string {
   try {
     const d = new Date(iso);
@@ -107,6 +125,10 @@ export function App() {
   const [selectedCard, setSelectedCard] = useState<SelectedCard>(null);
 
   const [createBookModalOpen, setCreateBookModalOpen] = useState(false);
+  const [chapterGapModalOpen, setChapterGapModalOpen] = useState(false);
+  const [chapterGapModalBookSlug, setChapterGapModalBookSlug] = useState("");
+  const [chapterGapModalIndexes, setChapterGapModalIndexes] = useState<number[]>([]);
+  const [chapterGapModalDraftTitle, setChapterGapModalDraftTitle] = useState("");
   const [modalNewTitle, setModalNewTitle] = useState("");
   const [modalNewSynopsis, setModalNewSynopsis] = useState("");
   const [shelfPeekSlug, setShelfPeekSlug] = useState<string | null>(null);
@@ -135,6 +157,7 @@ export function App() {
   const [chapterTitleEditing, setChapterTitleEditing] = useState(false);
 
   const chapterTitleInputRef = useRef<HTMLInputElement>(null);
+  const chapterGapTitleInputRef = useRef<HTMLInputElement>(null);
   const createBookTitleInputRef = useRef<HTMLInputElement>(null);
   const chapterTitleSkipBlurRef = useRef(false);
 
@@ -172,6 +195,11 @@ export function App() {
 
   const activeBookMeta = useMemo(() => books.find((b) => b.slug === activeBook) ?? null, [books, activeBook]);
 
+  const sortedActiveMissingChapterIndexes = useMemo(
+    () => normalizeChapterGapList(activeBookMeta?.missingChapterIndexes ?? []),
+    [activeBookMeta?.missingChapterIndexes]
+  );
+
   const displayedBooks = useMemo(() => {
     if (!bookShelfSortDesc) return books;
     return [...books].reverse();
@@ -187,13 +215,7 @@ export function App() {
     return CHAPTER_TITLE_RENAME_FILE_RE.test(selectedChapter.filename);
   }, [selectedChapter?.filename]);
 
-  const chapterWordCount = useMemo(() => {
-    const s = chapterContent || "";
-    // 近似字数：中文按字符计，英文按单词计，取二者相加的粗略值
-    const zh = (s.match(/[\u4e00-\u9fa5]/g) || []).length;
-    const en = (s.replace(/[\u4e00-\u9fa5]/g, " ").match(/[A-Za-z0-9]+/g) || []).length;
-    return zh + en;
-  }, [chapterContent]);
+  const chapterWordCount = useMemo(() => approximateWordCount(chapterContent || ""), [chapterContent]);
 
   const mobileViewport = useMemo(() => {
     const preset = MOBILE_PRESETS.find((p) => p.id === mobilePreset) || MOBILE_PRESETS[1];
@@ -232,6 +254,8 @@ export function App() {
     try {
       await updateChapter(sel.bookSlug, sel.filename, content);
       chapterBaselineRef.current = content;
+      const w = approximateWordCount(content);
+      setChapters((prev) => prev.map((c) => (c.filename === sel.filename ? { ...c, wordCount: w } : c)));
       setChapterAutosaveHint("已保存");
       window.setTimeout(() => {
         setChapterAutosaveHint((s) => (s === "已保存" ? "" : s));
@@ -350,6 +374,30 @@ export function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [createBookModalOpen, busy]);
+
+  const closeChapterGapModal = useCallback(() => {
+    setChapterGapModalOpen(false);
+    setChapterGapModalBookSlug("");
+    setChapterGapModalIndexes([]);
+    setChapterGapModalDraftTitle("");
+  }, []);
+
+  useEffect(() => {
+    if (!chapterGapModalOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (!busy) closeChapterGapModal();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [chapterGapModalOpen, busy, closeChapterGapModal]);
+
+  useEffect(() => {
+    if (!chapterGapModalOpen) return;
+    queueMicrotask(() => chapterGapTitleInputRef.current?.focus());
+  }, [chapterGapModalOpen]);
 
   useEffect(() => {
     if (!createBookModalOpen) return;
@@ -535,6 +583,7 @@ export function App() {
       setChapterAutosaveHint("");
       setChapterTitleEditing(false);
       await refreshChapters(activeBook);
+      await refreshBooks();
       setStatus("已删除章节。");
     } catch (e: any) {
       setStatus(e?.message || String(e));
@@ -543,27 +592,92 @@ export function App() {
     }
   }
 
-  async function onCreateChapter() {
-    if (!activeBook) return;
-    if (!chapterTitle.trim()) return;
+  async function performCreateChapter(bookSlug: string, title: string, chapterIndex?: number) {
+    const t = title.trim();
+    if (!bookSlug || !t) return;
     setBusy(true);
     setStatus("");
     try {
       await flushSynopsisSave();
       await flushChapterSave();
-      const { chapter } = await createChapter(activeBook, { title: chapterTitle.trim() });
-      setChapterTitle("");
-      await refreshChapters(activeBook);
-      setSelectedChapter({ bookSlug: activeBook, filename: chapter.filename });
-      const { content } = await readChapter(activeBook, chapter.filename);
+      const body: { title: string; chapterIndex?: number } = { title: t };
+      if (chapterIndex !== undefined) body.chapterIndex = chapterIndex;
+      const { chapter } = await createChapter(bookSlug, body);
+
+      if (bookSlug === activeBook) setChapterTitle("");
+
+      if (bookSlug !== activeBook) {
+        setActiveBook(bookSlug);
+        setNavHome(false);
+        setSelectedCard(null);
+        setCardContent("");
+        cardBaselineRef.current = "";
+      }
+
+      await refreshChapters(bookSlug);
+      await refreshStory(bookSlug);
+      await refreshBooks();
+
+      setSelectedChapter({ bookSlug, filename: chapter.filename });
+      const { content } = await readChapter(bookSlug, chapter.filename);
       setChapterContent(content);
       chapterBaselineRef.current = content;
+      setChapterTitleEditing(false);
       setStatus("已新建章节，并写入本地文件。");
     } catch (e: any) {
       setStatus(e?.message || String(e));
     } finally {
       setBusy(false);
     }
+  }
+
+  function openShelfChapterGapModal(b: BookMeta) {
+    const gaps = normalizeChapterGapList(b.missingChapterIndexes ?? []);
+    if (gaps.length === 0) return;
+    setChapterGapModalBookSlug(b.slug);
+    setChapterGapModalIndexes(gaps);
+    setChapterGapModalDraftTitle("");
+    setChapterGapModalOpen(true);
+  }
+
+  async function onCreateChapter() {
+    if (!activeBook) return;
+    if (!chapterTitle.trim()) return;
+    const gaps = normalizeChapterGapList(books.find((b) => b.slug === activeBook)?.missingChapterIndexes ?? []);
+    if (gaps.length > 0) {
+      setChapterGapModalBookSlug(activeBook);
+      setChapterGapModalIndexes(gaps);
+      setChapterGapModalDraftTitle(chapterTitle.trim());
+      setChapterGapModalOpen(true);
+      return;
+    }
+    await performCreateChapter(activeBook, chapterTitle.trim(), undefined);
+  }
+
+  async function confirmChapterGapFill() {
+    const t = chapterGapModalDraftTitle.trim();
+    const slug = chapterGapModalBookSlug;
+    if (!t) {
+      setStatus("请先填写章节标题。");
+      return;
+    }
+    if (!slug) return;
+    const next = chapterGapModalIndexes[0];
+    if (next === undefined) return;
+    closeChapterGapModal();
+    await performCreateChapter(slug, t, next);
+  }
+
+  async function confirmChapterGapSkip() {
+    const t = chapterGapModalDraftTitle.trim();
+    const slug = chapterGapModalBookSlug;
+    if (!t) {
+      setStatus("请先填写章节标题。");
+      return;
+    }
+    if (!slug) return;
+    closeChapterGapModal();
+    await performCreateChapter(slug, t, undefined);
   }
 
   async function goBookOverview() {
@@ -695,7 +809,7 @@ export function App() {
             {navHome ? (
               <>
                 <div className="navTitle">书架</div>
-                <div className="navShelfHint muted">点击书名可展开简介；点此新建书籍。</div>
+                <div className="navShelfHint muted">点击书名展开简介；书名下方显示缺失章节数量；点此新建书籍。</div>
                 <div className="navNewBookRow">
                   <button type="button" className="btnNewBookFull" onClick={() => openCreateBookModal()} disabled={busy}>
                     新建书籍
@@ -716,7 +830,9 @@ export function App() {
                   {books.length === 0 ? (
                     <div className="empty">还没有书，先新建一本。</div>
                   ) : (
-                    displayedBooks.map((b) => (
+                    displayedBooks.map((b) => {
+                      const gapCount = normalizeChapterGapList(b.missingChapterIndexes ?? []).length;
+                      return (
                       <div key={b.slug} className="bookShelfItem">
                         <div
                           role="button"
@@ -733,7 +849,9 @@ export function App() {
                               void openBookFromShelf(b);
                             }
                           }}
-                          title={`打开全书 · ${b.slug}\n创建：${formatBookCreatedAt(b.createdAt)}\n${b.status} · ${b.chapterCount}章`}
+                          title={`打开全书 · ${b.slug}\n创建：${formatBookCreatedAt(b.createdAt)}\n${b.status} · ${b.chapterCount}章${
+                            gapCount ? `\n缺失序号 ${gapCount} 处（进入该书后在左侧书名下处理）` : ""
+                          }`}
                         >
                           <span
                             className="bookShelfTitle bookShelfTitleToggle"
@@ -745,6 +863,9 @@ export function App() {
                           >
                             《{b.title}》
                           </span>
+                          {gapCount > 0 ? (
+                            <span className="bookShelfGapCount">缺 {gapCount} 章</span>
+                          ) : null}
                           <span className="bookShelfMeta">
                             {formatBookCreatedAt(b.createdAt)} · {b.status} · {b.chapterCount}章
                           </span>
@@ -777,7 +898,8 @@ export function App() {
                           </div>
                         ) : null}
                       </div>
-                    ))
+                    );
+                    })
                   )}
                 </div>
               </>
@@ -785,6 +907,17 @@ export function App() {
               <>
                 <div className="navChapterHeader">
                   <div className="navTitle">{activeBookMeta?.title ?? activeBook}</div>
+                  {sortedActiveMissingChapterIndexes.length > 0 && activeBookMeta ? (
+                    <button
+                      type="button"
+                      className="navBookGapHint"
+                      disabled={busy}
+                      onClick={() => openShelfChapterGapModal(activeBookMeta)}
+                      title="选择补齐空缺或接在最大序号之后新建"
+                    >
+                      空缺：{formatMissingChapterList(sortedActiveMissingChapterIndexes)} · 点此新建
+                    </button>
+                  ) : null}
                   <div className="navSubtitle">{activeBookMeta?.slug ?? activeBook}</div>
                   <div className="navHint">点击左上角 novel-helper 返回书架</div>
                 </div>
@@ -810,39 +943,44 @@ export function App() {
                     {chapterSortDesc ? "倒序" : "正序"}
                   </button>
                 </div>
-                <div className="tree navListDense chapterNavList">
-                  {chapters.length === 0 ? (
-                    <div className="empty">暂无章节，请在下方新建。</div>
-                  ) : (
-                    displayedChapters.map((c) => (
-                      <button
-                        key={c.filename}
-                        type="button"
-                        className={`treeChild ${selectedChapter?.filename === c.filename ? "active" : ""}`}
-                        onClick={() => void onOpenChapter(c)}
-                        disabled={busy}
-                      >
-                        {c.id}
-                      </button>
-                    ))
-                  )}
-                </div>
-                <div className="row chapterQuickRow">
-                  <input
-                    value={chapterTitle}
-                    onChange={(e) => setChapterTitle(e.target.value)}
-                    placeholder="新章节标题"
-                    disabled={busy}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        void onCreateChapter();
-                      }
-                    }}
-                  />
-                  <button onClick={() => void onCreateChapter()} disabled={busy || !chapterTitle.trim()}>
-                    新建章节
-                  </button>
+                <div className="navChapterBody">
+                  <div className="chapterNavScroll">
+                    <div className="tree navListDense chapterNavList">
+                      {chapters.length === 0 ? (
+                        <div className="empty">暂无章节，请在下方新建。</div>
+                      ) : (
+                        displayedChapters.map((c) => (
+                          <button
+                            key={c.filename}
+                            type="button"
+                            className={`treeChild chapterNavItem ${selectedChapter?.filename === c.filename ? "active" : ""}`}
+                            onClick={() => void onOpenChapter(c)}
+                            disabled={busy}
+                          >
+                            <span className="chapterNavItemTitle">{c.id}</span>
+                            <span className="chapterNavWordCount">{c.wordCount ?? 0} 字</span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                  <div className="row chapterQuickRow chapterQuickRowSticky">
+                    <input
+                      value={chapterTitle}
+                      onChange={(e) => setChapterTitle(e.target.value)}
+                      placeholder="新章节标题"
+                      disabled={busy}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void onCreateChapter();
+                        }
+                      }}
+                    />
+                    <button onClick={() => void onCreateChapter()} disabled={busy || !chapterTitle.trim()}>
+                      新建章节
+                    </button>
+                  </div>
                 </div>
               </>
             )}
@@ -1180,6 +1318,72 @@ export function App() {
                 onClick={() => void submitCreateBookModal()}
               >
                 创建
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {chapterGapModalOpen ? (
+        <div
+          className="modalBackdrop"
+          role="presentation"
+          onClick={() => {
+            if (!busy) closeChapterGapModal();
+          }}
+        >
+          <div
+            className="modalPanel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-chapter-gap-heading"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="modal-chapter-gap-heading" className="modalHeading">
+              检测到章节序号空缺
+            </h2>
+            <p className="modalChapterGapMuted">
+              {(() => {
+                const m = books.find((bk) => bk.slug === chapterGapModalBookSlug);
+                return m ? `《${m.title}》` : chapterGapModalBookSlug;
+              })()}
+            </p>
+            <p className="modalChapterGapBody">
+              当前空缺：{formatMissingChapterList(chapterGapModalIndexes)}。填写章节标题后，选择补齐最先空缺或跳过空缺接续在最大序号之后。
+            </p>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-chapter-gap-title">
+                章节标题<span className="modalReq">*</span>
+              </label>
+              <input
+                id="modal-chapter-gap-title"
+                ref={chapterGapTitleInputRef}
+                className="modalInput"
+                value={chapterGapModalDraftTitle}
+                onChange={(e) => setChapterGapModalDraftTitle(e.target.value)}
+                placeholder="将写入文件名中的标题部分"
+                disabled={busy}
+              />
+            </div>
+            <div className="modalActions modalActionsWrap">
+              <button type="button" className="btnModalSecondary" disabled={busy} onClick={() => closeChapterGapModal()}>
+                取消
+              </button>
+              <button
+                type="button"
+                className="btnModalSecondary"
+                disabled={busy || !chapterGapModalDraftTitle.trim()}
+                onClick={() => void confirmChapterGapSkip()}
+              >
+                跳过空缺
+              </button>
+              <button
+                type="button"
+                className="btnModalPrimary"
+                disabled={busy || chapterGapModalIndexes.length === 0 || !chapterGapModalDraftTitle.trim()}
+                onClick={() => void confirmChapterGapFill()}
+              >
+                补齐第 {chapterGapModalIndexes[0]} 章
               </button>
             </div>
           </div>

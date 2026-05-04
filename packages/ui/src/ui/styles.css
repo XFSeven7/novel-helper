@@ -312,10 +312,28 @@ code {
   line-height: 1.35;
 }
 
-.bookShelfList,
-.chapterNavList {
+.bookShelfList {
   flex: none;
   max-height: min(28vh, 180px);
+  min-height: 0;
+}
+
+/* 章节：列表占满剩余高度，仅溢出时滚动；新建章节始终在面板底部 */
+.navChapterBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chapterNavScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.chapterNavList {
+  flex: none;
   min-height: 0;
 }
 
@@ -341,6 +359,29 @@ code {
 
 .tree.navListDense .treeChild.active {
   background: rgba(139, 92, 246, 0.18);
+}
+
+.tree.navListDense .treeChild.chapterNavItem {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+}
+
+.chapterNavItemTitle {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chapterNavWordCount {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 450;
+  color: color-mix(in srgb, var(--muted) 92%, transparent);
 }
 
 .tree.navListDense .treeChild.bookShelfRow {
@@ -394,6 +435,40 @@ code {
   text-decoration: underline;
   text-decoration-style: dotted;
   text-underline-offset: 3px;
+}
+
+.bookShelfGapCount {
+  display: block;
+  width: 100%;
+  margin: 2px 0 1px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: color-mix(in srgb, #fbbf24 78%, var(--muted));
+}
+
+.navBookGapHint {
+  display: block;
+  width: 100%;
+  margin: 0 0 8px;
+  padding: 5px 8px;
+  text-align: left;
+  font-size: 11px;
+  line-height: 1.35;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, #fbbf24 42%, var(--border));
+  background: color-mix(in srgb, #fbbf24 12%, transparent);
+  color: color-mix(in srgb, #fbbf24 88%, var(--text));
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.navBookGapHint:hover:not(:disabled) {
+  background: color-mix(in srgb, #fbbf24 20%, transparent);
+}
+
+.navBookGapHint:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .bookShelfPeek {
@@ -515,6 +590,23 @@ code {
   justify-content: flex-end;
   gap: 10px;
   margin-top: 6px;
+}
+
+.modalActionsWrap {
+  flex-wrap: wrap;
+}
+
+.modalChapterGapBody {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--text) 88%, transparent);
+}
+
+.modalChapterGapMuted {
+  margin: -6px 0 10px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 .btnModalSecondary {
@@ -796,6 +888,13 @@ code {
 
 .chapterQuickRow {
   margin-top: 8px;
+}
+
+.chapterQuickRow.chapterQuickRowSticky {
+  flex-shrink: 0;
+  margin-top: 0;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
 }
 
 .btnDeleteChapter {

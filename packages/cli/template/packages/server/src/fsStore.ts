@@ -21,10 +21,15 @@ function normalizeBookMeta(parsed: BookMeta, slugFallback: string): BookMeta {
 export type BookSummary = BookMeta & {
   chapterCount: number;
   status: "进行中";
+  missingChapterIndexes: number[];
 };
 
-export function bookSummaryFromMeta(meta: BookMeta, chapterCount: number): BookSummary {
-  return { ...meta, chapterCount, status: "进行中" };
+export function bookSummaryFromMeta(
+  meta: BookMeta,
+  chapterCount: number,
+  missingChapterIndexes: number[] = []
+): BookSummary {
+  return { ...meta, chapterCount, status: "进行中", missingChapterIndexes };
 }
 
 async function countChapterMarkdownFiles(bookDir: string): Promise<number> {
@@ -39,6 +44,7 @@ export type ChapterMeta = {
   title: string;
   filename: string;
   createdAt: string;
+  wordCount: number;
 };
 
 export type StoryFile = {
@@ -90,6 +96,35 @@ async function maxChapterIndex(chaptersDir: string): Promise<number> {
   return max;
 }
 
+async function chapterIndexOccupied(chaptersDir: string, index: number): Promise<boolean> {
+  const names = await fs.readdir(chaptersDir);
+  const prefix = `${String(index).padStart(4, "0")}_`;
+  return names.some((name) => name.startsWith(prefix) && name.endsWith(".md"));
+}
+
+async function missingChapterIndexesFromDir(bookDir: string): Promise<number[]> {
+  const chaptersDir = path.join(bookDir, "chapters");
+  if (!(await exists(chaptersDir))) return [];
+  const names = await fs.readdir(chaptersDir);
+  const indices = new Set<number>();
+  let max = 0;
+  for (const name of names) {
+    if (!name.endsWith(".md")) continue;
+    const m = name.match(CHAPTER_FILENAME_RE);
+    if (!m) continue;
+    const n = parseInt(m[1], 10);
+    if (!Number.isFinite(n) || n < 1) continue;
+    indices.add(n);
+    if (n > max) max = n;
+  }
+  if (max < 1) return [];
+  const gaps: number[] = [];
+  for (let i = 1; i < max; i++) {
+    if (!indices.has(i)) gaps.push(i);
+  }
+  return gaps;
+}
+
 async function allocateChapterFilenameExcept(
   chaptersDir: string,
   index: number,
@@ -111,6 +146,12 @@ async function allocateChapterFilename(chaptersDir: string, index: number, stem:
   return allocateChapterFilenameExcept(chaptersDir, index, stem, null);
 }
 
+function approximateWordCount(s: string): number {
+  const zh = (s.match(/[\u4e00-\u9fa5]/g) || []).length;
+  const en = (s.replace(/[\u4e00-\u9fa5]/g, " ").match(/[A-Za-z0-9]+/g) || []).length;
+  return zh + en;
+}
+
 function applyChapterHeadingTitle(raw: string, title: string): string {
   if (raw.startsWith("# ")) {
     const nl = raw.indexOf("\n");
@@ -127,7 +168,8 @@ function chapterMetaFromFilename(filename: string): ChapterMeta {
       id: filename.replace(/\.md$/, ""),
       title: m[2],
       filename,
-      createdAt: new Date(0).toISOString()
+      createdAt: new Date(0).toISOString(),
+      wordCount: 0
     };
   }
   const base = filename.replace(/\.md$/, "");
@@ -135,7 +177,8 @@ function chapterMetaFromFilename(filename: string): ChapterMeta {
     id: base,
     title: base,
     filename,
-    createdAt: new Date(0).toISOString()
+    createdAt: new Date(0).toISOString(),
+    wordCount: 0
   };
 }
 
@@ -156,8 +199,10 @@ export async function listBooks(dataDir: string): Promise<BookSummary[]> {
       const raw = await fs.readFile(metaPath, "utf8");
       const parsed = JSON.parse(raw) as BookMeta;
       const meta = normalizeBookMeta(parsed, slug);
-      const chapterCount = await countChapterMarkdownFiles(path.join(dataDir, slug));
-      metas.push(bookSummaryFromMeta(meta, chapterCount));
+      const bookDir = path.join(dataDir, slug);
+      const chapterCount = await countChapterMarkdownFiles(bookDir);
+      const missingChapterIndexes = await missingChapterIndexesFromDir(bookDir);
+      metas.push(bookSummaryFromMeta(meta, chapterCount, missingChapterIndexes));
     } catch {
       // ignore broken meta
     }
@@ -219,7 +264,8 @@ export async function updateBookSynopsis(dataDir: string, slug: string, synopsis
   const next: BookMeta = { ...meta, synopsis: synopsis.slice(0, MAX_SYNOPSIS_LEN) };
   await fs.writeFile(metaPath, JSON.stringify(next, null, 2), "utf8");
   const chapterCount = await countChapterMarkdownFiles(bookDir);
-  return bookSummaryFromMeta(next, chapterCount);
+  const missingChapterIndexes = await missingChapterIndexesFromDir(bookDir);
+  return bookSummaryFromMeta(next, chapterCount, missingChapterIndexes);
 }
 
 export async function listChapters(dataDir: string, bookSlug: string) {
@@ -231,14 +277,36 @@ export async function listChapters(dataDir: string, bookSlug: string) {
     .map((e) => e.name)
     .sort(chapterFilenameSort);
 
-  return files.map((filename) => chapterMetaFromFilename(filename));
+  const metas: ChapterMeta[] = [];
+  for (const filename of files) {
+    const raw = await fs.readFile(path.join(chaptersDir, filename), "utf8");
+    metas.push({
+      ...chapterMetaFromFilename(filename),
+      wordCount: approximateWordCount(raw)
+    });
+  }
+  return metas;
 }
 
-export async function createChapter(dataDir: string, bookSlug: string, title: string, content?: string) {
+export async function createChapter(
+  dataDir: string,
+  bookSlug: string,
+  title: string,
+  content?: string,
+  chapterIndex?: number
+) {
   const chaptersDir = path.join(dataDir, bookSlug, "chapters");
   await ensureDir(chaptersDir);
 
-  const index = (await maxChapterIndex(chaptersDir)) + 1;
+  let index: number;
+  if (chapterIndex !== undefined) {
+    const n = Math.floor(chapterIndex);
+    if (!Number.isFinite(n) || n < 1) throw new Error("无效的章节序号");
+    if (await chapterIndexOccupied(chaptersDir, n)) throw new Error(`序号 ${n} 已被占用`);
+    index = n;
+  } else {
+    index = (await maxChapterIndex(chaptersDir)) + 1;
+  }
   const stem = sanitizeChapterStem(title);
   const filename = await allocateChapterFilename(chaptersDir, index, stem);
   const filePath = path.join(chaptersDir, filename);
@@ -246,7 +314,13 @@ export async function createChapter(dataDir: string, bookSlug: string, title: st
 
   const body = `# ${title}\n\n` + (content?.trim() ? `${content.trim()}\n` : "");
   await fs.writeFile(filePath, body, "utf8");
-  return { id, title, filename, createdAt: new Date().toISOString() } satisfies ChapterMeta;
+  return {
+    id,
+    title,
+    filename,
+    createdAt: new Date().toISOString(),
+    wordCount: approximateWordCount(body)
+  } satisfies ChapterMeta;
 }
 
 export async function readChapter(dataDir: string, bookSlug: string, filename: string) {
@@ -297,9 +371,14 @@ export async function renameChapterTitle(
   const raw = await fs.readFile(oldPath, "utf8");
   const nextBody = applyChapterHeadingTitle(raw, trimmed);
 
+  const metaWithCount = (fn: string): ChapterMeta => ({
+    ...chapterMetaFromFilename(fn),
+    wordCount: approximateWordCount(nextBody)
+  });
+
   if (newFilename === oldFilename) {
     await fs.writeFile(oldPath, nextBody, "utf8");
-    return chapterMetaFromFilename(oldFilename);
+    return metaWithCount(oldFilename);
   }
 
   const newPath = path.join(chaptersDir, newFilename);
@@ -308,7 +387,7 @@ export async function renameChapterTitle(
   await fs.writeFile(newPath, nextBody, "utf8");
   await fs.unlink(oldPath);
 
-  return chapterMetaFromFilename(newFilename);
+  return metaWithCount(newFilename);
 }
 
 export async function listStoryFiles(dataDir: string, bookSlug: string) {

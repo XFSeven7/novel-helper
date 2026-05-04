@@ -4,6 +4,8 @@ export type BookMeta = {
   createdAt: string;
   chapterCount: number;
   status: "进行中";
+  /** 介于 1..最大序号之间的空缺（文件名符合「序号_标题.md」） */
+  missingChapterIndexes: number[];
   synopsis?: string;
 };
 
@@ -12,17 +14,22 @@ export type ChapterMeta = {
   title: string;
   filename: string;
   createdAt: string;
+  wordCount: number;
 };
 
 const API_BASE = (import.meta as any).env?.VITE_API_BASE || "http://127.0.0.1:3177";
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers = new Headers(init?.headers ?? undefined);
+  const body = init?.body;
+  const hasJsonStringBody = typeof body === "string" && body.length > 0;
+  if (hasJsonStringBody && !headers.has("Content-Type") && !headers.has("content-type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
-    headers: {
-      "content-type": "application/json",
-      ...(init?.headers || {})
-    }
+    headers
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
@@ -59,7 +66,10 @@ export async function listChapters(slug: string) {
   return await http<{ chapters: ChapterMeta[] }>(`/api/books/${encodeURIComponent(slug)}/chapters`);
 }
 
-export async function createChapter(slug: string, input: { title: string; content?: string }) {
+export async function createChapter(
+  slug: string,
+  input: { title: string; content?: string; chapterIndex?: number }
+) {
   return await http<{ chapter: ChapterMeta }>(`/api/books/${encodeURIComponent(slug)}/chapters`, {
     method: "POST",
     body: JSON.stringify(input)

@@ -50,7 +50,7 @@ app.post("/api/books", async (req, reply) => {
 
   try {
     const meta = await createNovel(dataDir, slug, body.title, body.synopsis);
-    return { book: novelSummaryFromMeta(meta, 0) };
+    return { book: novelSummaryFromMeta(meta, 0, []) };
   } catch (e: any) {
     return reply.code(409).send({ message: e?.message || "Conflict" });
   }
@@ -82,11 +82,12 @@ app.post("/api/books/:slug/chapters", async (req) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const bodySchema = z.object({
     title: z.string().min(1),
-    content: z.string().optional()
+    content: z.string().optional(),
+    chapterIndex: z.number().int().min(1).optional()
   });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const chapter = await createChapter(dataDir, params.slug, body.title, body.content);
+  const chapter = await createChapter(dataDir, params.slug, body.title, body.content, body.chapterIndex);
   return { chapter };
 });
 
@@ -210,7 +211,7 @@ app.post("/api/novels", async (req, reply) => {
 
   try {
     const meta = await createNovel(dataDir, slug, body.title, body.synopsis);
-    return { novel: novelSummaryFromMeta(meta, 0) };
+    return { novel: novelSummaryFromMeta(meta, 0, []) };
   } catch (e: any) {
     return reply.code(409).send({ message: e?.message || "Conflict" });
   }
@@ -227,11 +228,12 @@ app.post("/api/novels/:slug/chapters", async (req, reply) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const bodySchema = z.object({
     title: z.string().min(1),
-    content: z.string().optional()
+    content: z.string().optional(),
+    chapterIndex: z.number().int().min(1).optional()
   });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const chapter = await createChapter(dataDir, params.slug, body.title, body.content);
+  const chapter = await createChapter(dataDir, params.slug, body.title, body.content, body.chapterIndex);
   return { chapter };
 });
 
