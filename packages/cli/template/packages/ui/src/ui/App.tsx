@@ -29,6 +29,9 @@ import {
   getAuditPlaces,
   hideAuditPlace,
   updateAuditPlace,
+  getAuditOrgs,
+  hideAuditOrg,
+  updateAuditOrg,
   getTimelineIndex,
   compressTimelineRange,
   markTimelineEvent,
@@ -134,6 +137,211 @@ function friendlyAuditFieldKey(k: string): string {
     aliases: "别名"
   };
   return map[k] ?? k;
+}
+
+type AuditLinkKind = "character" | "place" | "org" | "timelineEvent" | "storyFile";
+type AuditLinkTarget = {
+  kind: AuditLinkKind;
+  id: string;
+  display: string;
+  summaryLines: string[];
+  jump: { tab: "chapterSummary" | "auditCharacters" | "places" | "orgs" | "timeline" | "story"; key: string };
+};
+
+function splitParagraphs(raw: string): string[] {
+  const t = (raw || "").replace(/\r/g, "").trim();
+  if (!t) return [];
+  return t
+    .split(/\n{2,}/g)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function toPrettyJsonLines(v: any): string[] {
+  if (v === null || v === undefined) return [];
+  if (typeof v === "string") {
+    const t = v.trim();
+    return t ? t.split("\n") : [];
+  }
+  try {
+    const s = JSON.stringify(v, null, 2);
+    if (!s) return [];
+    return s.split("\n");
+  } catch {
+    try {
+      return [String(v)];
+    } catch {
+      return [];
+    }
+  }
+}
+
+function stateKeyLabel(k: string): string {
+  const key = String(k || "").trim();
+  if (!key) return "";
+  if (key === "location") return "地点";
+  if (key === "injuries") return "伤势与状态";
+  if (key === "items") return "随身物品";
+  if (key === "moneyChange") return "金钱变动";
+  if (key === "money") return "金钱";
+  if (key === "goal") return "目标";
+  return key;
+}
+
+function toStateFieldLines(state: any): string[] {
+  if (!state || typeof state !== "object") return [];
+
+  const out: string[] = [];
+  const pushKV = (k: string, v: any) => {
+    const label = stateKeyLabel(k);
+    if (!label) return;
+    if (v === null || v === undefined) return;
+    if (typeof v === "string") {
+      const t = v.trim();
+      if (!t) return;
+      out.push(`${label}：${t}`);
+      return;
+    }
+    if (typeof v === "number" || typeof v === "boolean") {
+      out.push(`${label}：${String(v)}`);
+      return;
+    }
+    if (Array.isArray(v)) {
+      const items = v.map((x) => String(x ?? "").trim()).filter(Boolean);
+      if (!items.length) return;
+      out.push(`${label}：${items.join("、")}`);
+      return;
+    }
+    if (typeof v === "object") {
+      const entries = Object.entries(v as Record<string, any>)
+        .map(([kk, vv]) => [String(kk).trim(), vv] as const)
+        .filter(([kk]) => kk);
+      if (!entries.length) return;
+      for (const [kk, vv] of entries) {
+        const childLabel = `${label}.${kk}`;
+        if (vv === null || vv === undefined) continue;
+        const s = typeof vv === "string" ? vv.trim() : Array.isArray(vv) ? vv.map(String).join("、") : String(vv);
+        if (!String(s).trim()) continue;
+        out.push(`${childLabel}：${s}`);
+      }
+    }
+  };
+
+  const keys = Object.keys(state as Record<string, any>).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+  for (const k of keys) pushKV(k, (state as any)[k]);
+  return out;
+}
+
+function buildAuditTargets(input: {
+  auditCharactersIndex: any;
+  auditPlacesIndex: any;
+  auditOrgsIndex: any;
+  timelineIndex: any;
+  storyFiles: StoryFile[];
+}): AuditLinkTarget[] {
+  const out: AuditLinkTarget[] = [];
+  const push = (t: AuditLinkTarget) => {
+    if (!t.id || !t.display) return;
+    out.push(t);
+  };
+
+  const chars = Array.isArray(input.auditCharactersIndex?.characters) ? input.auditCharactersIndex.characters : [];
+  const hiddenChars = new Set(
+    Array.isArray(input.auditCharactersIndex?.hiddenNames) ? input.auditCharactersIndex.hiddenNames.map(String) : []
+  );
+  for (const c of chars) {
+    const name = String(c?.name || "").trim();
+    if (!name || hiddenChars.has(name)) continue;
+    const role = String(c?.role || "").trim();
+    const tags = Array.isArray(c?.tags) ? c.tags.map(String).filter(Boolean) : [];
+    const personality = String(c?.personalityAnalysis || "").trim();
+    const lines: string[] = [];
+    lines.push(`姓名：${name}`);
+    if (role) lines.push(`身份：${role}`);
+    if (tags.length) lines.push(`标签：${tags.join("、")}`);
+    if (personality) lines.push(`性格分析：${personality}`);
+    const stateFields = toStateFieldLines(c?.state);
+    for (const l of stateFields) lines.push(l);
+    const compact = lines.map((s) => String(s)).filter((s) => s.trim().length > 0);
+    push({
+      kind: "character",
+      id: name,
+      display: name,
+      summaryLines: compact.length ? compact : ["角色卡（未补充更多信息）"],
+      jump: { tab: "auditCharacters", key: name }
+    });
+  }
+
+  const places = Array.isArray(input.auditPlacesIndex?.places) ? input.auditPlacesIndex.places : [];
+  const hiddenPlaces = new Set(
+    Array.isArray(input.auditPlacesIndex?.hiddenNames) ? input.auditPlacesIndex.hiddenNames.map(String) : []
+  );
+  for (const p of places) {
+    const name = String(p?.name || "").trim();
+    if (!name || hiddenPlaces.has(name)) continue;
+    const desc = String(p?.description || "").trim();
+    const note = String(p?.lastNote || "").trim();
+    const last = p?.lastChapter ? `最近：第 ${p.lastChapter} 章` : "";
+    push({
+      kind: "place",
+      id: name,
+      display: name,
+      summaryLines: [desc ? `简述：${desc}` : "", note ? `发生：${note}` : "", last].filter(Boolean).slice(0, 6),
+      jump: { tab: "places", key: name }
+    });
+  }
+
+  const orgs = Array.isArray(input.auditOrgsIndex?.orgs) ? input.auditOrgsIndex.orgs : [];
+  const hiddenOrgs = new Set(
+    Array.isArray(input.auditOrgsIndex?.hiddenNames) ? input.auditOrgsIndex.hiddenNames.map(String) : []
+  );
+  for (const o of orgs) {
+    const name = String(o?.name || "").trim();
+    if (!name || hiddenOrgs.has(name)) continue;
+    const desc = String(o?.description || "").trim();
+    const note = String(o?.lastNote || "").trim();
+    const last = o?.lastChapter ? `最近：第 ${o.lastChapter} 章` : "";
+    push({
+      kind: "org",
+      id: name,
+      display: name,
+      summaryLines: [desc ? `简述：${desc}` : "", note ? `动态：${note}` : "", last].filter(Boolean).slice(0, 6),
+      jump: { tab: "orgs", key: name }
+    });
+  }
+
+  const events = Array.isArray(input.timelineIndex?.events) ? input.timelineIndex.events : [];
+  for (const e of events) {
+    const id = String(e?.id || "").trim();
+    const title = String(e?.title || "").trim();
+    if (!id || !title) continue;
+    const sum = String(e?.summary || "").trim();
+    push({
+      kind: "timelineEvent",
+      id,
+      display: title,
+      summaryLines: [
+        sum ? `摘要：${sum}` : "",
+        e?.startChapter
+          ? `范围：第 ${e.startChapter}${e.endChapter && e.endChapter !== e.startChapter ? `-${e.endChapter}` : ""} 章`
+          : ""
+      ].filter(Boolean),
+      jump: { tab: "timeline", key: id }
+    });
+  }
+
+  for (const f of input.storyFiles || []) {
+    if (!f?.title || !f?.path) continue;
+    push({
+      kind: "storyFile",
+      id: String(f.path),
+      display: String(f.title),
+      summaryLines: [`资料：${f.title}`],
+      jump: { tab: "story", key: String(f.path) }
+    });
+  }
+
+  return out;
 }
 
 function auditCharStateExtraRows(st: Record<string, unknown>): Array<[string, string]> {
@@ -462,6 +670,7 @@ export function App() {
   const [busy, setBusy] = useState(false);
 
   const [mobileReading, setMobileReading] = useState(false);
+  const [auditReadModeOn, setAuditReadModeOn] = useState(false);
   const [mobilePreset, setMobilePreset] = useState<MobilePresetId>("iphone-14");
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => loadThemePreference());
   const [fullscreenOn, setFullscreenOn] = useState(false);
@@ -809,6 +1018,7 @@ export function App() {
   const [timelineShowDoneEvents, setTimelineShowDoneEvents] = useState(false);
   const [auditCharactersIndex, setAuditCharactersIndex] = useState<any | null>(null);
   const [auditPlacesIndex, setAuditPlacesIndex] = useState<any | null>(null);
+  const [auditOrgsIndex, setAuditOrgsIndex] = useState<any | null>(null);
   const [hiddenPlacePanelOpen, setHiddenPlacePanelOpen] = useState(false);
   const [editPlaceOpen, setEditPlaceOpen] = useState(false);
   const [editPlaceName, setEditPlaceName] = useState("");
@@ -830,6 +1040,10 @@ export function App() {
   const [auditStreamPhase, setAuditStreamPhase] = useState<AuditStreamPhase>("idle");
   const [auditStreamText, setAuditStreamText] = useState("");
   const auditStreamRef = useRef<HTMLDivElement | null>(null);
+  const [auditHover, setAuditHover] = useState<{
+    target: AuditLinkTarget;
+    rect: { left: number; top: number; width: number; height: number };
+  } | null>(null);
   /** SSE 收到的完整思考缓冲（服务端可能一次推一大块）；界面用 RAF 逐段追上 */
   const auditThinkingBufferRef = useRef("");
   const auditDisplayedLenRef = useRef(0);
@@ -1160,16 +1374,19 @@ export function App() {
 
   async function loadAuditArtifacts(slug: string, chapterFilename: string) {
     try {
-      const [{ run }, { index: timelineIdx }, { index: charIdx }, { index: placesIdx }] = await Promise.all([
+      const [{ run }, { index: timelineIdx }, { index: charIdx }, { index: placesIdx }, { index: orgsIdx }] =
+        await Promise.all([
         getAuditLatest(slug, chapterFilename).catch(() => ({ run: null })),
         getTimelineIndex(slug).catch(() => ({ index: null as any })),
         getAuditCharacters(slug).catch(() => ({ index: null as any })),
-        getAuditPlaces(slug).catch(() => ({ index: null as any }))
+        getAuditPlaces(slug).catch(() => ({ index: null as any })),
+        getAuditOrgs(slug).catch(() => ({ index: null as any }))
       ]);
       setAuditRun(run);
       setTimelineIndex(timelineIdx);
       setAuditCharactersIndex(charIdx);
       setAuditPlacesIndex(placesIdx);
+      setAuditOrgsIndex(orgsIdx);
     } catch {
       setAuditRun(null);
     }
@@ -1263,6 +1480,46 @@ export function App() {
       setTimelineBusy(false);
     }
   }
+
+  const jumpToOrganize = useCallback(
+    (tab: "chapterSummary" | "auditCharacters" | "places" | "orgs" | "timeline" | "story", key: string) => {
+      if (tab === "auditCharacters") {
+        setExpandedAuditCharIds((prev) => ({ ...prev, [key]: true }));
+      }
+      if (tab === "places") {
+        const places = Array.isArray(auditPlacesIndex?.places) ? (auditPlacesIndex.places as any[]) : [];
+        const p = places.find((x) => String(x?.name || "").trim() === key);
+        const group = String(p?.group || "").trim();
+        if (group) setPlaceGroupCollapsed((prev) => ({ ...prev, [group]: false }));
+      }
+
+      setRightTab(tab);
+      requestAnimationFrame(() => {
+        const root = document.querySelector(".organizeTabScroll") as HTMLElement | null;
+        if (!root) return;
+        const esc = (s: string) => CSS.escape(s);
+        const sel =
+          tab === "auditCharacters"
+            ? `[data-char-name="${esc(key)}"]`
+            : tab === "places"
+              ? `[data-place-name="${esc(key)}"]`
+              : tab === "timeline"
+                ? `[data-event-id="${esc(key)}"]`
+                : tab === "story"
+                  ? `[data-story-path="${esc(key)}"]`
+                  : tab === "orgs"
+                    ? `[data-org-name="${esc(key)}"]`
+                    : "";
+        if (!sel) return;
+        const el = root.querySelector(sel) as HTMLElement | null;
+        if (!el) return;
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
+        el.classList.add("flashFocus");
+        window.setTimeout(() => el.classList.remove("flashFocus"), 900);
+      });
+    },
+    [auditPlacesIndex]
+  );
 
   async function onAuditSelectedChapter() {
     if (!activeBook || !selectedChapter) return;
@@ -2050,6 +2307,15 @@ export function App() {
                   />
                   移动端阅读
                 </label>
+                <button
+                  type="button"
+                  className={`btnAuditRead ${auditReadModeOn ? "active" : ""}`}
+                  disabled={busy}
+                  onClick={() => setAuditReadModeOn((v) => !v)}
+                  title={auditReadModeOn ? "退出审计阅读模式" : "进入审计阅读模式（高亮内容整理关联）"}
+                >
+                  {auditReadModeOn ? "退出审计" : "审计"}
+                </button>
                 <select
                   className="select"
                   value={mobilePreset}
@@ -2240,26 +2506,248 @@ export function App() {
                 className="mobilePhone"
                 style={{ width: `${mobileViewport.w}px`, height: `${mobileViewport.h}px` }}
               >
-                <textarea
-                  className="mobileTextarea"
-                  ref={chapterTextareaRef}
-                  value={chapterContent}
-                  onChange={(e) => setChapterContent(e.target.value)}
-                  disabled={busy || !selectedChapter}
-                  placeholder="在左侧选择章节或新建章节后开始写作…"
-                />
+                {auditReadModeOn ? (
+                  <div className="auditReader">
+                    {(() => {
+                      const paras = splitParagraphs(chapterContent);
+                      const targets = buildAuditTargets({
+                        auditCharactersIndex,
+                        auditPlacesIndex,
+                        auditOrgsIndex,
+                        timelineIndex,
+                        storyFiles
+                      });
+                      const terms = [...targets]
+                        .map((t) => ({ term: t.display, target: t }))
+                        .filter((x) => x.term.length >= 2)
+                        .sort((a, b) => b.term.length - a.term.length);
+                      const recent = new Map<string, number>();
+                      const N = 10;
+                      const renderPara = (text: string, pi: number) => {
+                        const hits: Array<{ start: number; end: number; target: AuditLinkTarget; term: string }> = [];
+                        const used: Array<{ start: number; end: number }> = [];
+                        const overlap = (s: number, e: number) =>
+                          used.some((u) => Math.max(u.start, s) < Math.min(u.end, e));
+                        for (const { term, target } of terms) {
+                          const last = recent.get(term);
+                          if (last !== undefined && pi - last < N) continue;
+                          const idx = text.indexOf(term);
+                          if (idx < 0) continue;
+                          const s = idx;
+                          const e = idx + term.length;
+                          if (overlap(s, e)) continue;
+                          hits.push({ start: s, end: e, target, term });
+                          used.push({ start: s, end: e });
+                          recent.set(term, pi);
+                        }
+                        hits.sort((a, b) => a.start - b.start);
+                        if (!hits.length) return <div className="auditPara">{text}</div>;
+                        const parts: React.ReactNode[] = [];
+                        let cursor = 0;
+                        for (const h of hits) {
+                          if (h.start > cursor)
+                            parts.push(<span key={`${pi}-${cursor}`}>{text.slice(cursor, h.start)}</span>);
+                          parts.push(
+                            <span
+                              key={`${pi}-${h.start}-${h.end}`}
+                              className={`auditLink auditLink_${h.target.kind}`}
+                              onMouseEnter={(e) => {
+                                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                setAuditHover({
+                                  target: h.target,
+                                  rect: { left: r.left, top: r.top, width: r.width, height: r.height }
+                                });
+                              }}
+                              onMouseLeave={() => setAuditHover(null)}
+                              onClick={() => jumpToOrganize(h.target.jump.tab, h.target.jump.key)}
+                              role="button"
+                              tabIndex={0}
+                              title={h.target.display}
+                            >
+                              {text.slice(h.start, h.end)}
+                            </span>
+                          );
+                          cursor = h.end;
+                        }
+                        if (cursor < text.length)
+                          parts.push(<span key={`${pi}-tail`}>{text.slice(cursor)}</span>);
+                        return <div className="auditPara">{parts}</div>;
+                      };
+                      return (
+                        <>
+                          {paras.length ? (
+                            paras.map((p, i) => <React.Fragment key={i}>{renderPara(p, i)}</React.Fragment>)
+                          ) : (
+                            <div className="muted auditPanelEmpty">暂无正文。</div>
+                          )}
+                        </>
+                      );
+                    })()}
+                    {auditHover ? (
+                      <div
+                        className="auditTooltip"
+                        style={{
+                          left: Math.min(window.innerWidth - 320, Math.max(10, auditHover.rect.left)),
+                          top: Math.min(
+                            window.innerHeight - 180,
+                            Math.max(10, auditHover.rect.top + auditHover.rect.height + 8)
+                          )
+                        }}
+                        onMouseLeave={() => setAuditHover(null)}
+                      >
+                        <div className="auditTooltipTitle">{auditHover.target.display}</div>
+                        <div className="auditTooltipBody">
+                          {auditHover.target.summaryLines.map((l, i) => (
+                            <div key={i} className="auditTooltipLine">
+                              {l}
+                            </div>
+                          ))}
+                        </div>
+                        <div className="auditTooltipActions">
+                          <button
+                            type="button"
+                            className="btnSort"
+                            onClick={() => jumpToOrganize(auditHover.target.jump.tab, auditHover.target.jump.key)}
+                          >
+                            去内容整理查看
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <textarea
+                    className="mobileTextarea"
+                    ref={chapterTextareaRef}
+                    value={chapterContent}
+                    onChange={(e) => setChapterContent(e.target.value)}
+                    disabled={busy || !selectedChapter}
+                    placeholder="在左侧选择章节或新建章节后开始写作…"
+                  />
+                )}
               </div>
             </div>
           ) : (
             <div className={`chapterSplit ${auditStreamOpen ? "open" : ""}`}>
               <div className="chapterSplitLeft">
-                <textarea
-                  ref={chapterTextareaRef}
-                  value={chapterContent}
-                  onChange={(e) => setChapterContent(e.target.value)}
-                  disabled={busy || !selectedChapter}
-                  placeholder="在左侧选择章节或新建章节后开始写作…"
-                />
+                {auditReadModeOn ? (
+                  <div className="auditReader">
+                    {(() => {
+                      const paras = splitParagraphs(chapterContent);
+                      const targets = buildAuditTargets({
+                        auditCharactersIndex,
+                        auditPlacesIndex,
+                        auditOrgsIndex,
+                        timelineIndex,
+                        storyFiles
+                      });
+                      const terms = [...targets]
+                        .map((t) => ({ term: t.display, target: t }))
+                        .filter((x) => x.term.length >= 2)
+                        .sort((a, b) => b.term.length - a.term.length);
+                      const recent = new Map<string, number>();
+                      const N = 10;
+                      const renderPara = (text: string, pi: number) => {
+                        const hits: Array<{ start: number; end: number; target: AuditLinkTarget; term: string }> = [];
+                        const used: Array<{ start: number; end: number }> = [];
+                        const overlap = (s: number, e: number) =>
+                          used.some((u) => Math.max(u.start, s) < Math.min(u.end, e));
+                        for (const { term, target } of terms) {
+                          const last = recent.get(term);
+                          if (last !== undefined && pi - last < N) continue;
+                          const idx = text.indexOf(term);
+                          if (idx < 0) continue;
+                          const s = idx;
+                          const e = idx + term.length;
+                          if (overlap(s, e)) continue;
+                          hits.push({ start: s, end: e, target, term });
+                          used.push({ start: s, end: e });
+                          recent.set(term, pi);
+                        }
+                        hits.sort((a, b) => a.start - b.start);
+                        if (!hits.length) return <div className="auditPara">{text}</div>;
+                        const parts: React.ReactNode[] = [];
+                        let cursor = 0;
+                        for (const h of hits) {
+                          if (h.start > cursor)
+                            parts.push(<span key={`${pi}-${cursor}`}>{text.slice(cursor, h.start)}</span>);
+                          parts.push(
+                            <span
+                              key={`${pi}-${h.start}-${h.end}`}
+                              className={`auditLink auditLink_${h.target.kind}`}
+                              onMouseEnter={(e) => {
+                                const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                setAuditHover({
+                                  target: h.target,
+                                  rect: { left: r.left, top: r.top, width: r.width, height: r.height }
+                                });
+                              }}
+                              onMouseLeave={() => setAuditHover(null)}
+                              onClick={() => jumpToOrganize(h.target.jump.tab, h.target.jump.key)}
+                              role="button"
+                              tabIndex={0}
+                              title={h.target.display}
+                            >
+                              {text.slice(h.start, h.end)}
+                            </span>
+                          );
+                          cursor = h.end;
+                        }
+                        if (cursor < text.length)
+                          parts.push(<span key={`${pi}-tail`}>{text.slice(cursor)}</span>);
+                        return <div className="auditPara">{parts}</div>;
+                      };
+                      return (
+                        <>
+                          {paras.length ? (
+                            paras.map((p, i) => <React.Fragment key={i}>{renderPara(p, i)}</React.Fragment>)
+                          ) : (
+                            <div className="muted auditPanelEmpty">暂无正文。</div>
+                          )}
+                        </>
+                      );
+                    })()}
+                    {auditHover ? (
+                      <div
+                        className="auditTooltip"
+                        style={{
+                          left: Math.min(window.innerWidth - 320, Math.max(10, auditHover.rect.left)),
+                          top: Math.min(
+                            window.innerHeight - 180,
+                            Math.max(10, auditHover.rect.top + auditHover.rect.height + 8)
+                          )
+                        }}
+                        onMouseLeave={() => setAuditHover(null)}
+                      >
+                        <div className="auditTooltipTitle">{auditHover.target.display}</div>
+                        <div className="auditTooltipBody">
+                          {auditHover.target.summaryLines.map((l, i) => (
+                            <div key={i} className="auditTooltipLine">
+                              {l}
+                            </div>
+                          ))}
+                        </div>
+                        <div className="auditTooltipActions">
+                          <button
+                            type="button"
+                            className="btnSort"
+                            onClick={() => jumpToOrganize(auditHover.target.jump.tab, auditHover.target.jump.key)}
+                          >
+                            去内容整理查看
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <textarea
+                    ref={chapterTextareaRef}
+                    value={chapterContent}
+                    onChange={(e) => setChapterContent(e.target.value)}
+                    disabled={busy || !selectedChapter}
+                    placeholder="在左侧选择章节或新建章节后开始写作…"
+                  />
+                )}
               </div>
               {auditStreamOpen ? (
                 <div className="chapterSplitRight" aria-label="分析流式输出">
@@ -2558,7 +3046,7 @@ export function App() {
                                   const personality = String((c as any)?.personalityAnalysis ?? "").trim();
 
                                   return (
-                                    <div key={id} className="auditCharCard">
+                                    <div key={id} className="auditCharCard" data-char-name={name}>
                                       <div className="auditCharCardHeadRow">
                                         <button
                                           type="button"
@@ -2748,7 +3236,7 @@ export function App() {
                                             const noteText = String(p.lastNote || "").trim() || "—";
                                             const noteNeedToggle = noteText.length >= 36;
                                             return (
-                                              <div key={p.name} className="placeCard">
+                                              <div key={p.name} className="placeCard" data-place-name={p.name}>
                                                 <div className="placeCardTop">
                                                   <div className="placeName">{p.name}</div>
                                                   <div className="row">
@@ -2849,6 +3337,7 @@ export function App() {
                       {storyFiles.map((f) => (
                         <button
                           key={f.path}
+                          data-story-path={f.path}
                           className={`item ${selectedCard?.path === f.path ? "active" : ""}`}
                           onClick={() => onOpenCard(f)}
                           disabled={busy}
@@ -3031,7 +3520,11 @@ export function App() {
                                 const done =
                                   (timelineIndex.manual?.doneEventIds ?? []).includes(e.id) || e.status === "done";
                                 return (
-                                  <div key={e.id} className={`timelineEventItem ${done ? "done" : ""}`}>
+                                  <div
+                                    key={e.id}
+                                    className={`timelineEventItem ${done ? "done" : ""}`}
+                                    data-event-id={e.id}
+                                  >
                                     <div className="timelineEventTop">
                                       <div className="timelineEventTitle">
                                         第 {e.startChapter}

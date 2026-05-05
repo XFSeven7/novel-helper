@@ -328,6 +328,25 @@ export async function writeAuditPlacesIndex(dataDir: string, novelSlug: string, 
   await fs.writeFile(p, JSON.stringify(idx, null, 2), "utf8");
 }
 
+export async function readAuditOrgsIndex(dataDir: string, novelSlug: string): Promise<any> {
+  const p = path.join(auditDir(dataDir, novelSlug), "orgsIndex.json");
+  if (!(await exists(p))) return { orgs: [], hiddenNames: [], updatedAt: "" };
+  const parsed = JSON.parse(await fs.readFile(p, "utf8"));
+  if (parsed && typeof parsed === "object") {
+    if (!Array.isArray((parsed as any).orgs)) (parsed as any).orgs = [];
+    if (!Array.isArray((parsed as any).hiddenNames)) (parsed as any).hiddenNames = [];
+    if (typeof (parsed as any).updatedAt !== "string") (parsed as any).updatedAt = "";
+  }
+  return parsed;
+}
+
+export async function writeAuditOrgsIndex(dataDir: string, novelSlug: string, idx: any) {
+  const dir = auditDir(dataDir, novelSlug);
+  await ensureDir(dir);
+  const p = path.join(dir, "orgsIndex.json");
+  await fs.writeFile(p, JSON.stringify(idx, null, 2), "utf8");
+}
+
 export async function deleteNovel(dataDir: string, slug: string): Promise<void> {
   // 兼容旧逻辑：保留函数名，但改为“废弃书籍”
   const novelDir = path.join(dataDir, slug);

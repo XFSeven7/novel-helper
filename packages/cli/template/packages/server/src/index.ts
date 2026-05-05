@@ -31,6 +31,8 @@ import {
   writeAuditCharactersIndex,
   readAuditPlacesIndex,
   writeAuditPlacesIndex,
+  readAuditOrgsIndex,
+  writeAuditOrgsIndex,
   readTimelineIndex,
   writeTimelineIndex,
   writeStoryTimelineMarkdownFromIndex,
@@ -649,6 +651,60 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
   placesIdx.updatedAt = run.chapter.auditedAt;
   await writeAuditPlacesIndex(dataDir, slug, placesIdx);
 
+  // 自动抽取组织：全书共享 orgsIndex.json
+  const orgsIdx = await readAuditOrgsIndex(dataDir, slug);
+  const orgExisting = new Map<string, any>(
+    (orgsIdx.orgs || [])
+      .map((o: any) => ({ ...o, name: String(o?.name || "").trim() }))
+      .filter((o: any) => o.name)
+      .map((o: any) => [o.name, o])
+  );
+  const orgOccurrences: Array<{ name: string; note: string }> = [];
+  for (const ev of run?.entities?.events || []) {
+    if (!ev || typeof ev !== "object") continue;
+    const cand =
+      (ev as any).org ??
+      (ev as any).organization ??
+      (ev as any).faction ??
+      (ev as any)["组织"] ??
+      (ev as any)["势力"];
+    const name = String(cand || "").trim();
+    if (!name) continue;
+    const note =
+      String((ev as any).summary || (ev as any).what || (ev as any).event || "").trim() ||
+      String(run.gistL1 || "").trim();
+    orgOccurrences.push({ name, note });
+  }
+  const orgUniq = new Map<string, string>();
+  for (const o of orgOccurrences) if (!orgUniq.has(o.name)) orgUniq.set(o.name, o.note);
+  for (const [name, note] of orgUniq) {
+    const prev = orgExisting.get(name);
+    if (prev) {
+      prev.lastSeenAt = run.chapter.auditedAt;
+      prev.lastChapter = Number.isFinite(chapterNum) ? chapterNum : prev.lastChapter;
+      prev.lastNote = note || prev.lastNote || "";
+      prev.updatedAt = run.chapter.auditedAt;
+      orgExisting.set(name, prev);
+    } else {
+      orgExisting.set(name, {
+        name,
+        description: "",
+        lastNote: note || "",
+        firstSeenAt: run.chapter.auditedAt,
+        lastSeenAt: run.chapter.auditedAt,
+        firstChapter: Number.isFinite(chapterNum) ? chapterNum : 0,
+        lastChapter: Number.isFinite(chapterNum) ? chapterNum : 0,
+        updatedAt: run.chapter.auditedAt
+      });
+    }
+  }
+  orgsIdx.orgs = [...orgExisting.values()].sort((a: any, b: any) =>
+    String(a.name).localeCompare(String(b.name), "zh-Hans-CN")
+  );
+  if (!Array.isArray(orgsIdx.hiddenNames)) orgsIdx.hiddenNames = [];
+  orgsIdx.updatedAt = run.chapter.auditedAt;
+  await writeAuditOrgsIndex(dataDir, slug, orgsIdx);
+
   const ledger = await readAuditLedger(dataDir, slug);
   ledger.updatedAt = run.chapter.auditedAt;
   ledger.openLoops = ledger.openLoops || [];
@@ -1097,6 +1153,56 @@ app.post("/api/books/:slug/audit/places/update", async (req, reply) => {
   };
   idx.updatedAt = now;
   await writeAuditPlacesIndex(dataDir, params.slug, idx);
+  return { ok: true, index: idx };
+});
+
+app.get("/api/books/:slug/audit/orgs", async (req) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const params = paramsSchema.parse((req as any).params);
+  const idx = await readAuditOrgsIndex(dataDir, params.slug);
+  return { index: idx };
+});
+
+app.post("/api/books/:slug/audit/orgs/hide", async (req) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({ name: z.string().min(1), hidden: z.boolean() });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+  const idx = await readAuditOrgsIndex(dataDir, params.slug);
+  const set = new Set((idx.hiddenNames || []).map((x: any) => String(x)));
+  const name = body.name.trim();
+  if (body.hidden) set.add(name);
+  else set.delete(name);
+  idx.hiddenNames = [...set];
+  idx.updatedAt = new Date().toISOString();
+  await writeAuditOrgsIndex(dataDir, params.slug, idx);
+  return { ok: true, index: idx };
+});
+
+app.post("/api/books/:slug/audit/orgs/update", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({
+    name: z.string().min(1),
+    description: z.string().optional(),
+    lastNote: z.string().optional()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+  const idx = await readAuditOrgsIndex(dataDir, params.slug);
+  const name = body.name.trim();
+  const i = (idx.orgs || []).findIndex((o: any) => String(o?.name || "").trim() === name);
+  if (i < 0) return reply.code(404).send({ message: "组织不存在" });
+  const now = new Date().toISOString();
+  const prev = idx.orgs[i] || {};
+  idx.orgs[i] = {
+    ...prev,
+    name,
+    description: body.description !== undefined ? body.description : prev.description,
+    lastNote: body.lastNote !== undefined ? body.lastNote : prev.lastNote,
+    updatedAt: now
+  };
+  idx.updatedAt = now;
+  await writeAuditOrgsIndex(dataDir, params.slug, idx);
   return { ok: true, index: idx };
 });
 

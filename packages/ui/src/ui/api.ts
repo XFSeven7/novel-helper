@@ -199,6 +199,24 @@ export async function updateAuditPlace(
   });
 }
 
+export async function getAuditOrgs(slug: string) {
+  return await http<{ index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/orgs`);
+}
+
+export async function hideAuditOrg(slug: string, input: { name: string; hidden: boolean }) {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/orgs/hide`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function updateAuditOrg(slug: string, input: { name: string; description?: string; lastNote?: string }) {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/orgs/update`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
 export type TimelineIndex = {
   version: 1;
   updatedAt: string;
