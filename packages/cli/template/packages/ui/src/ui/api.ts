@@ -177,6 +177,27 @@ export async function updateAuditCharacter(
   });
 }
 
+export async function getAuditPlaces(slug: string) {
+  return await http<{ index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/places`);
+}
+
+export async function hideAuditPlace(slug: string, input: { name: string; hidden: boolean }) {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/places/hide`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function updateAuditPlace(
+  slug: string,
+  input: { name: string; description?: string; lastNote?: string }
+) {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/places/update`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
 export type TimelineIndex = {
   version: 1;
   updatedAt: string;

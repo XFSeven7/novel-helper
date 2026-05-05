@@ -26,6 +26,9 @@ import {
   getAuditCharacters,
   hideAuditCharacter,
   updateAuditCharacter,
+  getAuditPlaces,
+  hideAuditPlace,
+  updateAuditPlace,
   getTimelineIndex,
   compressTimelineRange,
   markTimelineEvent,
@@ -805,6 +808,14 @@ export function App() {
   const [timelineCompressEnd, setTimelineCompressEnd] = useState("");
   const [timelineShowDoneEvents, setTimelineShowDoneEvents] = useState(false);
   const [auditCharactersIndex, setAuditCharactersIndex] = useState<any | null>(null);
+  const [auditPlacesIndex, setAuditPlacesIndex] = useState<any | null>(null);
+  const [hiddenPlacePanelOpen, setHiddenPlacePanelOpen] = useState(false);
+  const [editPlaceOpen, setEditPlaceOpen] = useState(false);
+  const [editPlaceName, setEditPlaceName] = useState("");
+  const [editPlaceDesc, setEditPlaceDesc] = useState("");
+  const [editPlaceLastNote, setEditPlaceLastNote] = useState("");
+  const [placeGroupCollapsed, setPlaceGroupCollapsed] = useState<Record<string, boolean>>({});
+  const [placeTextExpanded, setPlaceTextExpanded] = useState<Record<string, boolean>>({});
   const [hiddenCharPanelOpen, setHiddenCharPanelOpen] = useState(false);
   const [editCharOpen, setEditCharOpen] = useState(false);
   const [editCharName, setEditCharName] = useState("");
@@ -1149,16 +1160,44 @@ export function App() {
 
   async function loadAuditArtifacts(slug: string, chapterFilename: string) {
     try {
-      const [{ run }, { index: timelineIdx }, { index: charIdx }] = await Promise.all([
+      const [{ run }, { index: timelineIdx }, { index: charIdx }, { index: placesIdx }] = await Promise.all([
         getAuditLatest(slug, chapterFilename).catch(() => ({ run: null })),
         getTimelineIndex(slug).catch(() => ({ index: null as any })),
-        getAuditCharacters(slug).catch(() => ({ index: null as any }))
+        getAuditCharacters(slug).catch(() => ({ index: null as any })),
+        getAuditPlaces(slug).catch(() => ({ index: null as any }))
       ]);
       setAuditRun(run);
       setTimelineIndex(timelineIdx);
       setAuditCharactersIndex(charIdx);
+      setAuditPlacesIndex(placesIdx);
     } catch {
       setAuditRun(null);
+    }
+  }
+
+  function openEditPlace(p: any) {
+    const name = String(p?.name || "").trim();
+    if (!name) return;
+    setEditPlaceName(name);
+    setEditPlaceDesc(String(p?.description || "").trim());
+    setEditPlaceLastNote(String(p?.lastNote || "").trim());
+    setEditPlaceOpen(true);
+  }
+
+  async function submitEditPlace() {
+    if (!activeBook) return;
+    const name = editPlaceName.trim();
+    if (!name) return;
+    try {
+      const { index } = await updateAuditPlace(activeBook, {
+        name,
+        description: editPlaceDesc,
+        lastNote: editPlaceLastNote
+      });
+      setAuditPlacesIndex(index);
+      setEditPlaceOpen(false);
+    } catch (e: any) {
+      setStatus(e?.message || String(e));
     }
   }
 
@@ -2655,6 +2694,156 @@ export function App() {
                         )}
                       </div>
                     </>
+                  ) : rightTab === "places" ? (
+                    <div className="placePanel">
+                      {Array.isArray(auditPlacesIndex?.places) && (auditPlacesIndex.places as any[]).length ? (
+                        (() => {
+                          const all = (auditPlacesIndex.places as any[])
+                            .map((p) => ({ ...p, name: String(p?.name || "").trim() }))
+                            .filter((p) => p.name);
+                          const hiddenSet = new Set(
+                            Array.isArray(auditPlacesIndex?.hiddenNames)
+                              ? (auditPlacesIndex.hiddenNames as any[]).map((x) => String(x))
+                              : []
+                          );
+                          const visible = all.filter((p) => !hiddenSet.has(p.name));
+                          const inferGroup = (name: string) => {
+                            const n = String(name || "").trim();
+                            if (!n) return "未分组";
+                            const m = n.split(/[·•—\-\/\s]/).map((s) => s.trim()).filter(Boolean);
+                            return m[0] ? m[0] : "未分组";
+                          };
+                          const groups = new Map<string, any[]>();
+                          for (const p of visible) {
+                            const g = String((p as any).group || "").trim() || inferGroup(p.name);
+                            if (!groups.has(g)) groups.set(g, []);
+                            groups.get(g)!.push(p);
+                          }
+                          const groupNames = [...groups.keys()].sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+                          return (
+                            <>
+                              <div className="placeList">
+                                {groupNames.map((g) => {
+                                  const list = groups.get(g) || [];
+                                  const collapsed = !!placeGroupCollapsed[g];
+                                  return (
+                                    <div key={g} className="placeGroup">
+                                      <button
+                                        type="button"
+                                        className="placeGroupHead"
+                                        onClick={() => setPlaceGroupCollapsed((prev) => ({ ...prev, [g]: !prev[g] }))}
+                                        disabled={busy}
+                                      >
+                                        <span className="placeGroupTitle">{g}</span>
+                                        <span className="muted placeGroupCount">{list.length}</span>
+                                        <span className={`placeGroupChevron ${collapsed ? "" : "open"}`} aria-hidden>
+                                          ›
+                                        </span>
+                                      </button>
+                                      {!collapsed ? (
+                                        <div className="placeGroupBody">
+                                          {list.map((p) => {
+                                            const key = `${g}::${p.name}`;
+                                            const expanded = !!placeTextExpanded[key];
+                                            const noteText = String(p.lastNote || "").trim() || "—";
+                                            const noteNeedToggle = noteText.length >= 36;
+                                            return (
+                                              <div key={p.name} className="placeCard">
+                                                <div className="placeCardTop">
+                                                  <div className="placeName">{p.name}</div>
+                                                  <div className="row">
+                                                    <button
+                                                      type="button"
+                                                      className="btnSort"
+                                                      disabled={busy || !activeBook}
+                                                      onClick={() => openEditPlace(p)}
+                                                    >
+                                                      编辑
+                                                    </button>
+                                                    <button
+                                                      type="button"
+                                                      className="btnSort"
+                                                      disabled={busy || !activeBook}
+                                                      onClick={async () => {
+                                                        if (!activeBook) return;
+                                                        try {
+                                                          const { index } = await hideAuditPlace(activeBook, {
+                                                            name: p.name,
+                                                            hidden: true
+                                                          });
+                                                          setAuditPlacesIndex(index);
+                                                        } catch (e: any) {
+                                                          setStatus(e?.message || String(e));
+                                                        }
+                                                      }}
+                                                    >
+                                                      隐藏
+                                                    </button>
+                                                  </div>
+                                                </div>
+                                                <div className="placeBody">
+                                                  <div className="placeRow">
+                                                    <div className="placeLabel">简述</div>
+                                                    <div className="placeValue">
+                                                      {String(p.description || "").trim() || "—"}
+                                                    </div>
+                                                  </div>
+                                                  <div className="placeRow">
+                                                    <div className="placeLabel">本地发生</div>
+                                                    <div className="placeValue">
+                                                      <div className={expanded ? "placeNote" : "placeNote placeNoteClamp2"}>
+                                                        {noteText}
+                                                      </div>
+                                                      {noteNeedToggle ? (
+                                                        <button
+                                                          type="button"
+                                                          className="btnLinkMuted placeNoteToggle"
+                                                          onClick={() =>
+                                                            setPlaceTextExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
+                                                          }
+                                                          disabled={busy}
+                                                        >
+                                                          {expanded ? "收起" : "…展开"}
+                                                        </button>
+                                                      ) : null}
+                                                    </div>
+                                                  </div>
+                                                  <div className="placeMeta muted">
+                                                    {p.lastChapter ? `最近出现：第 ${p.lastChapter} 章` : ""}
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                              <div className="muted auditHiddenSummary">
+                                {(() => {
+                                  const hidden = all.filter((p) => hiddenSet.has(p.name));
+                                  if (!hidden.length) return null;
+                                  return (
+                                    <button
+                                      type="button"
+                                      className="btnLinkMuted"
+                                      disabled={busy || !activeBook}
+                                      onClick={() => setHiddenPlacePanelOpen(true)}
+                                    >
+                                      已隐藏 {hidden.length}/{all.length} 个地点，点击查看
+                                    </button>
+                                  );
+                                })()}
+                              </div>
+                            </>
+                          );
+                        })()
+                      ) : (
+                        <div className="muted auditPanelEmpty">暂无地点卡。完成一次分析后会自动收集地点。</div>
+                      )}
+                    </div>
                   ) : rightTab === "story" ? (
                     <div className="list">
                       {storyFiles.map((f) => (
@@ -3037,6 +3226,122 @@ export function App() {
                 onClick={() => setHiddenCharPanelOpen(false)}
               >
                 关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {hiddenPlacePanelOpen ? (
+        <div
+          className="modalBackdrop"
+          role="presentation"
+          onClick={() => {
+            if (!busy) setHiddenPlacePanelOpen(false);
+          }}
+        >
+          <div
+            className="modalPanel modalPanelOpaque modalPanelLarge"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-hidden-places-heading"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="modal-hidden-places-heading" className="modalHeading">
+              已隐藏地点
+            </h2>
+            <div className="modalChapterGapBody">
+              {(Array.isArray(auditPlacesIndex?.hiddenNames) ? (auditPlacesIndex.hiddenNames as any[]) : [])
+                .map((x) => String(x).trim())
+                .filter(Boolean)
+                .map((name) => (
+                  <div key={name} className="hiddenCharRow">
+                    <div className="hiddenCharName">{name}</div>
+                    <button
+                      type="button"
+                      className="btnModalSecondary"
+                      disabled={busy || !activeBook}
+                      onClick={async () => {
+                        if (!activeBook) return;
+                        try {
+                          const { index } = await hideAuditPlace(activeBook, { name, hidden: false });
+                          setAuditPlacesIndex(index);
+                        } catch (e: any) {
+                          setStatus(e?.message || String(e));
+                        }
+                      }}
+                    >
+                      取消隐藏
+                    </button>
+                  </div>
+                ))}
+            </div>
+            <div className="modalActions">
+              <button
+                type="button"
+                className="btnModalSecondary"
+                disabled={busy}
+                onClick={() => setHiddenPlacePanelOpen(false)}
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editPlaceOpen ? (
+        <div
+          className="modalBackdrop"
+          role="presentation"
+          onClick={() => {
+            if (!busy) setEditPlaceOpen(false);
+          }}
+        >
+          <div
+            className="modalPanel modalPanelOpaque modalPanelLarge"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-edit-place-heading"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="modal-edit-place-heading" className="modalHeading">
+              编辑地点：{editPlaceName}
+            </h2>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-place-desc">
+                地点描述
+              </label>
+              <textarea
+                id="modal-edit-place-desc"
+                className="modalTextarea"
+                value={editPlaceDesc}
+                onChange={(e) => setEditPlaceDesc(e.target.value)}
+                placeholder="如：青石村晒谷场，村民聚集处…"
+                disabled={busy}
+                rows={6}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-place-note">
+                发生的事（简述）
+              </label>
+              <textarea
+                id="modal-edit-place-note"
+                className="modalTextarea"
+                value={editPlaceLastNote}
+                onChange={(e) => setEditPlaceLastNote(e.target.value)}
+                placeholder="如：主角与反派第一次冲突…"
+                disabled={busy}
+                rows={6}
+              />
+            </div>
+            <div className="modalActions">
+              <button type="button" className="btnModalSecondary" disabled={busy} onClick={() => setEditPlaceOpen(false)}>
+                取消
+              </button>
+              <button type="button" className="btnModalPrimary" disabled={busy || !activeBook} onClick={() => void submitEditPlace()}>
+                保存
               </button>
             </div>
           </div>

@@ -1444,6 +1444,136 @@ code {
   gap: 14px;
 }
 
+.placePanel {
+  min-width: 0;
+}
+
+.placeList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.placeCard {
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--panel2) 82%, transparent);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.placeCardTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.placeName {
+  font-weight: 650;
+  font-size: 13px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.placeBody {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.placeRow {
+  display: flex;
+  gap: 10px;
+}
+
+.placeLabel {
+  width: 62px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--text) 72%, transparent);
+}
+
+.placeValue {
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.placeMeta {
+  font-size: 12px;
+}
+
+.placeGroup {
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  background: color-mix(in srgb, var(--panel2) 70%, transparent);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.placeGroupHead {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.placeGroupHead:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--panel) 42%, transparent);
+}
+
+.placeGroupTitle {
+  font-weight: 700;
+  font-size: 13px;
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.placeGroupCount {
+  flex: none;
+  font-size: 12px;
+}
+
+.placeGroupChevron {
+  flex: none;
+  font-size: 18px;
+  line-height: 1;
+  transform: rotate(90deg);
+  opacity: 0.7;
+}
+
+.placeGroupChevron.open {
+  transform: rotate(-90deg);
+}
+
+.placeGroupBody {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.placeNoteClamp2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-clamp: 2;
+}
+
+.placeNoteToggle {
+  margin-top: 4px;
+}
+
 .timelineTopRow {
   display: flex;
   align-items: center;

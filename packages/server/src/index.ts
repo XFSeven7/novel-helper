@@ -29,6 +29,8 @@ import {
   writeAuditLedger,
   readAuditCharactersIndex,
   writeAuditCharactersIndex,
+  readAuditPlacesIndex,
+  writeAuditPlacesIndex,
   readTimelineIndex,
   writeTimelineIndex,
   writeStoryTimelineMarkdownFromIndex,
@@ -591,6 +593,72 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
   idx.updatedAt = run.chapter.auditedAt;
   await writeAuditCharactersIndex(dataDir, slug, idx);
 
+  // 自动抽取地点：全书共享 placesIndex.json
+  const placesIdx = await readAuditPlacesIndex(dataDir, slug);
+  const placeExisting = new Map<string, any>(
+    (placesIdx.places || [])
+      .map((p: any) => ({
+        ...p,
+        name: String(p?.name || "").trim()
+      }))
+      .filter((p: any) => p.name)
+      .map((p: any) => [p.name, p])
+  );
+  const chapterNum = parseChapterNumberFromFilename(filename);
+  const occurrences: Array<{ name: string; note: string }> = [];
+  // 1) 从事件里找常见地点字段
+  for (const ev of run?.entities?.events || []) {
+    if (!ev || typeof ev !== "object") continue;
+    const cand =
+      (ev as any).place ??
+      (ev as any).location ??
+      (ev as any).where ??
+      (ev as any)["地点"] ??
+      (ev as any)["发生地点"];
+    const name = String(cand || "").trim();
+    if (!name) continue;
+    const note =
+      String((ev as any).summary || (ev as any).what || (ev as any).event || "").trim() ||
+      String(run.gistL1 || "").trim();
+    occurrences.push({ name, note });
+  }
+  // 2) 兜底：从本章出现的角色 state.location 里补
+  for (const c of run?.entities?.characters || []) {
+    const loc = String(c?.state?.location || "").trim();
+    if (!loc) continue;
+    const note = String(run.gistL1 || "").trim();
+    occurrences.push({ name: loc, note });
+  }
+  const uniq = new Map<string, string>();
+  for (const o of occurrences) {
+    if (!uniq.has(o.name)) uniq.set(o.name, o.note);
+  }
+  for (const [name, note] of uniq) {
+    const prev = placeExisting.get(name);
+    if (prev) {
+      prev.lastSeenAt = run.chapter.auditedAt;
+      prev.lastChapter = Number.isFinite(chapterNum) ? chapterNum : prev.lastChapter;
+      prev.lastNote = note || prev.lastNote || "";
+      prev.updatedAt = run.chapter.auditedAt;
+      placeExisting.set(name, prev);
+    } else {
+      placeExisting.set(name, {
+        name,
+        description: "",
+        lastNote: note || "",
+        firstSeenAt: run.chapter.auditedAt,
+        lastSeenAt: run.chapter.auditedAt,
+        firstChapter: Number.isFinite(chapterNum) ? chapterNum : 0,
+        lastChapter: Number.isFinite(chapterNum) ? chapterNum : 0,
+        updatedAt: run.chapter.auditedAt
+      });
+    }
+  }
+  placesIdx.places = [...placeExisting.values()].sort((a: any, b: any) => String(a.name).localeCompare(String(b.name), "zh-Hans-CN"));
+  if (!Array.isArray(placesIdx.hiddenNames)) placesIdx.hiddenNames = [];
+  placesIdx.updatedAt = run.chapter.auditedAt;
+  await writeAuditPlacesIndex(dataDir, slug, placesIdx);
+
   const ledger = await readAuditLedger(dataDir, slug);
   ledger.updatedAt = run.chapter.auditedAt;
   ledger.openLoops = ledger.openLoops || [];
@@ -1018,6 +1086,56 @@ app.post("/api/books/:slug/audit/characters/update", async (req, reply) => {
   };
   idx.updatedAt = now;
   await writeAuditCharactersIndex(dataDir, params.slug, idx);
+  return { ok: true, index: idx };
+});
+
+app.get("/api/books/:slug/audit/places", async (req) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const params = paramsSchema.parse((req as any).params);
+  const idx = await readAuditPlacesIndex(dataDir, params.slug);
+  return { index: idx };
+});
+
+app.post("/api/books/:slug/audit/places/hide", async (req) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({ name: z.string().min(1), hidden: z.boolean() });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+  const idx = await readAuditPlacesIndex(dataDir, params.slug);
+  const set = new Set((idx.hiddenNames || []).map((x: any) => String(x)));
+  const name = body.name.trim();
+  if (body.hidden) set.add(name);
+  else set.delete(name);
+  idx.hiddenNames = [...set];
+  idx.updatedAt = new Date().toISOString();
+  await writeAuditPlacesIndex(dataDir, params.slug, idx);
+  return { ok: true, index: idx };
+});
+
+app.post("/api/books/:slug/audit/places/update", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({
+    name: z.string().min(1),
+    description: z.string().optional(),
+    lastNote: z.string().optional()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+  const idx = await readAuditPlacesIndex(dataDir, params.slug);
+  const name = body.name.trim();
+  const i = (idx.places || []).findIndex((p: any) => String(p?.name || "").trim() === name);
+  if (i < 0) return reply.code(404).send({ message: "地点不存在" });
+  const now = new Date().toISOString();
+  const prev = idx.places[i] || {};
+  idx.places[i] = {
+    ...prev,
+    name,
+    description: body.description !== undefined ? body.description : prev.description,
+    lastNote: body.lastNote !== undefined ? body.lastNote : prev.lastNote,
+    updatedAt: now
+  };
+  idx.updatedAt = now;
+  await writeAuditPlacesIndex(dataDir, params.slug, idx);
   return { ok: true, index: idx };
 });
 
