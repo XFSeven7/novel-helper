@@ -17,6 +17,7 @@ import {
   updateChapter,
   updateStoryFile,
   patchBookSynopsis,
+  patchBookCompleted,
   deleteBook,
   restoreBook,
   putModelConfigs,
@@ -706,9 +707,7 @@ export function App() {
   const [modalNewSynopsis, setModalNewSynopsis] = useState("");
   const [deleteBookModalOpen, setDeleteBookModalOpen] = useState(false);
   const [deleteBookTarget, setDeleteBookTarget] = useState<BookMeta | null>(null);
-  const [shelfPeekSlug, setShelfPeekSlug] = useState<string | null>(null);
-  const [shelfPeekDraft, setShelfPeekDraft] = useState("");
-  const [shelfPeekSaving, setShelfPeekSaving] = useState(false);
+  // 书架不再“展开简介”，点击直接进入书籍概览
 
   const [chapterTitle, setChapterTitle] = useState("");
   const [createCharacterModalOpen, setCreateCharacterModalOpen] = useState(false);
@@ -967,15 +966,7 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (!shelfPeekSlug) {
-      setShelfPeekDraft("");
-      return;
-    }
-    const m = books.find((b) => b.slug === shelfPeekSlug);
-    setShelfPeekDraft(m?.synopsis ?? "");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shelfPeekSlug]);
+  // 书架不再展开简介
 
   useEffect(() => {
     if (!createBookModalOpen) return;
@@ -1382,7 +1373,6 @@ export function App() {
       await refreshBooks();
       setActiveBook(book.slug);
       setNavHome(false);
-      setShelfPeekSlug(null);
       setStatus(`已创建书籍：${book.title}`);
     } catch (e: any) {
       setStatus(e?.message || String(e));
@@ -1391,19 +1381,7 @@ export function App() {
     }
   }
 
-  async function saveShelfPeekSynopsis(slug: string) {
-    setShelfPeekSaving(true);
-    setStatus("");
-    try {
-      const { book } = await patchBookSynopsis(slug, shelfPeekDraft.trim());
-      setBooks((prev) => prev.map((b) => (b.slug === slug ? book : b)));
-      setStatus("简介已保存。");
-    } catch (e: any) {
-      setStatus(e?.message || String(e));
-    } finally {
-      setShelfPeekSaving(false);
-    }
-  }
+  // 书架不再保存简介（改为在书籍概览中编辑）
 
   function openDeleteBookModal(b: BookMeta) {
     setDeleteBookTarget(b);
@@ -1423,7 +1401,6 @@ export function App() {
     try {
       await deleteBook(b.slug);
       closeDeleteBookModal();
-      setShelfPeekSlug(null);
       await refreshBooks();
       if (activeBookRef.current === b.slug) {
         setNavHome(true);
@@ -2208,14 +2185,7 @@ export function App() {
                             gapCount ? `\n缺失序号 ${gapCount} 处（进入该书后在左侧书名下处理）` : ""
                           }`}
                         >
-                          <span
-                            className="bookShelfTitle bookShelfTitleToggle"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setShelfPeekSlug((prev) => (prev === b.slug ? null : b.slug));
-                            }}
-                            title="展开或收起简介"
-                          >
+                          <span className="bookShelfTitle">
                             《{b.title}》
                           </span>
                           {gapCount > 0 ? (
@@ -2225,43 +2195,6 @@ export function App() {
                             {formatBookCreatedAt(b.createdAt)} · {b.status} · {b.chapterCount}章
                           </span>
                         </div>
-                        {shelfPeekSlug === b.slug ? (
-                          <div className="bookShelfPeek">
-                            {b.synopsis?.trim() ? (
-                              <p className="bookShelfPeekText">{b.synopsis}</p>
-                            ) : (
-                              <div className="bookShelfPeekEdit">
-                                <textarea
-                                  className="bookShelfPeekInput"
-                                  value={shelfPeekDraft}
-                                  onChange={(e) => setShelfPeekDraft(e.target.value)}
-                                  placeholder="暂无简介，在此输入…"
-                                  disabled={shelfPeekSaving}
-                                  rows={3}
-                                  aria-label="书籍简介"
-                                />
-                                <button
-                                  type="button"
-                                  className="btnPeekSave"
-                                  disabled={shelfPeekSaving || busy}
-                                  onClick={() => void saveShelfPeekSynopsis(b.slug)}
-                                >
-                                  {shelfPeekSaving ? "保存中…" : "保存简介"}
-                                </button>
-                              </div>
-                            )}
-                            <div className="bookShelfDangerRow">
-                              <button
-                                type="button"
-                                className="btnDanger"
-                                disabled={busy}
-                                onClick={() => openDeleteBookModal(b)}
-                              >
-                                废弃书籍
-                              </button>
-                            </div>
-                          </div>
-                        ) : null}
                       </div>
                     );
                     })
@@ -2740,7 +2673,39 @@ export function App() {
             )
           ) : showBookOverview ? (
             <div className="bookOverview">
-              <div className="bookOverviewSynopsisLabel">简介</div>
+              <div className="bookOverviewTopRow">
+                <div className="bookOverviewSynopsisLabel">简介</div>
+                {activeBookMeta ? (
+                  <div className="row bookOverviewActions">
+                    <button
+                      type="button"
+                      className="btnSort btnSuccess"
+                      disabled={busy || !activeBook}
+                      onClick={async () => {
+                        if (!activeBook) return;
+                        try {
+                          const { book } = await patchBookCompleted(activeBook, !Boolean((activeBookMeta as any)?.completed));
+                          setBooks((prev) => prev.map((b) => (b.slug === activeBook ? book : b)));
+                          setStatus(book.completed ? "已标记为已完结。" : "已取消完结标记。");
+                        } catch (e: any) {
+                          setStatus(e?.message || String(e));
+                        }
+                      }}
+                    >
+                      {activeBookMeta.completed ? "取消完结" : "完结书籍"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btnSort btnDanger"
+                      disabled={busy || !activeBook}
+                      onClick={() => activeBookMeta && openDeleteBookModal(activeBookMeta)}
+                      title="软删除：书籍目录仍保留在本地"
+                    >
+                      废弃书籍
+                    </button>
+                  </div>
+                ) : null}
+              </div>
               <textarea
                 className="bookOverviewSynopsis"
                 value={synopsisDraft}
@@ -2748,6 +2713,7 @@ export function App() {
                 disabled={busy}
                 placeholder="写一句简介或内容简介…（保存到书籍 meta.json）"
                 aria-label="书籍简介"
+                rows={4}
               />
             </div>
           ) : mobileReading ? (

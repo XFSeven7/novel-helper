@@ -7,6 +7,9 @@ export type NovelMeta = {
   createdAt: string;
   /** 书籍简介（写入 meta.json；旧数据可无此字段） */
   synopsis?: string;
+  /** 已完结 */
+  completed?: boolean;
+  completedAt?: string;
   /** 软删除：标记该书已废弃（仍保留本地目录与文件） */
   abandoned?: boolean;
   abandonedAt?: string;
@@ -18,6 +21,8 @@ function normalizeNovelMeta(parsed: NovelMeta, slugFallback: string): NovelMeta 
     title: parsed.title ?? slugFallback,
     createdAt: parsed.createdAt ?? new Date(0).toISOString(),
     synopsis: typeof parsed.synopsis === "string" ? parsed.synopsis : "",
+    completed: Boolean((parsed as any).completed),
+    completedAt: typeof (parsed as any).completedAt === "string" ? (parsed as any).completedAt : "",
     abandoned: Boolean((parsed as any).abandoned),
     abandonedAt: typeof (parsed as any).abandonedAt === "string" ? (parsed as any).abandonedAt : ""
   };
@@ -26,7 +31,7 @@ function normalizeNovelMeta(parsed: NovelMeta, slugFallback: string): NovelMeta 
 /** 列表/接口返回：含章节数与状态（不写入 meta.json） */
 export type NovelSummary = NovelMeta & {
   chapterCount: number;
-  status: "进行中";
+  status: "进行中" | "已完结";
   /** 介于 1..最大序号之间、文件名符合「序号_标题.md」但未出现的序号（如删了第 4 章则为 [4]） */
   missingChapterIndexes: number[];
 };
@@ -36,7 +41,7 @@ export function novelSummaryFromMeta(
   chapterCount: number,
   missingChapterIndexes: number[] = []
 ): NovelSummary {
-  return { ...meta, chapterCount, status: "进行中", missingChapterIndexes };
+  return { ...meta, chapterCount, status: meta.completed ? "已完结" : "进行中", missingChapterIndexes };
 }
 
 async function countChapterMarkdownFiles(novelDir: string): Promise<number> {
@@ -660,6 +665,25 @@ export async function updateNovelSynopsis(dataDir: string, slug: string, synopsi
   const parsed = JSON.parse(raw) as NovelMeta;
   const meta = normalizeNovelMeta(parsed, slug);
   const next: NovelMeta = { ...meta, synopsis: synopsis.slice(0, MAX_SYNOPSIS_LEN) };
+  await fs.writeFile(metaPath, JSON.stringify(next, null, 2), "utf8");
+  const chapterCount = await countChapterMarkdownFiles(novelDir);
+  const missingChapterIndexes = await missingChapterIndexesFromDir(novelDir);
+  return novelSummaryFromMeta(next, chapterCount, missingChapterIndexes);
+}
+
+export async function updateNovelCompleted(dataDir: string, slug: string, completed: boolean): Promise<NovelSummary> {
+  const novelDir = path.join(dataDir, slug);
+  const metaPath = path.join(novelDir, "meta.json");
+  if (!(await exists(metaPath))) throw new Error("Not found");
+  const raw = await fs.readFile(metaPath, "utf8");
+  const parsed = JSON.parse(raw) as NovelMeta;
+  const meta = normalizeNovelMeta(parsed, slug);
+  const now = new Date().toISOString();
+  const next: NovelMeta = {
+    ...meta,
+    completed: Boolean(completed),
+    completedAt: completed ? (meta.completedAt || now) : ""
+  };
   await fs.writeFile(metaPath, JSON.stringify(next, null, 2), "utf8");
   const chapterCount = await countChapterMarkdownFiles(novelDir);
   const missingChapterIndexes = await missingChapterIndexesFromDir(novelDir);

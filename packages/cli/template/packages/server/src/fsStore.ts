@@ -6,6 +6,8 @@ export type BookMeta = {
   title: string;
   createdAt: string;
   synopsis?: string;
+  completed?: boolean;
+  completedAt?: string;
   abandoned?: boolean;
   abandonedAt?: string;
 };
@@ -16,6 +18,8 @@ function normalizeBookMeta(parsed: BookMeta, slugFallback: string): BookMeta {
     title: parsed.title ?? slugFallback,
     createdAt: parsed.createdAt ?? new Date(0).toISOString(),
     synopsis: typeof parsed.synopsis === "string" ? parsed.synopsis : "",
+    completed: Boolean((parsed as any).completed),
+    completedAt: typeof (parsed as any).completedAt === "string" ? (parsed as any).completedAt : "",
     abandoned: Boolean((parsed as any).abandoned),
     abandonedAt: typeof (parsed as any).abandonedAt === "string" ? (parsed as any).abandonedAt : ""
   };
@@ -24,7 +28,7 @@ function normalizeBookMeta(parsed: BookMeta, slugFallback: string): BookMeta {
 /** 列表/接口返回：含章节数与状态（不写入 meta.json） */
 export type BookSummary = BookMeta & {
   chapterCount: number;
-  status: "进行中";
+  status: "进行中" | "已完结";
   missingChapterIndexes: number[];
 };
 
@@ -33,7 +37,7 @@ export function bookSummaryFromMeta(
   chapterCount: number,
   missingChapterIndexes: number[] = []
 ): BookSummary {
-  return { ...meta, chapterCount, status: "进行中", missingChapterIndexes };
+  return { ...meta, chapterCount, status: meta.completed ? "已完结" : "进行中", missingChapterIndexes };
 }
 
 async function countChapterMarkdownFiles(bookDir: string): Promise<number> {
@@ -622,6 +626,25 @@ export async function updateBookSynopsis(dataDir: string, slug: string, synopsis
   const parsed = JSON.parse(raw) as BookMeta;
   const meta = normalizeBookMeta(parsed, slug);
   const next: BookMeta = { ...meta, synopsis: synopsis.slice(0, MAX_SYNOPSIS_LEN) };
+  await fs.writeFile(metaPath, JSON.stringify(next, null, 2), "utf8");
+  const chapterCount = await countChapterMarkdownFiles(bookDir);
+  const missingChapterIndexes = await missingChapterIndexesFromDir(bookDir);
+  return bookSummaryFromMeta(next, chapterCount, missingChapterIndexes);
+}
+
+export async function updateBookCompleted(dataDir: string, slug: string, completed: boolean): Promise<BookSummary> {
+  const bookDir = path.join(dataDir, slug);
+  const metaPath = path.join(bookDir, "meta.json");
+  if (!(await exists(metaPath))) throw new Error("Not found");
+  const raw = await fs.readFile(metaPath, "utf8");
+  const parsed = JSON.parse(raw) as BookMeta;
+  const meta = normalizeBookMeta(parsed, slug);
+  const now = new Date().toISOString();
+  const next: BookMeta = {
+    ...meta,
+    completed: Boolean(completed),
+    completedAt: completed ? (meta.completedAt || now) : ""
+  };
   await fs.writeFile(metaPath, JSON.stringify(next, null, 2), "utf8");
   const chapterCount = await countChapterMarkdownFiles(bookDir);
   const missingChapterIndexes = await missingChapterIndexesFromDir(bookDir);

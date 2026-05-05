@@ -21,6 +21,7 @@ import {
   updateStoryFile,
   createCharacterCard,
   updateBookSynopsis,
+  updateBookCompleted,
   deleteBook,
   restoreBook,
   writeAuditRun,
@@ -929,11 +930,21 @@ app.post("/api/books", async (req, reply) => {
 
 app.patch("/api/books/:slug", async (req, reply) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
-  const bodySchema = z.object({ synopsis: z.string().max(20000) });
+  const bodySchema = z.object({
+    synopsis: z.string().max(20000).optional(),
+    completed: z.boolean().optional()
+  });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
   try {
-    const book = await updateBookSynopsis(dataDir, params.slug, body.synopsis);
+    let book: any = null;
+    if (body.synopsis !== undefined) {
+      book = await updateBookSynopsis(dataDir, params.slug, body.synopsis);
+    }
+    if (body.completed !== undefined) {
+      book = await updateBookCompleted(dataDir, params.slug, body.completed);
+    }
+    if (!book) return reply.code(400).send({ message: "No-op" });
     return { book };
   } catch {
     return reply.code(404).send({ message: "Not found" });

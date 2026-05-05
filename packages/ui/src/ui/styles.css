@@ -521,12 +521,10 @@ code {
   border-bottom: none;
 }
 
-.bookShelfTitleToggle {
+.bookShelfTitle {
   cursor: pointer;
   color: color-mix(in srgb, var(--text) 92%, rgba(167, 139, 250, 0.95));
-  text-decoration: underline;
-  text-decoration-style: dotted;
-  text-underline-offset: 3px;
+  text-decoration: none;
 }
 
 .bookShelfGapCount {
@@ -563,41 +561,7 @@ code {
   cursor: not-allowed;
 }
 
-.bookShelfPeek {
-  padding: 0 10px 8px 10px;
-  background: rgba(0, 0, 0, 0.12);
-}
-
-.bookShelfPeekText {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.55;
-  color: color-mix(in srgb, var(--text) 88%, transparent);
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.bookShelfPeekEdit {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-top: 4px;
-}
-
-.bookShelfPeekInput {
-  width: 100%;
-  resize: vertical;
-  min-height: 56px;
-  padding: 8px 10px;
-  font-size: 12px;
-  line-height: 1.45;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  background: rgba(255, 255, 255, 0.06);
-  color: var(--text);
-  outline: none;
-  font-family: ui-serif, "PingFang SC", "Noto Serif SC", serif;
-}
+/* 书架不再展开简介：bookShelfPeek 相关样式已移除 */
 
 .btnPeekSave {
   align-self: flex-start;
@@ -741,6 +705,17 @@ code {
 .btnSort:disabled {
   opacity: 0.38;
   cursor: not-allowed;
+}
+
+.btnSuccess {
+  border-color: color-mix(in srgb, #22c55e 52%, var(--border));
+  background: color-mix(in srgb, #22c55e 18%, transparent);
+  color: color-mix(in srgb, #22c55e 92%, var(--text));
+}
+
+.btnSuccess:hover:not(:disabled) {
+  background: color-mix(in srgb, #22c55e 26%, transparent);
+  color: var(--text);
 }
 
 .navOverviewBar {
@@ -1020,7 +995,8 @@ code {
 
 .bookOverviewSynopsis {
   flex: 1;
-  min-height: 200px;
+  min-height: 120px;
+  max-height: 220px;
   width: 100%;
   resize: vertical;
   padding: 14px;
@@ -1032,6 +1008,22 @@ code {
   color: var(--text);
   background: rgba(255, 255, 255, 0.05);
   font-family: ui-serif, "PingFang SC", "Noto Serif SC", "Songti SC", "Source Han Serif SC", serif;
+}
+
+.bookOverviewTopRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.bookOverviewActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .chapterQuickRow {

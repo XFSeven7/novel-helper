@@ -3,10 +3,11 @@ export type BookMeta = {
   title: string;
   createdAt: string;
   chapterCount: number;
-  status: "进行中";
+  status: "进行中" | "已完结";
   /** 介于 1..最大序号之间的空缺（文件名符合「序号_标题.md」） */
   missingChapterIndexes: number[];
   synopsis?: string;
+  completed?: boolean;
 };
 
 export type ChapterMeta = {
@@ -61,6 +62,13 @@ export async function patchBookSynopsis(slug: string, synopsis: string) {
   return await http<{ book: BookMeta }>(`/api/books/${encodeURIComponent(slug)}`, {
     method: "PATCH",
     body: JSON.stringify({ synopsis })
+  });
+}
+
+export async function patchBookCompleted(slug: string, completed: boolean) {
+  return await http<{ book: BookMeta }>(`/api/books/${encodeURIComponent(slug)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ completed })
   });
 }
 
