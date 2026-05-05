@@ -771,6 +771,46 @@ async function performAuditWithAiSdk(input: {
   return run;
 }
 
+async function performPolishWithAiSdk(input: {
+  slug: string;
+  filename: string;
+  modelConfigId: string | null | undefined;
+  original: string;
+  onDelta?: (textDelta: string) => void;
+}) {
+  const { slug, filename, modelConfigId, onDelta, original } = input;
+  const settings = await readModelSettings();
+  const activeId = modelConfigId || settings.activeId;
+  const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+  if (!cfg) throw new Error("未配置模型");
+
+  const { model, providerOptions } = createAiSdkModel(cfg);
+  const prompt = [
+    "你是一位中文小说编辑。请对下面的章节正文进行润色：",
+    "- 不改变剧情事实与信息顺序（不加戏、不删关键事件）",
+    "- 保留人名/地名/专有名词一致",
+    "- 优化语病、重复、节奏与描写，增强可读性",
+    "- 输出只要润色后的正文，不要解释、不要加标题",
+    "",
+    "【原文】",
+    original || "",
+    ""
+  ].join("\n");
+
+  const r = await streamText({
+    model,
+    messages: [{ role: "user", content: prompt }],
+    providerOptions
+  });
+
+  for await (const delta of r.textStream) {
+    onDelta?.(delta);
+  }
+
+  const full = await r.text;
+  return { text: full };
+}
+
 async function performAudit(slug: string, filename: string, modelConfigId: string | null | undefined) {
   const settings = await readModelSettings();
   const activeId = modelConfigId || settings.activeId;
@@ -1060,6 +1100,46 @@ app.post("/api/books/:slug/chapters/:filename/audit/stream", async (req, reply) 
       }
     });
     sseWrite(reply.raw, { type: "done", run });
+  } catch (e: any) {
+    sseWrite(reply.raw, { type: "error", message: e?.message || String(e) });
+  } finally {
+    reply.raw.end();
+  }
+});
+
+app.post("/api/books/:slug/chapters/:filename/polish/stream", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1), filename: z.string().min(1) });
+  const bodySchema = z.object({
+    modelConfigId: z.string().nullable().optional(),
+    original: z.string().optional()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+
+  // @ts-ignore
+  reply.hijack();
+  reply.raw.writeHead(200, {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Methods": "POST, OPTIONS"
+  });
+  sseWrite(reply.raw, { type: "log", text: "连接已建立…\n" });
+
+  try {
+    sseWrite(reply.raw, { type: "log", text: "开始润色…\n" });
+    const { text } = await performPolishWithAiSdk({
+      slug: params.slug,
+      filename: params.filename,
+      modelConfigId: body.modelConfigId,
+      original: body.original || "",
+      onDelta: (d) => {
+        if (d) sseWrite(reply.raw, { type: "delta", textDelta: d });
+      }
+    });
+    sseWrite(reply.raw, { type: "done", text });
   } catch (e: any) {
     sseWrite(reply.raw, { type: "error", message: e?.message || String(e) });
   } finally {

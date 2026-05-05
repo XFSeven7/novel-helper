@@ -1635,6 +1635,109 @@ button:disabled {
   word-break: break-word;
 }
 
+.polishSplit {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.polishHead {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+}
+
+.polishTitle {
+  font-weight: 750;
+  font-size: 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  min-width: 0;
+}
+
+.polishCounts {
+  font-weight: 600;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.polishCols {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  padding: 10px 12px 12px;
+}
+
+.polishCol {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-radius: 12px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--panel2) 80%, transparent);
+}
+
+.polishColTitle {
+  flex-shrink: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  font-size: 12px;
+}
+
+.polishText {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 10px 12px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.85;
+}
+
+.polishTextarea {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--text);
+  padding: 10px 10px 12px;
+  line-height: 1.85;
+}
+
+.polishDiffPreview {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 10px 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.85;
+  color: color-mix(in srgb, var(--text) 92%, var(--muted));
+  background: transparent;
+}
+
+.polishDiffIns {
+  background: color-mix(in srgb, #22c55e 18%, transparent);
+  color: color-mix(in srgb, #22c55e 90%, var(--text));
+  border-radius: 6px;
+  padding: 0 2px;
+}
+
 .auditPara {
   margin-bottom: 14px;
 }

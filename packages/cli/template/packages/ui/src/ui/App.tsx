@@ -157,6 +157,62 @@ function splitParagraphs(raw: string): string[] {
     .filter(Boolean);
 }
 
+type DiffSeg = { t: "eq" | "ins" | "del"; s: string };
+
+function diffChars(aRaw: string, bRaw: string): DiffSeg[] {
+  const a = (aRaw || "").replace(/\r/g, "");
+  const b = (bRaw || "").replace(/\r/g, "");
+  if (!a && !b) return [];
+  if (!a) return [{ t: "ins", s: b }];
+  if (!b) return [{ t: "del", s: a }];
+  if (a === b) return [{ t: "eq", s: a }];
+
+  const A = Array.from(a);
+  const B = Array.from(b);
+  const n = A.length;
+  const m = B.length;
+  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+    }
+  }
+
+  const out: DiffSeg[] = [];
+  let i = 0;
+  let j = 0;
+  const push = (t: DiffSeg["t"], s: string) => {
+    if (!s) return;
+    const last = out[out.length - 1];
+    if (last && last.t === t) last.s += s;
+    else out.push({ t, s });
+  };
+  while (i < n && j < m) {
+    if (A[i] === B[j]) {
+      push("eq", A[i]);
+      i++;
+      j++;
+      continue;
+    }
+    if (dp[i + 1][j] >= dp[i][j + 1]) {
+      push("del", A[i]);
+      i++;
+    } else {
+      push("ins", B[j]);
+      j++;
+    }
+  }
+  while (i < n) {
+    push("del", A[i]);
+    i++;
+  }
+  while (j < m) {
+    push("ins", B[j]);
+    j++;
+  }
+  return out;
+}
+
 function toPrettyJsonLines(v: any): string[] {
   if (v === null || v === undefined) return [];
   if (typeof v === "string") {
@@ -671,6 +727,7 @@ export function App() {
 
   const [mobileReading, setMobileReading] = useState(false);
   const [auditReadModeOn, setAuditReadModeOn] = useState(false);
+  const [polishModeOn, setPolishModeOn] = useState(false);
   const [mobilePreset, setMobilePreset] = useState<MobilePresetId>("iphone-14");
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => loadThemePreference());
   const [fullscreenOn, setFullscreenOn] = useState(false);
@@ -1044,6 +1101,12 @@ export function App() {
     target: AuditLinkTarget;
     rect: { left: number; top: number; width: number; height: number };
   } | null>(null);
+
+  const [polishBusy, setPolishBusy] = useState(false);
+  type PolishPhase = "idle" | "running" | "done" | "error";
+  const [polishPhase, setPolishPhase] = useState<PolishPhase>("idle");
+  const [polishOriginal, setPolishOriginal] = useState("");
+  const [polishDraft, setPolishDraft] = useState("");
   /** SSE 收到的完整思考缓冲（服务端可能一次推一大块）；界面用 RAF 逐段追上 */
   const auditThinkingBufferRef = useRef("");
   const auditDisplayedLenRef = useRef(0);
@@ -1590,6 +1653,80 @@ export function App() {
       setStatus(e?.message || String(e));
     } finally {
       setAuditBusy(false);
+    }
+  }
+
+  async function onPolishSelectedChapter() {
+    if (!activeBook || !selectedChapter) return;
+    if (!okModelConfigs.length) {
+      setStatus("没有可用模型：请先在「模型配置」里测试连接，连接成功后再润色。");
+      return;
+    }
+    setPolishBusy(true);
+    setStatus("");
+    setPolishPhase("running");
+    const original = polishOriginal || chapterContent;
+    setPolishOriginal(original);
+    setPolishDraft("");
+    try {
+      await putModelConfigs({ configs: modelConfigs as any, activeId: activeModelId ?? null }).catch(() => {});
+      const res = await fetch(
+        `${(import.meta as any).env?.VITE_API_BASE || "http://127.0.0.1:3177"}/api/books/${encodeURIComponent(
+          activeBook
+        )}/chapters/${encodeURIComponent(selectedChapter.filename)}/polish/stream`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ modelConfigId: activeModelId ?? null, original })
+        }
+      );
+      if (!res.ok || !res.body) {
+        const t = await res.text().catch(() => "");
+        throw new Error(t || `HTTP ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buf = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf("\n\n")) >= 0) {
+          const chunk = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          const line = chunk
+            .split("\n")
+            .map((l) => l.trimEnd())
+            .find((l) => l.startsWith("data:"));
+          if (!line) continue;
+          const payloadText = line.replace(/^data:\s?/, "");
+          try {
+            const payload = JSON.parse(payloadText) as any;
+            if (payload.type === "delta") {
+              const d = String(payload.textDelta ?? "");
+              if (d) setPolishDraft((prev) => prev + d);
+            }
+            if (payload.type === "done") {
+              const t = String(payload.text ?? "");
+              if (t.trim()) setPolishDraft(t);
+              setPolishPhase("done");
+            }
+            if (payload.type === "error") {
+              throw new Error(String(payload.message || "润色失败"));
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+      setPolishPhase((p) => (p === "done" ? "done" : "done"));
+    } catch (e: any) {
+      setPolishPhase("error");
+      setStatus(e?.message || String(e));
+    } finally {
+      setPolishBusy(false);
     }
   }
 
@@ -2303,10 +2440,33 @@ export function App() {
                     type="checkbox"
                     checked={mobileReading}
                     onChange={(e) => setMobileReading(e.target.checked)}
-                    disabled={busy}
+                    disabled={busy || polishModeOn}
                   />
                   移动端阅读
                 </label>
+                <button
+                  type="button"
+                  className={`btnAuditRead ${polishModeOn ? "active" : ""}`}
+                  disabled={busy || polishBusy}
+                  onClick={() => {
+                    if (busy) return;
+                    setMobileReading(false);
+                    setAuditReadModeOn(false);
+                    setPolishModeOn((v) => {
+                      const next = !v;
+                      if (next) {
+                        setPolishOriginal(chapterContent);
+                        setPolishDraft("");
+                        setPolishPhase("idle");
+                        void onPolishSelectedChapter();
+                      }
+                      return next;
+                    });
+                  }}
+                  title={polishModeOn ? "退出润色对照" : "用 AI 润色本章并提供对照"}
+                >
+                  {polishBusy ? "润色中…" : polishModeOn ? "退出润色" : "润色"}
+                </button>
                 <button
                   type="button"
                   className={`btnAuditRead ${auditReadModeOn ? "active" : ""}`}
@@ -2316,11 +2476,20 @@ export function App() {
                 >
                   {auditReadModeOn ? "退出审计" : "审计"}
                 </button>
+                <button
+                  type="button"
+                  className={`btnAuditRead ${auditStreamOpen ? "active" : ""}`}
+                  disabled={busy}
+                  onClick={() => setAuditStreamOpen((v) => !v)}
+                  title={auditStreamOpen ? "收起右侧分析面板" : "打开分析面板（可在面板内开始本章分析）"}
+                >
+                  {auditBusy ? "分析中…" : auditStreamOpen ? "收起面板" : "分析面板"}
+                </button>
                 <select
                   className="select"
                   value={mobilePreset}
                   onChange={(e) => setMobilePreset(e.target.value as MobilePresetId)}
-                  disabled={busy || !mobileReading}
+                  disabled={busy || !mobileReading || polishModeOn}
                   title="常见机型尺寸预设"
                 >
                   {MOBILE_PRESETS.map((p) => (
@@ -2330,21 +2499,6 @@ export function App() {
                   ))}
                 </select>
               </div>
-            ) : null}
-            {selectedChapter ? (
-              <button
-                type="button"
-                className={`btnAuditChapter ${auditStreamOpen ? "active" : ""}`}
-                disabled={busy}
-                onClick={() => setAuditStreamOpen((v) => !v)}
-                title={
-                  auditStreamOpen
-                    ? "收起右侧分析面板"
-                    : "打开分析面板（可在面板内开始本章分析）"
-                }
-              >
-                {auditBusy ? "分析中…" : auditStreamOpen ? "收起面板" : "分析面板"}
-              </button>
             ) : null}
           </div>
           {!activeBook ? (
@@ -2506,7 +2660,65 @@ export function App() {
                 className="mobilePhone"
                 style={{ width: `${mobileViewport.w}px`, height: `${mobileViewport.h}px` }}
               >
-                {auditReadModeOn ? (
+                {polishModeOn ? (
+                  <div className="polishSplit">
+                    <div className="polishHead">
+                      <div className="polishTitle">
+                        润色对照
+                        <span className="polishCounts muted">
+                          原文 {approximateWordCount(polishOriginal || chapterContent)} 字 · 润色后{" "}
+                          {approximateWordCount(polishDraft)} 字
+                        </span>
+                      </div>
+                      <div className="row">
+                        <button
+                          type="button"
+                          className="btnSort"
+                          disabled={busy || polishBusy || !okModelConfigs.length}
+                          onClick={() => void onPolishSelectedChapter()}
+                          title={!okModelConfigs.length ? "请先在「模型配置」里测试连接" : "重新润色（覆盖右侧润色稿）"}
+                        >
+                          重新润色
+                        </button>
+                        <button
+                          type="button"
+                          className="btnSort"
+                          disabled={busy || polishBusy || !polishDraft.trim()}
+                          onClick={() => {
+                            setChapterContent(polishDraft);
+                            setPolishModeOn(false);
+                            setPolishPhase("idle");
+                            setPolishOriginal("");
+                            setPolishDraft("");
+                          }}
+                          title="用右侧润色稿替换正文"
+                        >
+                          一键更换
+                        </button>
+                      </div>
+                    </div>
+                    <div className="polishCols">
+                      <div className="polishCol">
+                        <div className="polishColTitle muted">原文</div>
+                        <div className="polishText">{polishOriginal || chapterContent}</div>
+                      </div>
+                      <div className="polishCol">
+                        <div className="polishColTitle muted">润色后</div>
+                        <div className="polishDiffPreview" aria-label="润色改动标记预览">
+                          {diffChars(polishOriginal || chapterContent, polishDraft).map((seg, idx) =>
+                            seg.t === "ins" ? (
+                              <span key={idx} className="polishDiffIns">
+                                {seg.s}
+                              </span>
+                            ) : seg.t === "eq" ? (
+                              <span key={idx}>{seg.s}</span>
+                            ) : null
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : auditReadModeOn ? (
                   <div className="auditReader">
                     {(() => {
                       const paras = splitParagraphs(chapterContent);
@@ -2630,7 +2842,65 @@ export function App() {
           ) : (
             <div className={`chapterSplit ${auditStreamOpen ? "open" : ""}`}>
               <div className="chapterSplitLeft">
-                {auditReadModeOn ? (
+                {polishModeOn ? (
+                  <div className="polishSplit">
+                    <div className="polishHead">
+                      <div className="polishTitle">
+                        润色对照
+                        <span className="polishCounts muted">
+                          原文 {approximateWordCount(polishOriginal || chapterContent)} 字 · 润色后{" "}
+                          {approximateWordCount(polishDraft)} 字
+                        </span>
+                      </div>
+                      <div className="row">
+                        <button
+                          type="button"
+                          className="btnSort"
+                          disabled={busy || polishBusy || !okModelConfigs.length}
+                          onClick={() => void onPolishSelectedChapter()}
+                          title={!okModelConfigs.length ? "请先在「模型配置」里测试连接" : "重新润色（覆盖右侧润色稿）"}
+                        >
+                          重新润色
+                        </button>
+                        <button
+                          type="button"
+                          className="btnSort"
+                          disabled={busy || polishBusy || !polishDraft.trim()}
+                          onClick={() => {
+                            setChapterContent(polishDraft);
+                            setPolishModeOn(false);
+                            setPolishPhase("idle");
+                            setPolishOriginal("");
+                            setPolishDraft("");
+                          }}
+                          title="用右侧润色稿替换正文"
+                        >
+                          一键更换
+                        </button>
+                      </div>
+                    </div>
+                    <div className="polishCols">
+                      <div className="polishCol">
+                        <div className="polishColTitle muted">原文</div>
+                        <div className="polishText">{polishOriginal || chapterContent}</div>
+                      </div>
+                      <div className="polishCol">
+                        <div className="polishColTitle muted">润色后</div>
+                        <div className="polishDiffPreview" aria-label="润色改动标记预览">
+                          {diffChars(polishOriginal || chapterContent, polishDraft).map((seg, idx) =>
+                            seg.t === "ins" ? (
+                              <span key={idx} className="polishDiffIns">
+                                {seg.s}
+                              </span>
+                            ) : seg.t === "eq" ? (
+                              <span key={idx}>{seg.s}</span>
+                            ) : null
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : auditReadModeOn ? (
                   <div className="auditReader">
                     {(() => {
                       const paras = splitParagraphs(chapterContent);
