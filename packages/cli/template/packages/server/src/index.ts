@@ -932,6 +932,56 @@ app.get("/api/books/:slug/audit/characters", async (req) => {
   return { index: idx };
 });
 
+app.post("/api/books/:slug/audit/characters/hide", async (req) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({ name: z.string().min(1), hidden: z.boolean() });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+
+  const idx = await readAuditCharactersIndex(dataDir, params.slug);
+  const set = new Set((idx.hiddenNames || []).map((x: any) => String(x)));
+  const name = body.name.trim();
+  if (body.hidden) set.add(name);
+  else set.delete(name);
+  idx.hiddenNames = [...set];
+  idx.updatedAt = new Date().toISOString();
+  await writeAuditCharactersIndex(dataDir, params.slug, idx);
+  return { ok: true, index: idx };
+});
+
+app.post("/api/books/:slug/audit/characters/update", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({
+    name: z.string().min(1),
+    role: z.string().optional(),
+    tags: z.array(z.string()).optional(),
+    state: z.any().optional(),
+    personalityAnalysis: z.string().optional()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+
+  const idx = await readAuditCharactersIndex(dataDir, params.slug);
+  const name = body.name.trim();
+  const i = (idx.characters || []).findIndex((c: any) => String(c?.name || "").trim() === name);
+  if (i < 0) return reply.code(404).send({ message: "角色不存在" });
+  const now = new Date().toISOString();
+  const prev = idx.characters[i] || {};
+  idx.characters[i] = {
+    ...prev,
+    name,
+    role: body.role !== undefined ? body.role : prev.role,
+    tags: body.tags !== undefined ? body.tags : prev.tags,
+    state: body.state !== undefined ? body.state : prev.state,
+    personalityAnalysis:
+      body.personalityAnalysis !== undefined ? body.personalityAnalysis : prev.personalityAnalysis,
+    updatedAt: now
+  };
+  idx.updatedAt = now;
+  await writeAuditCharactersIndex(dataDir, params.slug, idx);
+  return { ok: true, index: idx };
+});
+
 app.get("/api/books/:slug/timeline/index", async (req) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);

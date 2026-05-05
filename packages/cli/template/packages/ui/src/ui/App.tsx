@@ -24,6 +24,8 @@ import {
   getAuditLatest,
   getAuditLedger,
   getAuditCharacters,
+  hideAuditCharacter,
+  updateAuditCharacter,
   getTimelineIndex,
   compressTimelineRange,
   markTimelineEvent,
@@ -802,6 +804,14 @@ export function App() {
   const [timelineCompressStart, setTimelineCompressStart] = useState("");
   const [timelineCompressEnd, setTimelineCompressEnd] = useState("");
   const [timelineShowDoneEvents, setTimelineShowDoneEvents] = useState(false);
+  const [auditCharactersIndex, setAuditCharactersIndex] = useState<any | null>(null);
+  const [hiddenCharPanelOpen, setHiddenCharPanelOpen] = useState(false);
+  const [editCharOpen, setEditCharOpen] = useState(false);
+  const [editCharName, setEditCharName] = useState("");
+  const [editCharRole, setEditCharRole] = useState("");
+  const [editCharTags, setEditCharTags] = useState("");
+  const [editCharStateJson, setEditCharStateJson] = useState("");
+  const [editCharPersonality, setEditCharPersonality] = useState("");
   const [auditBusy, setAuditBusy] = useState(false);
   const okModelConfigs = useMemo(() => modelConfigs.filter((c) => c.lastTestOk), [modelConfigs]);
   const [auditStreamOpen, setAuditStreamOpen] = useState(false);
@@ -1139,14 +1149,66 @@ export function App() {
 
   async function loadAuditArtifacts(slug: string, chapterFilename: string) {
     try {
-      const [{ run }, { index: timelineIdx }] = await Promise.all([
+      const [{ run }, { index: timelineIdx }, { index: charIdx }] = await Promise.all([
         getAuditLatest(slug, chapterFilename).catch(() => ({ run: null })),
-        getTimelineIndex(slug).catch(() => ({ index: null as any }))
+        getTimelineIndex(slug).catch(() => ({ index: null as any })),
+        getAuditCharacters(slug).catch(() => ({ index: null as any }))
       ]);
       setAuditRun(run);
       setTimelineIndex(timelineIdx);
+      setAuditCharactersIndex(charIdx);
     } catch {
       setAuditRun(null);
+    }
+  }
+
+  function openEditCharacter(c: any) {
+    const name = String(c?.name || "").trim();
+    if (!name) return;
+    setEditCharName(name);
+    setEditCharRole(typeof c?.role === "string" ? c.role : "");
+    setEditCharTags(Array.isArray(c?.tags) ? (c.tags as any[]).map((x) => String(x)).filter(Boolean).join(", ") : "");
+    const st = c?.state && typeof c.state === "object" ? c.state : {};
+    try {
+      setEditCharStateJson(JSON.stringify(st, null, 2));
+    } catch {
+      setEditCharStateJson(String(st || ""));
+    }
+    setEditCharPersonality(String(c?.personalityAnalysis || "").trim());
+    setEditCharOpen(true);
+  }
+
+  async function submitEditCharacter() {
+    if (!activeBook) return;
+    const name = editCharName.trim();
+    if (!name) return;
+    let state: any = undefined;
+    const stText = editCharStateJson.trim();
+    if (stText) {
+      try {
+        state = JSON.parse(stText);
+      } catch (e: any) {
+        setStatus(`state 不是合法 JSON：${e?.message || String(e)}`);
+        return;
+      }
+    }
+    const tags = editCharTags
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 30);
+    try {
+      const { index } = await updateAuditCharacter(activeBook, {
+        name,
+        role: editCharRole.trim(),
+        tags,
+        state,
+        personalityAnalysis: editCharPersonality.trim()
+      });
+      setAuditCharactersIndex(index);
+      setEditCharOpen(false);
+    } catch (e: any) {
+      setStatus(e?.message || String(e));
     }
   }
 
@@ -2423,140 +2485,173 @@ export function App() {
                   ) : rightTab === "auditCharacters" ? (
                     <>
                       <div className="auditCharList">
-                        {Array.isArray(auditRun?.entities?.characters) &&
-                        (auditRun.entities.characters as any[]).length ? (
-                          (auditRun.entities.characters as any[]).map((c: any, idx: number) => {
-                            const name = String(c?.name ?? "").trim() || "未命名";
-                            const id = `${idx}-${name}`;
-                            const open = !!expandedAuditCharIds[id];
-                            const roleStr =
-                              typeof c?.role === "string" && c.role.trim() ? c.role.trim() : "";
-                            const neo = String(c?.newOrExisting ?? "").trim() || "unknown";
-                            const neoNorm = neo.toLowerCase();
-                            const neoLabel =
-                              neoNorm === "new"
-                                ? "本章新增"
-                                : neoNorm === "existing"
-                                  ? "已有设定"
-                                  : neoNorm === "unknown"
-                                    ? "待确认"
-                                    : neo;
-                            const st = c?.state && typeof c.state === "object" ? c.state : {};
-                            const loc = String((st as any).location ?? "").trim();
-                            const inj = String((st as any).injuries ?? "").trim();
-                            const items = Array.isArray((st as any).items)
-                              ? ((st as any).items as unknown[]).map((x) => String(x)).filter(Boolean)
-                              : [];
-                            const money = (st as any).moneyChange;
-                            const quotes = Array.isArray(c?.evidenceQuotes)
-                              ? (c.evidenceQuotes as unknown[]).map((x) => String(x)).filter(Boolean)
-                              : [];
-                            const tagArr = Array.isArray(c?.tags)
-                              ? (c.tags as unknown[]).map((x) => String(x)).filter(Boolean)
-                              : [];
+                        {Array.isArray(auditCharactersIndex?.characters) &&
+                        (auditCharactersIndex.characters as any[]).length ? (
+                          (() => {
+                            const all = (auditCharactersIndex.characters as any[])
+                              .map((c) => ({ ...c, name: String(c?.name || "").trim() }))
+                              .filter((c) => c.name);
+                            const hiddenSet = new Set(
+                              Array.isArray(auditCharactersIndex?.hiddenNames)
+                                ? (auditCharactersIndex.hiddenNames as any[]).map((x) => String(x))
+                                : []
+                            );
+                            const visible = all.filter((c) => !hiddenSet.has(c.name));
 
                             return (
-                              <div key={id} className="auditCharCard">
-                                <button
-                                  type="button"
-                                  className="auditCharCardHead"
-                                  aria-expanded={open}
-                                  onClick={() =>
-                                    setExpandedAuditCharIds((prev) => ({ ...prev, [id]: !prev[id] }))
-                                  }
-                                  disabled={busy}
-                                >
-                                  <span className="auditCharIcon" aria-hidden>
-                                    ◎
-                                  </span>
-                                  <span className="auditCharName">{name}</span>
-                                  <span className="auditCharBadges">
-                                    <span className={auditCharacterNewBadgeClass(neoNorm)}>{neoLabel}</span>
-                                    {roleStr ? (
-                                      <span className={auditCharacterRoleClass(roleStr)}>{roleStr}</span>
-                                    ) : null}
-                                  </span>
-                                  <span className={`auditCharChevron ${open ? "open" : ""}`} aria-hidden>
-                                    ›
-                                  </span>
-                                </button>
-                                {open ? (
-                                  <div className="auditCharCardBody">
-                                    <div className="auditCharDetailRow">
-                                      <div className="auditCharDetailLabel">判定</div>
-                                      <div className="auditCharDetailValue">
-                                        {neoLabel}
-                                        {neo &&
-                                        !["new", "existing", "unknown"].includes(neoNorm)
-                                          ? `（原始字段：${neo}）`
-                                          : ""}
+                              <>
+                                {visible.map((c) => {
+                                  const name = String(c?.name || "").trim() || "未命名";
+                                  const id = name;
+                                  const open = !!expandedAuditCharIds[id];
+                                  const roleStr =
+                                    typeof c?.role === "string" && c.role.trim() ? c.role.trim() : "";
+                                  const st = c?.state && typeof c.state === "object" ? c.state : {};
+                                  const loc = String((st as any).location ?? "").trim();
+                                  const inj = String((st as any).injuries ?? "").trim();
+                                  const items = Array.isArray((st as any).items)
+                                    ? ((st as any).items as unknown[]).map((x) => String(x)).filter(Boolean)
+                                    : [];
+                                  const money = (st as any).moneyChange;
+                                  const tagArr = Array.isArray(c?.tags)
+                                    ? (c.tags as unknown[]).map((x) => String(x)).filter(Boolean)
+                                    : [];
+                                  const personality = String((c as any)?.personalityAnalysis ?? "").trim();
+
+                                  return (
+                                    <div key={id} className="auditCharCard">
+                                      <div className="auditCharCardHeadRow">
+                                        <button
+                                          type="button"
+                                          className="auditCharCardHead"
+                                          aria-expanded={open}
+                                          onClick={() =>
+                                            setExpandedAuditCharIds((prev) => ({ ...prev, [id]: !prev[id] }))
+                                          }
+                                          onDoubleClick={() => openEditCharacter(c)}
+                                          disabled={busy}
+                                          title="双击可编辑角色属性"
+                                        >
+                                          <span className="auditCharIcon" aria-hidden>
+                                            ◎
+                                          </span>
+                                          <span className="auditCharName">{name}</span>
+                                          <span className="auditCharBadges">
+                                            {roleStr ? (
+                                              <span className={auditCharacterRoleClass(roleStr)}>{roleStr}</span>
+                                            ) : null}
+                                          </span>
+                                          <span className={`auditCharChevron ${open ? "open" : ""}`} aria-hidden>
+                                            ›
+                                          </span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="btnSort btnCharEdit"
+                                          disabled={busy || !activeBook}
+                                          onClick={() => openEditCharacter(c)}
+                                          title="编辑角色属性"
+                                        >
+                                          编辑
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className="btnSort btnCharHide"
+                                          disabled={busy || !activeBook}
+                                          onClick={async () => {
+                                            if (!activeBook) return;
+                                            try {
+                                              const { index } = await hideAuditCharacter(activeBook, {
+                                                name,
+                                                hidden: true
+                                              });
+                                              setAuditCharactersIndex(index);
+                                            } catch (e: any) {
+                                              setStatus(e?.message || String(e));
+                                            }
+                                          }}
+                                          title="隐藏该角色（全书范围）"
+                                        >
+                                          隐藏
+                                        </button>
                                       </div>
-                                    </div>
-                                    <div className="auditCharDetailRow">
-                                      <div className="auditCharDetailLabel">身份</div>
-                                      <div className="auditCharDetailValue">{roleStr || "—"}</div>
-                                    </div>
-                                    <div className="auditCharDetailRow">
-                                      <div className="auditCharDetailLabel">标签</div>
-                                      <div className="auditCharDetailValue">
-                                        {tagArr.length ? tagArr.join("、") : "—"}
-                                      </div>
-                                    </div>
-                                    <div className="auditCharDetailRow">
-                                      <div className="auditCharDetailLabel">地点</div>
-                                      <div className="auditCharDetailValue">{loc || "—"}</div>
-                                    </div>
-                                    <div className="auditCharDetailRow">
-                                      <div className="auditCharDetailLabel">伤势与状态</div>
-                                      <div className="auditCharDetailValue">{inj || "—"}</div>
-                                    </div>
-                                    <div className="auditCharDetailRow">
-                                      <div className="auditCharDetailLabel">随身物品</div>
-                                      <div className="auditCharDetailValue">
-                                        {items.length ? items.join("、") : "—"}
-                                      </div>
-                                    </div>
-                                    <div className="auditCharDetailRow">
-                                      <div className="auditCharDetailLabel">金钱变动</div>
-                                      <div className="auditCharDetailValue">
-                                        {money !== undefined && money !== null && money !== ""
-                                          ? String(money)
-                                          : "—"}
-                                      </div>
-                                    </div>
-                                    {auditCharStateExtraRows(st as Record<string, unknown>).map(([lk, lv], ri) => (
-                                      <div key={`st-${lk}-${ri}`} className="auditCharDetailRow">
-                                        <div className="auditCharDetailLabel">{lk}</div>
-                                        <div className="auditCharDetailValue">{lv}</div>
-                                      </div>
-                                    ))}
-                                    {auditCharTopExtraRows(c as Record<string, unknown>).map(([lk, lv], ri) => (
-                                      <div key={`ex-${lk}-${ri}`} className="auditCharDetailRow">
-                                        <div className="auditCharDetailLabel">{lk}</div>
-                                        <div className="auditCharDetailValue">{lv}</div>
-                                      </div>
-                                    ))}
-                                    <div className="auditCharQuotes">
-                                      <div className="auditCharDetailLabel">原文摘录</div>
-                                      {quotes.length ? (
-                                        <ul className="auditCharQuoteList">
-                                          {quotes.map((q, qi) => (
-                                            <li key={qi}>{q}</li>
+                                      {open ? (
+                                        <div className="auditCharCardBody">
+                                          <div className="auditCharDetailRow">
+                                            <div className="auditCharDetailLabel">身份</div>
+                                            <div className="auditCharDetailValue">{roleStr || "—"}</div>
+                                          </div>
+                                          <div className="auditCharDetailRow">
+                                            <div className="auditCharDetailLabel">标签</div>
+                                            <div className="auditCharDetailValue">
+                                              {tagArr.length ? tagArr.join("、") : "—"}
+                                            </div>
+                                          </div>
+                                          <div className="auditCharDetailRow">
+                                            <div className="auditCharDetailLabel">地点</div>
+                                            <div className="auditCharDetailValue">{loc || "—"}</div>
+                                          </div>
+                                          <div className="auditCharDetailRow">
+                                            <div className="auditCharDetailLabel">伤势与状态</div>
+                                            <div className="auditCharDetailValue">{inj || "—"}</div>
+                                          </div>
+                                          <div className="auditCharDetailRow">
+                                            <div className="auditCharDetailLabel">随身物品</div>
+                                            <div className="auditCharDetailValue">
+                                              {items.length ? items.join("、") : "—"}
+                                            </div>
+                                          </div>
+                                          <div className="auditCharDetailRow">
+                                            <div className="auditCharDetailLabel">金钱变动</div>
+                                            <div className="auditCharDetailValue">
+                                              {money !== undefined && money !== null && money !== ""
+                                                ? String(money)
+                                                : "—"}
+                                            </div>
+                                          </div>
+                                          {auditCharStateExtraRows(st as Record<string, unknown>).map(([lk, lv], ri) => (
+                                            <div key={`st-${lk}-${ri}`} className="auditCharDetailRow">
+                                              <div className="auditCharDetailLabel">{lk}</div>
+                                              <div className="auditCharDetailValue">{lv}</div>
+                                            </div>
                                           ))}
-                                        </ul>
-                                      ) : (
-                                        <div className="auditCharDetailEmpty">—</div>
-                                      )}
+                                          {auditCharTopExtraRows(c as Record<string, unknown>).map(([lk, lv], ri) => (
+                                            <div key={`ex-${lk}-${ri}`} className="auditCharDetailRow">
+                                              <div className="auditCharDetailLabel">{lk}</div>
+                                              <div className="auditCharDetailValue">{lv}</div>
+                                            </div>
+                                          ))}
+                                          <div className="auditCharQuotes">
+                                            <div className="auditCharDetailLabel">性格分析</div>
+                                            <div className="auditCharDetailValue">{personality ? personality : "—"}</div>
+                                          </div>
+                                        </div>
+                                      ) : null}
                                     </div>
-                                  </div>
-                                ) : null}
-                              </div>
+                                  );
+                                })}
+
+                                <div className="muted auditHiddenSummary">
+                                  {(() => {
+                                    const hidden = all.filter((c) => hiddenSet.has(c.name));
+                                    if (!hidden.length) return null;
+                                    return (
+                                      <button
+                                        type="button"
+                                        className="btnLinkMuted"
+                                        disabled={busy || !activeBook}
+                                        onClick={() => setHiddenCharPanelOpen(true)}
+                                      >
+                                        已隐藏 {hidden.length}/{all.length} 个角色，点击查看
+                                      </button>
+                                    );
+                                  })()}
+                                </div>
+                              </>
                             );
-                          })
+                          })()
                         ) : (
-                          <div className="muted auditPanelEmpty">
-                            暂无本章角色梳理。选中章节并点击「分析」后，模型抽取的角色会显示在这里。
-                          </div>
+                          <div className="muted auditPanelEmpty">暂无角色库。完成一次分析后会自动沉淀到这里。</div>
                         )}
                       </div>
                     </>
@@ -2884,6 +2979,146 @@ export function App() {
                 onClick={() => void submitCreateBookModal()}
               >
                 创建
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {hiddenCharPanelOpen ? (
+        <div
+          className="modalBackdrop"
+          role="presentation"
+          onClick={() => {
+            if (!busy) setHiddenCharPanelOpen(false);
+          }}
+        >
+          <div
+            className="modalPanel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-hidden-chars-heading"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="modal-hidden-chars-heading" className="modalHeading">
+              已隐藏角色
+            </h2>
+            <div className="modalChapterGapBody">
+              {(Array.isArray(auditCharactersIndex?.hiddenNames) ? (auditCharactersIndex.hiddenNames as any[]) : [])
+                .map((x) => String(x).trim())
+                .filter(Boolean)
+                .map((name) => (
+                  <div key={name} className="hiddenCharRow">
+                    <div className="hiddenCharName">{name}</div>
+                    <button
+                      type="button"
+                      className="btnModalSecondary"
+                      disabled={busy || !activeBook}
+                      onClick={async () => {
+                        if (!activeBook) return;
+                        try {
+                          const { index } = await hideAuditCharacter(activeBook, { name, hidden: false });
+                          setAuditCharactersIndex(index);
+                        } catch (e: any) {
+                          setStatus(e?.message || String(e));
+                        }
+                      }}
+                    >
+                      取消隐藏
+                    </button>
+                  </div>
+                ))}
+            </div>
+            <div className="modalActions">
+              <button
+                type="button"
+                className="btnModalSecondary"
+                disabled={busy}
+                onClick={() => setHiddenCharPanelOpen(false)}
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editCharOpen ? (
+        <div
+          className="modalBackdrop"
+          role="presentation"
+          onClick={() => {
+            if (!busy) setEditCharOpen(false);
+          }}
+        >
+          <div
+            className="modalPanel modalPanelOpaque modalPanelLarge"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-edit-char-heading"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="modal-edit-char-heading" className="modalHeading">
+              编辑角色：{editCharName}
+            </h2>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-role">
+                身份
+              </label>
+              <input
+                id="modal-edit-char-role"
+                className="modalInput"
+                value={editCharRole}
+                onChange={(e) => setEditCharRole(e.target.value)}
+                placeholder="如：主角/配角/反派…"
+                disabled={busy}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-tags">
+                标签<span className="modalOptional">（逗号分隔）</span>
+              </label>
+              <input
+                id="modal-edit-char-tags"
+                className="modalInput"
+                value={editCharTags}
+                onChange={(e) => setEditCharTags(e.target.value)}
+                placeholder="盟友, 敌对, 神秘…"
+                disabled={busy}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-personality">
+                性格分析
+              </label>
+              <input
+                id="modal-edit-char-personality"
+                className="modalInput"
+                value={editCharPersonality}
+                onChange={(e) => setEditCharPersonality(e.target.value)}
+                placeholder="性格、动机、弱点、行为模式…"
+                disabled={busy}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-state">
+                state<span className="modalOptional">（JSON，可选）</span>
+              </label>
+              <textarea
+                id="modal-edit-char-state"
+                className="modalTextarea"
+                value={editCharStateJson}
+                onChange={(e) => setEditCharStateJson(e.target.value)}
+                disabled={busy}
+                rows={8}
+              />
+            </div>
+            <div className="modalActions">
+              <button type="button" className="btnModalSecondary" disabled={busy} onClick={() => setEditCharOpen(false)}>
+                取消
+              </button>
+              <button type="button" className="btnModalPrimary" disabled={busy || !activeBook} onClick={() => void submitEditCharacter()}>
+                保存
               </button>
             </div>
           </div>

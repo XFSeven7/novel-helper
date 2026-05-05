@@ -281,8 +281,14 @@ export async function writeAuditLedger(dataDir: string, novelSlug: string, ledge
 
 export async function readAuditCharactersIndex(dataDir: string, novelSlug: string): Promise<any> {
   const p = path.join(auditDir(dataDir, novelSlug), "charactersIndex.json");
-  if (!(await exists(p))) return { characters: [], updatedAt: "" };
-  return JSON.parse(await fs.readFile(p, "utf8"));
+  if (!(await exists(p))) return { characters: [], hiddenNames: [], updatedAt: "" };
+  const parsed = JSON.parse(await fs.readFile(p, "utf8"));
+  if (parsed && typeof parsed === "object") {
+    if (!Array.isArray((parsed as any).characters)) (parsed as any).characters = [];
+    if (!Array.isArray((parsed as any).hiddenNames)) (parsed as any).hiddenNames = [];
+    if (typeof (parsed as any).updatedAt !== "string") (parsed as any).updatedAt = "";
+  }
+  return parsed;
 }
 
 export async function writeAuditCharactersIndex(dataDir: string, novelSlug: string, idx: any) {

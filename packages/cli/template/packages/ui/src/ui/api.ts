@@ -154,6 +154,29 @@ export async function getAuditCharacters(slug: string) {
   return await http<{ index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/characters`);
 }
 
+export async function hideAuditCharacter(slug: string, input: { name: string; hidden: boolean }) {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/characters/hide`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function updateAuditCharacter(
+  slug: string,
+  input: {
+    name: string;
+    role?: string;
+    tags?: string[];
+    state?: any;
+    personalityAnalysis?: string;
+  }
+) {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/characters/update`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
 export type TimelineIndex = {
   version: 1;
   updatedAt: string;

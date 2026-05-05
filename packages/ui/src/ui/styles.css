@@ -1946,6 +1946,47 @@ code {
   overflow: hidden;
 }
 
+.auditCharCardHeadRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.auditCharCardHeadRow .auditCharCardHead {
+  flex: 1;
+  min-width: 0;
+}
+
+.btnCharHide {
+  flex-shrink: 0;
+  margin-right: 10px;
+  opacity: 0.92;
+}
+
+.btnCharEdit {
+  flex-shrink: 0;
+  opacity: 0.92;
+}
+
+.modalPanelOpaque {
+  /* 用不透明纯色（按主题调配），避免 var(--panel) 本身是半透明 rgba */
+  background: var(--bg);
+}
+
+.modalPanelLarge {
+  width: min(860px, 96vw);
+  max-height: min(92vh, 860px);
+}
+
+:root.theme-dark .modalPanelOpaque {
+  background: color-mix(in srgb, var(--bg) 86%, #ffffff 14%);
+}
+
+:root.theme-light .modalPanelOpaque,
+:root.theme-system .modalPanelOpaque {
+  background: color-mix(in srgb, var(--bg) 94%, #000000 6%);
+}
+
 .auditCharCardHead {
   display: flex;
   align-items: center;
@@ -1961,6 +2002,47 @@ code {
 
 .auditCharCardHead:hover:not(:disabled) {
   background: color-mix(in srgb, var(--panel) 42%, transparent);
+}
+
+.auditHiddenSummary {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.btnLinkMuted {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  color: color-mix(in srgb, var(--text) 55%, transparent);
+  cursor: pointer;
+  text-align: left;
+}
+
+.btnLinkMuted:hover:not(:disabled) {
+  color: color-mix(in srgb, var(--text) 75%, transparent);
+  text-decoration: underline;
+}
+
+.hiddenCharRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.hiddenCharRow:last-child {
+  border-bottom: 0;
+}
+
+.hiddenCharName {
+  font-weight: 650;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .auditCharIcon {
