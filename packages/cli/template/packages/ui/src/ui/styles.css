@@ -526,7 +526,7 @@ button:disabled {
   max-height: min(90vh, 560px);
   overflow: auto;
   padding: 18px 20px;
-  border-radius: 14px;
+  border-radius: 0;
   border: 1px solid var(--border);
   background: var(--panel);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
@@ -573,7 +573,7 @@ button:disabled {
   padding: 10px;
   font-size: 13px;
   line-height: 1.5;
-  border-radius: 10px;
+  border-radius: 0;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.06);
   color: var(--text);
@@ -689,7 +689,7 @@ button:disabled {
 .modelProviderCard {
   text-align: left;
   padding: 14px 14px 12px;
-  border-radius: 14px;
+  border-radius: 0;
   border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
   background: color-mix(in srgb, var(--panel) 92%, transparent);
 }
@@ -1280,7 +1280,7 @@ button:disabled {
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
 }
 
 .treeChildren {

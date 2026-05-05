@@ -371,17 +371,18 @@ code {
 .chapterEntityList {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 0;
 }
 
 .chapterEntityItem {
   width: 100%;
   text-align: left;
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  border: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  background: transparent;
   color: var(--text);
-  padding: 8px 10px;
-  border-radius: 10px;
+  padding: 8px 6px;
+  border-radius: 0;
   cursor: pointer;
   display: flex;
   gap: 10px;
@@ -389,7 +390,7 @@ code {
 }
 
 .chapterEntityItem:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--panel2) 72%, transparent);
+  background: color-mix(in srgb, var(--panel2) 55%, transparent);
 }
 
 .chapterEntityItem:disabled {
@@ -414,23 +415,25 @@ code {
 }
 
 .chapterEntityRow {
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  background: color-mix(in srgb, var(--panel) 70%, transparent);
-  padding: 8px 10px;
-  border-radius: 10px;
+  border: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  background: transparent;
+  padding: 8px 6px;
+  border-radius: 0;
 }
 
 .chapterEventList {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
 }
 
 .chapterEventItem {
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  background: color-mix(in srgb, var(--panel) 70%, transparent);
-  padding: 8px 10px;
-  border-radius: 10px;
+  border: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  background: transparent;
+  padding: 8px 6px;
+  border-radius: 0;
 }
 
 .chapterEventTop {
@@ -475,7 +478,7 @@ code {
 .modelProviderCard {
   text-align: left;
   padding: 14px 14px 12px;
-  border-radius: 14px;
+  border-radius: 0;
   border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
   background: color-mix(in srgb, var(--panel) 92%, transparent);
 }
@@ -762,7 +765,7 @@ code {
   max-height: min(90vh, 560px);
   overflow: auto;
   padding: 18px 20px;
-  border-radius: 14px;
+  border-radius: 0;
   border: 1px solid var(--border);
   background: var(--panel);
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
@@ -809,7 +812,7 @@ code {
   padding: 10px;
   font-size: 13px;
   line-height: 1.5;
-  border-radius: 10px;
+  border-radius: 0;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.06);
   color: var(--text);
@@ -907,7 +910,7 @@ code {
   overflow: auto;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
 }
 
 .treeNode {
@@ -930,15 +933,19 @@ code {
 
 .treeChild {
   text-align: left;
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: rgba(255, 255, 255, 0.05);
+  padding: 8px 6px;
+  border-radius: 0;
+  border: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  background: transparent;
 }
 
 .treeChild.active {
-  border-color: rgba(139, 92, 246, 0.5);
   background: rgba(139, 92, 246, 0.16);
+}
+
+.treeChild:last-child {
+  border-bottom: none;
 }
 
 .center {
@@ -980,7 +987,7 @@ code {
 .homeModelList {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 0;
   padding: 12px;
 }
 
@@ -1594,7 +1601,7 @@ code {
 .auditStreamMd pre {
   margin: 0.65em 0;
   padding: 10px;
-  border-radius: 10px;
+  border-radius: 0;
   border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
   background: color-mix(in srgb, var(--panel) 90%, transparent);
   overflow-x: auto;
@@ -1861,7 +1868,7 @@ code {
 .placeGroup {
   border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   background: color-mix(in srgb, var(--panel2) 70%, transparent);
-  border-radius: 14px;
+  border-radius: 0;
   overflow: hidden;
 }
 
@@ -2592,7 +2599,7 @@ code {
   flex: none;
   padding: 8px 12px;
   margin-bottom: -1px;
-  border-radius: 10px 10px 0 0;
+  border-radius: 0;
   border: 1px solid transparent;
   border-bottom: none;
   background: transparent;
@@ -3116,7 +3123,7 @@ button:disabled {
   flex-direction: column;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 0;
   overflow: hidden;
 }
 
