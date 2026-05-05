@@ -141,6 +141,27 @@ export type TimelineIndex = {
   };
 };
 
+export type ForeshadowStatus = "open" | "progress" | "closed";
+
+export type ForeshadowItem = {
+  id: string;
+  title: string;
+  status: ForeshadowStatus;
+  firstChapter?: number;
+  lastChapter?: number;
+  chapters?: number[];
+  lastProgress?: string;
+  note?: string;
+  updatedAt: string;
+};
+
+export type ForeshadowsIndex = {
+  version: 1;
+  updatedAt: string;
+  foreshadows: ForeshadowItem[];
+  hiddenIds: string[];
+};
+
 async function exists(p: string) {
   try {
     await fs.access(p);
@@ -349,6 +370,26 @@ export async function writeAuditOrgsIndex(dataDir: string, novelSlug: string, id
   const dir = auditDir(dataDir, novelSlug);
   await ensureDir(dir);
   const p = path.join(dir, "orgsIndex.json");
+  await fs.writeFile(p, JSON.stringify(idx, null, 2), "utf8");
+}
+
+export async function readAuditForeshadowsIndex(dataDir: string, novelSlug: string): Promise<ForeshadowsIndex> {
+  const p = path.join(auditDir(dataDir, novelSlug), "foreshadowsIndex.json");
+  if (!(await exists(p))) return { version: 1, updatedAt: "", foreshadows: [], hiddenIds: [] };
+  const parsed = JSON.parse(await fs.readFile(p, "utf8"));
+  const idx: ForeshadowsIndex = {
+    version: 1,
+    updatedAt: typeof parsed?.updatedAt === "string" ? parsed.updatedAt : "",
+    foreshadows: Array.isArray(parsed?.foreshadows) ? parsed.foreshadows : [],
+    hiddenIds: Array.isArray(parsed?.hiddenIds) ? parsed.hiddenIds : []
+  };
+  return idx;
+}
+
+export async function writeAuditForeshadowsIndex(dataDir: string, novelSlug: string, idx: ForeshadowsIndex) {
+  const dir = auditDir(dataDir, novelSlug);
+  await ensureDir(dir);
+  const p = path.join(dir, "foreshadowsIndex.json");
   await fs.writeFile(p, JSON.stringify(idx, null, 2), "utf8");
 }
 

@@ -224,6 +224,56 @@ export async function updateAuditOrg(slug: string, input: { name: string; descri
   });
 }
 
+export type ForeshadowStatus = "open" | "progress" | "closed";
+export type ForeshadowItem = {
+  id: string;
+  title: string;
+  status: ForeshadowStatus;
+  firstChapter?: number;
+  lastChapter?: number;
+  chapters?: number[];
+  lastProgress?: string;
+  note?: string;
+  updatedAt: string;
+};
+export type ForeshadowsIndex = {
+  version: 1;
+  updatedAt: string;
+  foreshadows: ForeshadowItem[];
+  hiddenIds: string[];
+};
+
+export async function getAuditForeshadows(slug: string) {
+  return await http<{ index: ForeshadowsIndex }>(`/api/books/${encodeURIComponent(slug)}/audit/foreshadows`);
+}
+
+export async function createAuditForeshadow(
+  slug: string,
+  input: { title: string; status?: ForeshadowStatus; lastProgress?: string; note?: string; chapters?: number[] }
+) {
+  return await http<{ ok: true; index: ForeshadowsIndex }>(`/api/books/${encodeURIComponent(slug)}/audit/foreshadows/create`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function updateAuditForeshadow(
+  slug: string,
+  input: { id: string; title?: string; status?: ForeshadowStatus; lastProgress?: string; note?: string; chapters?: number[] }
+) {
+  return await http<{ ok: true; index: ForeshadowsIndex }>(`/api/books/${encodeURIComponent(slug)}/audit/foreshadows/update`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function hideAuditForeshadow(slug: string, input: { id: string; hidden: boolean }) {
+  return await http<{ ok: true; index: ForeshadowsIndex }>(`/api/books/${encodeURIComponent(slug)}/audit/foreshadows/hide`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
 export type TimelineIndex = {
   version: 1;
   updatedAt: string;

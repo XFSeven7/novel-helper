@@ -34,6 +34,8 @@ import {
   writeAuditPlacesIndex,
   readAuditOrgsIndex,
   writeAuditOrgsIndex,
+  readAuditForeshadowsIndex,
+  writeAuditForeshadowsIndex,
   readTimelineIndex,
   writeTimelineIndex,
   writeStoryTimelineMarkdownFromIndex,
@@ -723,6 +725,93 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
   if (run.ledgerUpdates?.openLoops?.length) ledger.openLoops.push(...run.ledgerUpdates.openLoops);
   if (run.ledgerUpdates?.closedLoops?.length) ledger.closedLoops.push(...run.ledgerUpdates.closedLoops);
   await writeAuditLedger(dataDir, slug, ledger);
+
+  // 自动沉淀伏笔：全书共享 foreshadowsIndex.json（来源 ledgerUpdates）
+  const foIdx = await readAuditForeshadowsIndex(dataDir, slug);
+  const byId = new Map<string, any>(
+    (foIdx.foreshadows || [])
+      .map((f: any) => ({ ...f, id: String(f?.id || "").trim() }))
+      .filter((f: any) => f.id)
+      .map((f: any) => [f.id, f])
+  );
+  const now = run.chapter.auditedAt;
+  const chap = parseChapterNumberFromFilename(filename);
+
+  const normTitle = (x: any) =>
+    String(
+      x?.title ||
+        x?.item ||
+        x?.name ||
+        x?.description ||
+        x?.question ||
+        x?.hook ||
+        x?.setup ||
+        x?.payoff ||
+        ""
+    ).trim();
+  const normProgress = (x: any) =>
+    String(
+      x?.progress ||
+        x?.update ||
+        x?.推进 ||
+        x?.note ||
+        x?.why ||
+        x?.summary ||
+        x?.expectedResolution ||
+        x?.resolution ||
+        ""
+    ).trim();
+  const makeId = (title: string) => title.replace(/\s+/g, " ").slice(0, 160);
+
+  const pushChapter = (f: any) => {
+    if (Number.isFinite(chap)) {
+      f.firstChapter = Number.isFinite(f.firstChapter) ? Math.min(f.firstChapter, chap) : chap;
+      f.lastChapter = Number.isFinite(f.lastChapter) ? Math.max(f.lastChapter, chap) : chap;
+      const arr = Array.isArray(f.chapters) ? f.chapters.map((n: any) => Math.floor(Number(n))).filter((n: any) => Number.isFinite(n)) : [];
+      if (!arr.includes(chap)) arr.push(chap);
+      arr.sort((a: number, b: number) => a - b);
+      f.chapters = arr;
+    }
+  };
+
+  for (const raw of run?.ledgerUpdates?.openLoops || []) {
+    const title = normTitle(raw);
+    if (!title || title === "[object Object]") continue;
+    const id = makeId(title);
+    const prev = byId.get(id) || { id, title, status: "open" };
+    if (prev.status === "closed") {
+      // 已回收的不自动打开；保留人工状态
+    } else if (prev.status !== "progress") {
+      prev.status = "open";
+    }
+    const p = normProgress(raw);
+    if (p) prev.lastProgress = p;
+    pushChapter(prev);
+    prev.updatedAt = now;
+    byId.set(id, prev);
+  }
+  for (const raw of run?.ledgerUpdates?.closedLoops || []) {
+    const title = normTitle(raw);
+    if (!title || title === "[object Object]") continue;
+    const id = makeId(title);
+    const prev = byId.get(id) || { id, title, status: "closed" };
+    prev.status = "closed";
+    const p = normProgress(raw);
+    if (p) prev.lastProgress = p;
+    pushChapter(prev);
+    prev.updatedAt = now;
+    byId.set(id, prev);
+  }
+
+  foIdx.foreshadows = [...byId.values()]
+    .filter((f: any) => {
+      const t = String(f?.title || "").trim();
+      return t && t !== "[object Object]";
+    })
+    .sort((a: any, b: any) => String(a.title || "").localeCompare(String(b.title || ""), "zh-Hans-CN"));
+  if (!Array.isArray(foIdx.hiddenIds)) foIdx.hiddenIds = [];
+  foIdx.updatedAt = now;
+  await writeAuditForeshadowsIndex(dataDir, slug, foIdx);
 
   return run;
 }
@@ -1432,6 +1521,109 @@ app.post("/api/books/:slug/audit/orgs/update", async (req, reply) => {
   };
   idx.updatedAt = now;
   await writeAuditOrgsIndex(dataDir, params.slug, idx);
+  return { ok: true, index: idx };
+});
+
+app.get("/api/books/:slug/audit/foreshadows", async (req) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const params = paramsSchema.parse((req as any).params);
+  const idx = await readAuditForeshadowsIndex(dataDir, params.slug);
+  return { index: idx };
+});
+
+app.post("/api/books/:slug/audit/foreshadows/create", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({
+    title: z.string().min(1),
+    status: z.enum(["open", "progress", "closed"]).optional(),
+    lastProgress: z.string().optional(),
+    note: z.string().optional(),
+    chapters: z.array(z.number().int().min(1)).optional()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+  const idx = await readAuditForeshadowsIndex(dataDir, params.slug);
+  const title = body.title.trim();
+  const id = title.replace(/\s+/g, " ").slice(0, 160);
+  if ((idx.foreshadows || []).some((f: any) => String(f?.id || "").trim() === id)) {
+    return reply.code(409).send({ message: "伏笔已存在（同名）" });
+  }
+  const now = new Date().toISOString();
+  const chapters = (body.chapters || [])
+    .map((n) => Math.floor(Number(n)))
+    .filter((n) => Number.isFinite(n) && n >= 1);
+  chapters.sort((a, b) => a - b);
+  (idx.foreshadows ||= []).push({
+    id,
+    title,
+    status: body.status || "open",
+    firstChapter: chapters.length ? chapters[0] : undefined,
+    lastChapter: chapters.length ? chapters[chapters.length - 1] : undefined,
+    chapters: chapters.length ? chapters : undefined,
+    lastProgress: (body.lastProgress || "").trim() || "",
+    note: (body.note || "").trim() || "",
+    updatedAt: now
+  });
+  idx.updatedAt = now;
+  await writeAuditForeshadowsIndex(dataDir, params.slug, idx);
+  return { ok: true, index: idx };
+});
+
+app.post("/api/books/:slug/audit/foreshadows/update", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({
+    id: z.string().min(1),
+    title: z.string().optional(),
+    status: z.enum(["open", "progress", "closed"]).optional(),
+    lastProgress: z.string().optional(),
+    note: z.string().optional(),
+    chapters: z.array(z.number().int().min(1)).optional()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+  const idx = await readAuditForeshadowsIndex(dataDir, params.slug);
+  const id = body.id.trim();
+  const i = (idx.foreshadows || []).findIndex((f: any) => String(f?.id || "").trim() === id);
+  if (i < 0) return reply.code(404).send({ message: "伏笔不存在" });
+  const prev = idx.foreshadows[i] || {};
+  const now = new Date().toISOString();
+  const chapters = body.chapters
+    ? body.chapters
+        .map((n) => Math.floor(Number(n)))
+        .filter((n) => Number.isFinite(n) && n >= 1)
+        .sort((a, b) => a - b)
+    : undefined;
+  idx.foreshadows[i] = {
+    ...prev,
+    id,
+    title: body.title !== undefined ? body.title.trim() : prev.title,
+    status: body.status !== undefined ? body.status : prev.status,
+    lastProgress: body.lastProgress !== undefined ? body.lastProgress : prev.lastProgress,
+    note: body.note !== undefined ? body.note : prev.note,
+    chapters: chapters !== undefined ? (chapters.length ? chapters : undefined) : prev.chapters,
+    firstChapter: chapters !== undefined ? (chapters.length ? chapters[0] : undefined) : prev.firstChapter,
+    lastChapter:
+      chapters !== undefined ? (chapters.length ? chapters[chapters.length - 1] : undefined) : prev.lastChapter,
+    updatedAt: now
+  };
+  idx.updatedAt = now;
+  await writeAuditForeshadowsIndex(dataDir, params.slug, idx);
+  return { ok: true, index: idx };
+});
+
+app.post("/api/books/:slug/audit/foreshadows/hide", async (req) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({ id: z.string().min(1), hidden: z.boolean() });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+  const idx = await readAuditForeshadowsIndex(dataDir, params.slug);
+  const set = new Set((idx.hiddenIds || []).map((x: any) => String(x)));
+  const id = body.id.trim();
+  if (body.hidden) set.add(id);
+  else set.delete(id);
+  idx.hiddenIds = [...set];
+  idx.updatedAt = new Date().toISOString();
+  await writeAuditForeshadowsIndex(dataDir, params.slug, idx);
   return { ok: true, index: idx };
 });
 

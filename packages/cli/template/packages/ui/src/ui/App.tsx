@@ -33,6 +33,10 @@ import {
   getAuditOrgs,
   hideAuditOrg,
   updateAuditOrg,
+  getAuditForeshadows,
+  createAuditForeshadow,
+  updateAuditForeshadow,
+  hideAuditForeshadow,
   getTimelineIndex,
   compressTimelineRange,
   markTimelineEvent,
@@ -718,7 +722,7 @@ export function App() {
   const [chapterContent, setChapterContent] = useState("");
   const [cardContent, setCardContent] = useState("");
   const [rightTab, setRightTab] = useState<
-    "chapterSummary" | "auditCharacters" | "story" | "places" | "orgs" | "timeline"
+    "chapterSummary" | "auditCharacters" | "story" | "places" | "orgs" | "timeline" | "foreshadows"
   >("chapterSummary");
   const [expandedAuditCharIds, setExpandedAuditCharIds] = useState<Record<string, boolean>>({});
   const [status, setStatus] = useState("");
@@ -1068,6 +1072,22 @@ export function App() {
   const [auditCharactersIndex, setAuditCharactersIndex] = useState<any | null>(null);
   const [auditPlacesIndex, setAuditPlacesIndex] = useState<any | null>(null);
   const [auditOrgsIndex, setAuditOrgsIndex] = useState<any | null>(null);
+  const [auditForeshadowsIndex, setAuditForeshadowsIndex] = useState<any | null>(null);
+
+  const [foreshadowCreateOpen, setForeshadowCreateOpen] = useState(false);
+  const [foreshadowCreateTitle, setForeshadowCreateTitle] = useState("");
+  const [foreshadowCreateStatus, setForeshadowCreateStatus] = useState<"open" | "progress" | "closed">("open");
+
+  const [editForeshadowOpen, setEditForeshadowOpen] = useState(false);
+  const [editForeshadowId, setEditForeshadowId] = useState("");
+  const [editForeshadowTitle, setEditForeshadowTitle] = useState("");
+  const [editForeshadowStatus, setEditForeshadowStatus] = useState<"open" | "progress" | "closed">("open");
+  const [editForeshadowLastProgress, setEditForeshadowLastProgress] = useState("");
+  const [editForeshadowNote, setEditForeshadowNote] = useState("");
+  const [editForeshadowChapters, setEditForeshadowChapters] = useState("");
+
+  const [hiddenForeshadowPanelOpen, setHiddenForeshadowPanelOpen] = useState(false);
+  const [foreshadowExpanded, setForeshadowExpanded] = useState<Record<string, boolean>>({});
   const [hiddenPlacePanelOpen, setHiddenPlacePanelOpen] = useState(false);
   const [editPlaceOpen, setEditPlaceOpen] = useState(false);
   const [editPlaceName, setEditPlaceName] = useState("");
@@ -1421,19 +1441,28 @@ export function App() {
 
   async function loadAuditArtifacts(slug: string, chapterFilename: string) {
     try {
-      const [{ run }, { index: timelineIdx }, { index: charIdx }, { index: placesIdx }, { index: orgsIdx }] =
+      const [
+        { run },
+        { index: timelineIdx },
+        { index: charIdx },
+        { index: placesIdx },
+        { index: orgsIdx },
+        { index: foreshadowsIdx }
+      ] =
         await Promise.all([
         getAuditLatest(slug, chapterFilename).catch(() => ({ run: null })),
         getTimelineIndex(slug).catch(() => ({ index: null as any })),
         getAuditCharacters(slug).catch(() => ({ index: null as any })),
         getAuditPlaces(slug).catch(() => ({ index: null as any })),
-        getAuditOrgs(slug).catch(() => ({ index: null as any }))
+        getAuditOrgs(slug).catch(() => ({ index: null as any })),
+        getAuditForeshadows(slug).catch(() => ({ index: null as any }))
       ]);
       setAuditRun(run);
       setTimelineIndex(timelineIdx);
       setAuditCharactersIndex(charIdx);
       setAuditPlacesIndex(placesIdx);
       setAuditOrgsIndex(orgsIdx);
+      setAuditForeshadowsIndex(foreshadowsIdx);
     } catch {
       setAuditRun(null);
     }
@@ -1460,6 +1489,61 @@ export function App() {
       });
       setAuditPlacesIndex(index);
       setEditPlaceOpen(false);
+    } catch (e: any) {
+      setStatus(e?.message || String(e));
+    }
+  }
+
+  function openEditForeshadow(f: any) {
+    const id = String(f?.id || "").trim();
+    if (!id) return;
+    setEditForeshadowId(id);
+    setEditForeshadowTitle(String(f?.title || "").trim());
+    const st = String(f?.status || "open");
+    setEditForeshadowStatus(st === "closed" ? "closed" : st === "progress" ? "progress" : "open");
+    setEditForeshadowLastProgress(String(f?.lastProgress || "").trim());
+    setEditForeshadowNote(String(f?.note || "").trim());
+    const chapters = Array.isArray(f?.chapters) ? (f.chapters as any[]).map((n) => String(n)).join(",") : "";
+    setEditForeshadowChapters(chapters);
+    setEditForeshadowOpen(true);
+  }
+
+  async function submitEditForeshadow() {
+    if (!activeBook) return;
+    const id = editForeshadowId.trim();
+    if (!id) return;
+    const title = editForeshadowTitle.trim();
+    try {
+      const chapters = editForeshadowChapters
+        .split(/[，,、\s]+/g)
+        .map((x) => Math.floor(Number(x)))
+        .filter((n) => Number.isFinite(n) && n >= 1);
+      const uniq = [...new Set(chapters)].sort((a, b) => a - b);
+      const { index } = await updateAuditForeshadow(activeBook, {
+        id,
+        title,
+        status: editForeshadowStatus,
+        lastProgress: editForeshadowLastProgress,
+        note: editForeshadowNote,
+        chapters: uniq.length ? uniq : undefined
+      });
+      setAuditForeshadowsIndex(index);
+      setEditForeshadowOpen(false);
+    } catch (e: any) {
+      setStatus(e?.message || String(e));
+    }
+  }
+
+  async function submitCreateForeshadow() {
+    if (!activeBook) return;
+    const title = foreshadowCreateTitle.trim();
+    if (!title) return;
+    try {
+      const { index } = await createAuditForeshadow(activeBook, { title, status: foreshadowCreateStatus });
+      setAuditForeshadowsIndex(index);
+      setForeshadowCreateTitle("");
+      setForeshadowCreateStatus("open");
+      setForeshadowCreateOpen(false);
     } catch (e: any) {
       setStatus(e?.message || String(e));
     }
@@ -3378,16 +3462,6 @@ export function App() {
                     <button
                       type="button"
                       role="tab"
-                      className={`browserTab ${rightTab === "story" ? "active" : ""}`}
-                      aria-selected={rightTab === "story"}
-                      onClick={() => setRightTab("story")}
-                      disabled={busy}
-                    >
-                      资料
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
                       className={`browserTab ${rightTab === "places" ? "active" : ""}`}
                       aria-selected={rightTab === "places"}
                       onClick={() => setRightTab("places")}
@@ -3398,22 +3472,22 @@ export function App() {
                     <button
                       type="button"
                       role="tab"
-                      className={`browserTab ${rightTab === "orgs" ? "active" : ""}`}
-                      aria-selected={rightTab === "orgs"}
-                      onClick={() => setRightTab("orgs")}
-                      disabled={busy}
-                    >
-                      组织
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
                       className={`browserTab ${rightTab === "timeline" ? "active" : ""}`}
                       aria-selected={rightTab === "timeline"}
                       onClick={() => setRightTab("timeline")}
                       disabled={busy}
                     >
                       时间线
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      className={`browserTab ${rightTab === "foreshadows" ? "active" : ""}`}
+                      aria-selected={rightTab === "foreshadows"}
+                      onClick={() => setRightTab("foreshadows")}
+                      disabled={busy}
+                    >
+                      伏笔
                     </button>
                   </div>
                 </div>
@@ -4038,6 +4112,178 @@ export function App() {
                         )}
                       </div>
                     </div>
+                  ) : rightTab === "foreshadows" ? (
+                    <div className="foreshadowPanel">
+                      {(() => {
+                        const all = Array.isArray(auditForeshadowsIndex?.foreshadows)
+                          ? (auditForeshadowsIndex.foreshadows as any[])
+                              .map((f) => ({ ...f, id: String(f?.id || "").trim(), title: String(f?.title || "").trim() }))
+                              .filter((f) => f.id && f.title)
+                          : [];
+                        const hiddenSet = new Set(
+                          Array.isArray(auditForeshadowsIndex?.hiddenIds)
+                            ? (auditForeshadowsIndex.hiddenIds as any[]).map((x) => String(x))
+                            : []
+                        );
+                        const visible = all.filter((f) => !hiddenSet.has(f.id));
+                        const hidden = all.filter((f) => hiddenSet.has(f.id));
+                        const statusLabel = (s: string) => (s === "closed" ? "已回收" : s === "progress" ? "推进中" : "未回收");
+                        return (
+                          <>
+                            <div className="foreshadowTopRow">
+                              <button
+                                type="button"
+                                className="btnSort"
+                                disabled={busy || !activeBook}
+                                onClick={() => setForeshadowCreateOpen(true)}
+                              >
+                                新增伏笔
+                              </button>
+                              <div className="muted">自动来自审计：openLoops / closedLoops（你也可以手动维护）</div>
+                            </div>
+
+                            {visible.length ? (
+                              <div className="foreshadowList">
+                                {visible.map((f) => {
+                                  const st = String(f.status || "open");
+                                  const badgeCls =
+                                    st === "closed"
+                                      ? "foreshadowBadge foreshadowBadgeClosed"
+                                      : st === "progress"
+                                        ? "foreshadowBadge foreshadowBadgeProgress"
+                                        : "foreshadowBadge foreshadowBadgeOpen";
+                                  const first = Number.isFinite(Number(f.firstChapter)) ? Number(f.firstChapter) : null;
+                                  const last = Number.isFinite(Number(f.lastChapter)) ? Number(f.lastChapter) : null;
+                                  const expanded = Boolean(foreshadowExpanded[f.id]);
+                                  const lastProgressText = String(f.lastProgress || "").trim();
+                                  const noteText = String(f.note || "").trim();
+                                  const compactText = lastProgressText || noteText;
+                                  return (
+                                    <div key={f.id} className="foreshadowItem" data-foreshadow-id={f.id}>
+                                      <div className="foreshadowItemTop">
+                                        <button
+                                          type="button"
+                                          className="foreshadowExpandBtn"
+                                          disabled={busy}
+                                          onClick={() =>
+                                            setForeshadowExpanded((prev) => ({ ...prev, [f.id]: !Boolean(prev[f.id]) }))
+                                          }
+                                          aria-expanded={expanded}
+                                          title={expanded ? "收起" : "展开查看"}
+                                        >
+                                          {expanded ? "▾" : "▸"}
+                                        </button>
+                                        <div className="foreshadowTitleRow">
+                                          <div className="foreshadowTitle">{f.title}</div>
+                                          <span className={badgeCls}>{statusLabel(st)}</span>
+                                        </div>
+                                        <div className="foreshadowItemRight row">
+                                          <button
+                                            type="button"
+                                            className="btnSort"
+                                            disabled={busy || !activeBook}
+                                            onClick={() => openEditForeshadow(f)}
+                                          >
+                                            编辑
+                                          </button>
+                                          <button
+                                            type="button"
+                                            className="btnSort"
+                                            disabled={busy || !activeBook}
+                                            onClick={async () => {
+                                              if (!activeBook) return;
+                                              try {
+                                                const { index } = await hideAuditForeshadow(activeBook, {
+                                                  id: f.id,
+                                                  hidden: true
+                                                });
+                                                setAuditForeshadowsIndex(index);
+                                              } catch (e: any) {
+                                                setStatus(e?.message || String(e));
+                                              }
+                                            }}
+                                          >
+                                            隐藏
+                                          </button>
+                                        </div>
+                                      </div>
+
+                                      <div className="foreshadowMeta muted">
+                                          {first ? (
+                                            <button
+                                              type="button"
+                                              className="btnLinkMuted"
+                                              disabled={busy || !activeBook}
+                                              onClick={() => {
+                                                const c = chapters.find((x) => x.id === String(first));
+                                                if (c) void onOpenChapter(c);
+                                              }}
+                                            >
+                                              首次：第 {first} 章
+                                            </button>
+                                          ) : (
+                                            <span>首次：—</span>
+                                          )}
+                                          <span className="mutedDot">·</span>
+                                          {last ? (
+                                            <button
+                                              type="button"
+                                              className="btnLinkMuted"
+                                              disabled={busy || !activeBook}
+                                              onClick={() => {
+                                                const c = chapters.find((x) => x.id === String(last));
+                                                if (c) void onOpenChapter(c);
+                                              }}
+                                            >
+                                              最近：第 {last} 章
+                                            </button>
+                                          ) : (
+                                            <span>最近：—</span>
+                                          )}
+                                      </div>
+
+                                      {!expanded ? (
+                                        compactText ? <div className="foreshadowCompact muted">{compactText}</div> : null
+                                      ) : lastProgressText || noteText ? (
+                                        <div className="foreshadowDetails">
+                                          {lastProgressText ? (
+                                            <div className="foreshadowRow">
+                                              <div className="foreshadowLabel">最近推进</div>
+                                              <div className="foreshadowValue">{lastProgressText}</div>
+                                            </div>
+                                          ) : null}
+                                          {noteText ? (
+                                            <div className="foreshadowRow">
+                                              <div className="foreshadowLabel">备注</div>
+                                              <div className="foreshadowValue">{noteText}</div>
+                                            </div>
+                                          ) : null}
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            ) : (
+                              <div className="muted auditPanelEmpty">暂无伏笔。完成一次审计后会自动沉淀；也可以手动新增。</div>
+                            )}
+
+                            <div className="muted auditHiddenSummary">
+                              {hidden.length ? (
+                                <button
+                                  type="button"
+                                  className="btnLinkMuted"
+                                  disabled={busy || !activeBook}
+                                  onClick={() => setHiddenForeshadowPanelOpen(true)}
+                                >
+                                  已隐藏 {hidden.length}/{all.length} 条伏笔，点击查看
+                                </button>
+                              ) : null}
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
                   ) : (
                     <div className="empty">该页签后续完善。</div>
                   )}
@@ -4284,6 +4530,238 @@ export function App() {
                 取消
               </button>
               <button type="button" className="btnModalPrimary" disabled={busy || !activeBook} onClick={() => void submitEditPlace()}>
+                保存
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {hiddenForeshadowPanelOpen ? (
+        <div
+          className="modalBackdrop"
+          role="presentation"
+          onClick={() => {
+            if (!busy) setHiddenForeshadowPanelOpen(false);
+          }}
+        >
+          <div
+            className="modalPanel modalPanelOpaque modalPanelLarge"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-hidden-foreshadows-heading"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="modal-hidden-foreshadows-heading" className="modalHeading">
+              已隐藏伏笔
+            </h2>
+            <div className="modalChapterGapBody">
+              {(Array.isArray(auditForeshadowsIndex?.hiddenIds) ? (auditForeshadowsIndex.hiddenIds as any[]) : [])
+                .map((x) => String(x).trim())
+                .filter(Boolean)
+                .map((id) => (
+                  <div key={id} className="hiddenCharRow">
+                    <div className="hiddenCharName">
+                      {(() => {
+                        const list = Array.isArray(auditForeshadowsIndex?.foreshadows)
+                          ? (auditForeshadowsIndex.foreshadows as any[])
+                          : [];
+                        const f = list.find((x) => String(x?.id || "").trim() === id);
+                        return String(f?.title || id);
+                      })()}
+                    </div>
+                    <button
+                      type="button"
+                      className="btnModalSecondary"
+                      disabled={busy || !activeBook}
+                      onClick={async () => {
+                        if (!activeBook) return;
+                        try {
+                          const { index } = await hideAuditForeshadow(activeBook, { id, hidden: false });
+                          setAuditForeshadowsIndex(index);
+                        } catch (e: any) {
+                          setStatus(e?.message || String(e));
+                        }
+                      }}
+                    >
+                      取消隐藏
+                    </button>
+                  </div>
+                ))}
+            </div>
+            <div className="modalActions">
+              <button
+                type="button"
+                className="btnModalSecondary"
+                disabled={busy}
+                onClick={() => setHiddenForeshadowPanelOpen(false)}
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {foreshadowCreateOpen ? (
+        <div
+          className="modalBackdrop"
+          role="presentation"
+          onClick={() => {
+            if (!busy) setForeshadowCreateOpen(false);
+          }}
+        >
+          <div
+            className="modalPanel modalPanelOpaque modalPanelLarge"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-create-foreshadow-heading"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="modal-create-foreshadow-heading" className="modalHeading">
+              新增伏笔
+            </h2>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-create-foreshadow-title">
+                标题<span className="modalReq">*</span>
+              </label>
+              <input
+                id="modal-create-foreshadow-title"
+                className="modalInput"
+                value={foreshadowCreateTitle}
+                onChange={(e) => setForeshadowCreateTitle(e.target.value)}
+                placeholder="例如：神秘戒指的来历"
+                disabled={busy}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-create-foreshadow-status">
+                状态
+              </label>
+              <select
+                id="modal-create-foreshadow-status"
+                className="modalSelect"
+                value={foreshadowCreateStatus}
+                onChange={(e) => setForeshadowCreateStatus(e.target.value as any)}
+                disabled={busy}
+              >
+                <option value="open">未回收</option>
+                <option value="progress">推进中</option>
+                <option value="closed">已回收</option>
+              </select>
+            </div>
+            <div className="modalActions">
+              <button
+                type="button"
+                className="btnModalSecondary"
+                disabled={busy}
+                onClick={() => setForeshadowCreateOpen(false)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="btnModalPrimary"
+                disabled={busy || !activeBook || !foreshadowCreateTitle.trim()}
+                onClick={() => void submitCreateForeshadow()}
+              >
+                创建
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {editForeshadowOpen ? (
+        <div
+          className="modalBackdrop"
+          role="presentation"
+          onClick={() => {
+            if (!busy) setEditForeshadowOpen(false);
+          }}
+        >
+          <div
+            className="modalPanel modalPanelOpaque modalPanelLarge"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-edit-foreshadow-heading"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="modal-edit-foreshadow-heading" className="modalHeading">
+              编辑伏笔：{editForeshadowTitle || editForeshadowId}
+            </h2>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-foreshadow-title">
+                标题
+              </label>
+              <input
+                id="modal-edit-foreshadow-title"
+                className="modalInput"
+                value={editForeshadowTitle}
+                onChange={(e) => setEditForeshadowTitle(e.target.value)}
+                disabled={busy}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-foreshadow-status">
+                状态
+              </label>
+              <select
+                id="modal-edit-foreshadow-status"
+                className="modalSelect"
+                value={editForeshadowStatus}
+                onChange={(e) => setEditForeshadowStatus(e.target.value as any)}
+                disabled={busy}
+              >
+                <option value="open">未回收</option>
+                <option value="progress">推进中</option>
+                <option value="closed">已回收</option>
+              </select>
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-foreshadow-chapters">
+                出现章节（逗号分隔）
+              </label>
+              <input
+                id="modal-edit-foreshadow-chapters"
+                className="modalInput"
+                value={editForeshadowChapters}
+                onChange={(e) => setEditForeshadowChapters(e.target.value)}
+                placeholder="例如：3,7,10"
+                disabled={busy}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-foreshadow-progress">
+                最近推进
+              </label>
+              <textarea
+                id="modal-edit-foreshadow-progress"
+                className="modalTextarea"
+                value={editForeshadowLastProgress}
+                onChange={(e) => setEditForeshadowLastProgress(e.target.value)}
+                disabled={busy}
+                rows={6}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-foreshadow-note">
+                备注
+              </label>
+              <textarea
+                id="modal-edit-foreshadow-note"
+                className="modalTextarea"
+                value={editForeshadowNote}
+                onChange={(e) => setEditForeshadowNote(e.target.value)}
+                disabled={busy}
+                rows={6}
+              />
+            </div>
+            <div className="modalActions">
+              <button type="button" className="btnModalSecondary" disabled={busy} onClick={() => setEditForeshadowOpen(false)}>
+                取消
+              </button>
+              <button type="button" className="btnModalPrimary" disabled={busy || !activeBook} onClick={() => void submitEditForeshadow()}>
                 保存
               </button>
             </div>
