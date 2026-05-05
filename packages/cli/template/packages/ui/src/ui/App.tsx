@@ -692,6 +692,10 @@ function formatMissingChapterList(gaps: number[]): string {
 }
 
 export function App() {
+  const [leftTab, setLeftTab] = useState<"chapters" | "global">("chapters");
+  const [globalTab, setGlobalTab] = useState<"auditCharacters" | "places" | "timeline" | "foreshadows">(
+    "auditCharacters"
+  );
   const [books, setBooks] = useState<BookMeta[]>([]);
   const [activeBook, setActiveBook] = useState("");
   const [navHome, setNavHome] = useState(true);
@@ -721,9 +725,7 @@ export function App() {
   const [modalCharacterTagDraft, setModalCharacterTagDraft] = useState("");
   const [chapterContent, setChapterContent] = useState("");
   const [cardContent, setCardContent] = useState("");
-  const [rightTab, setRightTab] = useState<
-    "chapterSummary" | "auditCharacters" | "story" | "places" | "orgs" | "timeline" | "foreshadows"
-  >("chapterSummary");
+  const [rightTab, setRightTab] = useState<"chapterSummary" | "chapterEntities">("chapterSummary");
   const [expandedAuditCharIds, setExpandedAuditCharIds] = useState<Record<string, boolean>>({});
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);

@@ -701,6 +701,10 @@ function IconFullscreenExit(props: React.SVGProps<SVGSVGElement>) {
 }
 
 export function App() {
+  const [leftTab, setLeftTab] = useState<"chapters" | "global">("chapters");
+  const [globalTab, setGlobalTab] = useState<"auditCharacters" | "places" | "timeline" | "foreshadows">(
+    "auditCharacters"
+  );
   const [books, setBooks] = useState<BookMeta[]>([]);
   const [activeBook, setActiveBook] = useState<string>("");
   /** true：左侧显示书架；false：左侧显示当前书的章节 */
@@ -734,7 +738,7 @@ export function App() {
   const [cardContent, setCardContent] = useState("");
   const [storyFiles, setStoryFiles] = useState<StoryFile[]>([]);
   const [rightTab, setRightTab] = useState<
-    "chapterSummary" | "auditCharacters" | "story" | "places" | "orgs" | "timeline" | "foreshadows"
+    "chapterSummary" | "chapterEntities"
   >("chapterSummary");
   const [expandedAuditCharIds, setExpandedAuditCharIds] = useState<Record<string, boolean>>({});
   const [status, setStatus] = useState<string>("");
@@ -1602,6 +1606,7 @@ export function App() {
       chapterBaselineRef.current = content;
       queueMicrotask(() => scrollChapterToTop());
       void loadAuditArtifacts(activeBook, c.filename);
+      void loadGlobalArtifacts(activeBook);
       resetAuditThinkingReveal();
       setAuditStreamPhase("idle");
     } catch (e: any) {
@@ -1611,33 +1616,27 @@ export function App() {
     }
   }
 
-  async function loadAuditArtifacts(slug: string, chapterFilename: string) {
+  async function loadGlobalArtifacts(slug: string) {
     try {
-      const [
-        { run },
-        { ledger },
-        { index },
-        { index: timelineIdx },
-        { index: placesIdx },
-        { index: orgsIdx },
-        { index: foreshadowsIdx }
-      ] =
-        await Promise.all([
-        getAuditLatest(slug, chapterFilename).catch(() => ({ run: null })),
-        getAuditLedger(slug).catch(() => ({ ledger: null })),
+      const [{ index }, { index: timelineIdx }, { index: placesIdx }, { index: foreshadowsIdx }] = await Promise.all([
         getAuditCharacters(slug).catch(() => ({ index: null })),
         getTimelineIndex(slug).catch(() => ({ index: null as any })),
         getAuditPlaces(slug).catch(() => ({ index: null as any })),
-        getAuditOrgs(slug).catch(() => ({ index: null as any })),
         getAuditForeshadows(slug).catch(() => ({ index: null as any }))
       ]);
-      setAuditRun(run);
-      setAuditLedger(ledger);
       setAuditCharactersIndex(index);
       setTimelineIndex(timelineIdx);
       setAuditPlacesIndex(placesIdx);
-      setAuditOrgsIndex(orgsIdx);
       setAuditForeshadowsIndex(foreshadowsIdx);
+    } catch {
+      // ignore
+    }
+  }
+
+  async function loadAuditArtifacts(slug: string, chapterFilename: string) {
+    try {
+      const [{ run }] = await Promise.all([getAuditLatest(slug, chapterFilename).catch(() => ({ run: null }))]);
+      setAuditRun(run);
     } catch {
       // ignore
     }
@@ -1764,7 +1763,7 @@ export function App() {
   }
 
   const jumpToOrganize = useCallback(
-    (tab: "chapterSummary" | "auditCharacters" | "places" | "orgs" | "timeline" | "story", key: string) => {
+    (tab: "chapterSummary" | "chapterEntities" | "auditCharacters" | "places" | "timeline" | "foreshadows" | "story" | "orgs", key: string) => {
       // 额外展开：让“跳转过去”落点是可见的
       if (tab === "auditCharacters") {
         setExpandedAuditCharIds((prev) => ({ ...prev, [key]: true }));
@@ -1776,13 +1775,21 @@ export function App() {
         const group = String(p?.group || "").trim();
         if (group) setPlaceGroupCollapsed((prev) => ({ ...prev, [group]: false }));
       }
-      if (tab === "orgs") {
-        // 组织列表目前没有分组折叠；仅确保卡片本身可见（无需额外展开）
+      if (tab === "chapterSummary" || tab === "chapterEntities") {
+        setRightTab(tab);
+      } else if (tab === "auditCharacters" || tab === "places" || tab === "timeline" || tab === "foreshadows") {
+        setLeftTab("global");
+        setGlobalTab(tab);
+      } else {
+        setStatus("该分类已取消（不再提供入口）。");
+        return;
       }
 
-      setRightTab(tab);
       requestAnimationFrame(() => {
-        const root = document.querySelector(".organizeTabScroll") as HTMLElement | null;
+        const root =
+          tab === "chapterSummary" || tab === "chapterEntities"
+            ? (document.querySelector(".organizeTabScroll") as HTMLElement | null)
+            : (document.querySelector(".navGlobalScroll") as HTMLElement | null);
         if (!root) return;
         const esc = (s: string) => CSS.escape(s);
         const sel =
@@ -1792,11 +1799,9 @@ export function App() {
               ? `[data-place-name="${esc(key)}"]`
               : tab === "timeline"
                 ? `[data-event-id="${esc(key)}"]`
-                : tab === "story"
-                  ? `[data-story-path="${esc(key)}"]`
-                  : tab === "orgs"
-                    ? `[data-org-name="${esc(key)}"]`
-                    : "";
+                : tab === "foreshadows"
+                  ? `[data-foreshadow-id="${esc(key)}"]`
+                  : "";
         if (!sel) return;
         const el = root.querySelector(sel) as HTMLElement | null;
         if (!el) return;
@@ -2380,67 +2385,901 @@ export function App() {
                     <div className="navSubtitle">{activeBookMeta?.slug ?? activeBook}</div>
                     <div className="navHint">点击左上角 novel-helper 返回书架</div>
                   </div>
-                  <div className="navOverviewBar">
-                    <button
-                      type="button"
-                      className="btnSort btnOverview"
-                      disabled={busy || !selectedChapter}
-                      title={selectedChapter ? "在中间查看本书信息与简介" : "当前已在书籍概览"}
-                      onClick={() => void goBookOverview()}
-                    >
-                      书籍概览
-                    </button>
-                  </div>
-                  <div className="navSortBar">
-                    <button
-                      type="button"
-                      className="btnSort"
-                      disabled={busy || chapters.length < 2}
-                      title={chapterSortDesc ? "切换为正序" : "切换为倒序"}
-                      onClick={() => setChapterSortDesc((v) => !v)}
-                    >
-                      {chapterSortDesc ? "倒序" : "正序"}
-                    </button>
-                  </div>
-                  <div className="navChapterBody">
-                    <div className="chapterNavScroll">
-                      <div className="tree navListDense chapterNavList">
-                        {chapters.length === 0 ? (
-                          <div className="empty">暂无章节，请在下方新建。</div>
-                        ) : (
-                          displayedChapters.map((c) => (
-                            <button
-                              key={c.filename}
-                              type="button"
-                              className={`treeChild chapterNavItem ${selectedChapter?.filename === c.filename ? "active" : ""}`}
-                              onClick={() => void onOpenChapter(c)}
-                              disabled={busy}
-                            >
-                              <span className="chapterNavItemTitle">{c.id}</span>
-                              <span className="chapterNavWordCount">{c.wordCount ?? 0} 字</span>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                    <div className="row chapterQuickRow chapterQuickRowSticky">
-                      <input
-                        value={chapterTitle}
-                        onChange={(e) => setChapterTitle(e.target.value)}
-                        placeholder="新章节标题"
+
+                  <div className="navLeftTabsBar" role="tablist" aria-label="左侧页签">
+                    <div className="navLeftTabsStrip">
+                      <button
+                        type="button"
+                        role="tab"
+                        className={`navLeftTab ${leftTab === "chapters" ? "active" : ""}`}
+                        aria-selected={leftTab === "chapters"}
+                        onClick={() => setLeftTab("chapters")}
                         disabled={busy}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault();
-                            void onCreateChapter();
-                          }
-                        }}
-                      />
-                      <button onClick={() => void onCreateChapter()} disabled={busy || !chapterTitle.trim()}>
-                        新建章节
+                      >
+                        章节目录
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        className={`navLeftTab ${leftTab === "global" ? "active" : ""}`}
+                        aria-selected={leftTab === "global"}
+                        onClick={() => setLeftTab("global")}
+                        disabled={busy}
+                      >
+                        全局信息
                       </button>
                     </div>
                   </div>
+
+                  {leftTab === "chapters" ? (
+                    <>
+                      <div className="navOverviewBar">
+                        <button
+                          type="button"
+                          className="btnSort btnOverview"
+                          disabled={busy || !selectedChapter}
+                          title={selectedChapter ? "在中间查看本书信息与简介" : "当前已在书籍概览"}
+                          onClick={() => void goBookOverview()}
+                        >
+                          书籍概览
+                        </button>
+                      </div>
+                      <div className="navSortBar">
+                        <button
+                          type="button"
+                          className="btnSort"
+                          disabled={busy || chapters.length < 2}
+                          title={chapterSortDesc ? "切换为正序" : "切换为倒序"}
+                          onClick={() => setChapterSortDesc((v) => !v)}
+                        >
+                          {chapterSortDesc ? "倒序" : "正序"}
+                        </button>
+                      </div>
+                      <div className="navChapterBody">
+                        <div className="chapterNavScroll">
+                          <div className="tree navListDense chapterNavList">
+                            {chapters.length === 0 ? (
+                              <div className="empty">暂无章节，请在下方新建。</div>
+                            ) : (
+                              displayedChapters.map((c) => (
+                                <button
+                                  key={c.filename}
+                                  type="button"
+                                  className={`treeChild chapterNavItem ${selectedChapter?.filename === c.filename ? "active" : ""}`}
+                                  onClick={() => void onOpenChapter(c)}
+                                  disabled={busy}
+                                >
+                                  <span className="chapterNavItemTitle">{c.id}</span>
+                                  <span className="chapterNavWordCount">{c.wordCount ?? 0} 字</span>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                        <div className="row chapterQuickRow chapterQuickRowSticky">
+                          <input
+                            value={chapterTitle}
+                            onChange={(e) => setChapterTitle(e.target.value)}
+                            placeholder="新章节标题"
+                            disabled={busy}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                void onCreateChapter();
+                              }
+                            }}
+                          />
+                          <button onClick={() => void onCreateChapter()} disabled={busy || !chapterTitle.trim()}>
+                            新建章节
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="navGlobalTabsBar" role="tablist" aria-label="全局信息分类">
+                        <div className="navGlobalTabsStrip">
+                          <button
+                            type="button"
+                            role="tab"
+                            className={`navGlobalTab ${globalTab === "auditCharacters" ? "active" : ""}`}
+                            aria-selected={globalTab === "auditCharacters"}
+                            onClick={() => setGlobalTab("auditCharacters")}
+                            disabled={busy}
+                          >
+                            角色
+                          </button>
+                          <button
+                            type="button"
+                            role="tab"
+                            className={`navGlobalTab ${globalTab === "places" ? "active" : ""}`}
+                            aria-selected={globalTab === "places"}
+                            onClick={() => setGlobalTab("places")}
+                            disabled={busy}
+                          >
+                            地点
+                          </button>
+                          <button
+                            type="button"
+                            role="tab"
+                            className={`navGlobalTab ${globalTab === "timeline" ? "active" : ""}`}
+                            aria-selected={globalTab === "timeline"}
+                            onClick={() => setGlobalTab("timeline")}
+                            disabled={busy}
+                          >
+                            时间线
+                          </button>
+                          <button
+                            type="button"
+                            role="tab"
+                            className={`navGlobalTab ${globalTab === "foreshadows" ? "active" : ""}`}
+                            aria-selected={globalTab === "foreshadows"}
+                            onClick={() => setGlobalTab("foreshadows")}
+                            disabled={busy}
+                          >
+                            伏笔
+                          </button>
+                        </div>
+                      </div>
+                      <div className="navGlobalScroll">
+                        {globalTab === "auditCharacters" ? (
+                          <>
+                            <div className="auditCharList">
+                              {Array.isArray(auditCharactersIndex?.characters) &&
+                              (auditCharactersIndex.characters as any[]).length ? (
+                                (() => {
+                                  const all = (auditCharactersIndex.characters as any[])
+                                    .map((c) => ({
+                                      ...c,
+                                      name: String(c?.name || "").trim()
+                                    }))
+                                    .filter((c) => c.name);
+                                  const hiddenSet = new Set(
+                                    Array.isArray(auditCharactersIndex?.hiddenNames)
+                                      ? (auditCharactersIndex.hiddenNames as any[]).map((x) => String(x))
+                                      : []
+                                  );
+                                  const visible = all.filter((c) => !hiddenSet.has(c.name));
+
+                                  return (
+                                    <>
+                                      {visible.map((c) => {
+                                        const name = String(c?.name || "").trim() || "未命名";
+                                        const id = name;
+                                        const open = !!expandedAuditCharIds[id];
+                                        const roleStr =
+                                          typeof c?.role === "string" && c.role.trim() ? c.role.trim() : "";
+                                        const st = c?.state && typeof c.state === "object" ? c.state : {};
+                                        const loc = String((st as any).location ?? "").trim();
+                                        const inj = String((st as any).injuries ?? "").trim();
+                                        const items = Array.isArray((st as any).items)
+                                          ? ((st as any).items as unknown[]).map((x) => String(x)).filter(Boolean)
+                                          : [];
+                                        const money = (st as any).moneyChange;
+                                        const tagArr = Array.isArray(c?.tags)
+                                          ? (c.tags as unknown[]).map((x) => String(x)).filter(Boolean)
+                                          : [];
+                                        const personality = String((c as any)?.personalityAnalysis ?? "").trim();
+
+                                        return (
+                                          <div key={id} className="auditCharCard" data-char-name={name}>
+                                            <div className="auditCharCardHeadRow">
+                                              <button
+                                                type="button"
+                                                className="auditCharCardHead"
+                                                aria-expanded={open}
+                                                onClick={() =>
+                                                  setExpandedAuditCharIds((prev) => ({ ...prev, [id]: !prev[id] }))
+                                                }
+                                                onDoubleClick={() => {
+                                                  openEditCharacter(c);
+                                                }}
+                                                disabled={busy}
+                                                title="双击可编辑角色属性"
+                                              >
+                                                <span className="auditCharIcon" aria-hidden>
+                                                  ◎
+                                                </span>
+                                                <span className="auditCharName">{name}</span>
+                                                <span className="auditCharBadges">
+                                                  {roleStr ? (
+                                                    <span className={auditCharacterRoleClass(roleStr)}>{roleStr}</span>
+                                                  ) : null}
+                                                </span>
+                                                <span className={`auditCharChevron ${open ? "open" : ""}`} aria-hidden>
+                                                  ›
+                                                </span>
+                                              </button>
+                                              <button
+                                                type="button"
+                                                className="btnSort btnCharEdit"
+                                                disabled={busy || !activeBook}
+                                                onClick={() => openEditCharacter(c)}
+                                                title="编辑角色属性"
+                                              >
+                                                编辑
+                                              </button>
+                                              <button
+                                                type="button"
+                                                className="btnSort btnCharHide"
+                                                disabled={busy || !activeBook}
+                                                onClick={async () => {
+                                                  if (!activeBook) return;
+                                                  try {
+                                                    const { index } = await hideAuditCharacter(activeBook, {
+                                                      name,
+                                                      hidden: true
+                                                    });
+                                                    setAuditCharactersIndex(index);
+                                                  } catch (e: any) {
+                                                    setStatus(e?.message || String(e));
+                                                  }
+                                                }}
+                                                title="隐藏该角色（全书范围）"
+                                              >
+                                                隐藏
+                                              </button>
+                                            </div>
+
+                                            {open ? (
+                                              <div className="auditCharCardBody">
+                                                <div className="auditCharDetailRow">
+                                                  <div className="auditCharDetailLabel">身份</div>
+                                                  <div className="auditCharDetailValue">{roleStr || "—"}</div>
+                                                </div>
+                                                <div className="auditCharDetailRow">
+                                                  <div className="auditCharDetailLabel">标签</div>
+                                                  <div className="auditCharDetailValue">
+                                                    {tagArr.length ? tagArr.join("、") : "—"}
+                                                  </div>
+                                                </div>
+                                                <div className="auditCharDetailRow">
+                                                  <div className="auditCharDetailLabel">地点</div>
+                                                  <div className="auditCharDetailValue">{loc || "—"}</div>
+                                                </div>
+                                                <div className="auditCharDetailRow">
+                                                  <div className="auditCharDetailLabel">伤势与状态</div>
+                                                  <div className="auditCharDetailValue">{inj || "—"}</div>
+                                                </div>
+                                                <div className="auditCharDetailRow">
+                                                  <div className="auditCharDetailLabel">随身物品</div>
+                                                  <div className="auditCharDetailValue">
+                                                    {items.length ? items.join("、") : "—"}
+                                                  </div>
+                                                </div>
+                                                <div className="auditCharDetailRow">
+                                                  <div className="auditCharDetailLabel">金钱变动</div>
+                                                  <div className="auditCharDetailValue">
+                                                    {money !== undefined && money !== null && money !== ""
+                                                      ? String(money)
+                                                      : "—"}
+                                                  </div>
+                                                </div>
+                                                {auditCharStateExtraRows(st as Record<string, unknown>).map(([lk, lv], ri) => (
+                                                  <div key={`st-${lk}-${ri}`} className="auditCharDetailRow">
+                                                    <div className="auditCharDetailLabel">{lk}</div>
+                                                    <div className="auditCharDetailValue">{lv}</div>
+                                                  </div>
+                                                ))}
+                                                {auditCharTopExtraRows(c as Record<string, unknown>).map(([lk, lv], ri) => (
+                                                  <div key={`ex-${lk}-${ri}`} className="auditCharDetailRow">
+                                                    <div className="auditCharDetailLabel">{lk}</div>
+                                                    <div className="auditCharDetailValue">{lv}</div>
+                                                  </div>
+                                                ))}
+                                                <div className="auditCharQuotes">
+                                                  <div className="auditCharDetailLabel">性格分析</div>
+                                                  <div className="auditCharDetailValue">
+                                                    {personality ? personality : "—"}
+                                                  </div>
+                                                </div>
+                                              </div>
+                                            ) : null}
+                                          </div>
+                                        );
+                                      })}
+
+                                      <div className="muted auditHiddenSummary">
+                                        {(() => {
+                                          const hidden = all.filter((c) => hiddenSet.has(c.name));
+                                          if (!hidden.length) return null;
+                                          return (
+                                            <button
+                                              type="button"
+                                              className="btnLinkMuted"
+                                              disabled={busy || !activeBook}
+                                              onClick={() => setHiddenCharPanelOpen(true)}
+                                            >
+                                              已隐藏 {hidden.length}/{all.length} 个角色，点击查看
+                                            </button>
+                                          );
+                                        })()}
+                                      </div>
+                                    </>
+                                  );
+                                })()
+                              ) : (
+                                <div className="muted auditPanelEmpty">暂无角色库。完成一次分析后会自动沉淀到这里。</div>
+                              )}
+                            </div>
+                          </>
+                        ) : globalTab === "places" ? (
+                          <div className="placePanel">
+                            {Array.isArray(auditPlacesIndex?.places) && (auditPlacesIndex.places as any[]).length ? (
+                              (() => {
+                                const all = (auditPlacesIndex.places as any[])
+                                  .map((p) => ({ ...p, name: String(p?.name || "").trim() }))
+                                  .filter((p) => p.name);
+                                const hiddenSet = new Set(
+                                  Array.isArray(auditPlacesIndex?.hiddenNames)
+                                    ? (auditPlacesIndex.hiddenNames as any[]).map((x) => String(x))
+                                    : []
+                                );
+                                const visible = all.filter((p) => !hiddenSet.has(p.name));
+                                const inferGroup = (name: string) => {
+                                  const n = String(name || "").trim();
+                                  if (!n) return "未分组";
+                                  // 常见写法：青石村·晒谷场 / 青石村-晒谷场 / 青石村 晒谷场
+                                  const m = n.split(/[·•—\-\/\s]/).map((s) => s.trim()).filter(Boolean);
+                                  return m[0] ? m[0] : "未分组";
+                                };
+                                const groups = new Map<string, any[]>();
+                                for (const p of visible) {
+                                  const g = String((p as any).group || "").trim() || inferGroup(p.name);
+                                  if (!groups.has(g)) groups.set(g, []);
+                                  groups.get(g)!.push(p);
+                                }
+                                const groupNames = [...groups.keys()].sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
+                                return (
+                                  <>
+                                    <div className="placeList">
+                                      {groupNames.map((g) => {
+                                        const list = groups.get(g) || [];
+                                        const collapsed = !!placeGroupCollapsed[g];
+                                        return (
+                                          <div key={g} className="placeGroup">
+                                            <button
+                                              type="button"
+                                              className="placeGroupHead"
+                                              onClick={() => setPlaceGroupCollapsed((prev) => ({ ...prev, [g]: !prev[g] }))}
+                                              disabled={busy}
+                                            >
+                                              <span className="placeGroupTitle">{g}</span>
+                                              <span className="muted placeGroupCount">{list.length}</span>
+                                              <span className={`placeGroupChevron ${collapsed ? "" : "open"}`} aria-hidden>
+                                                ›
+                                              </span>
+                                            </button>
+                                            {!collapsed ? (
+                                              <div className="placeGroupBody">
+                                                {list.map((p) => {
+                                                  const key = `${g}::${p.name}`;
+                                                  const expanded = !!placeTextExpanded[key];
+                                                  const noteText = String(p.lastNote || "").trim() || "—";
+                                                  const noteNeedToggle = noteText.length >= 36;
+                                                  return (
+                                                    <div key={p.name} className="placeCard" data-place-name={p.name}>
+                                                      <div className="placeCardTop">
+                                                        <div className="placeName">{p.name}</div>
+                                                        <div className="row">
+                                                          <button
+                                                            type="button"
+                                                            className="btnSort"
+                                                            disabled={busy || !activeBook}
+                                                            onClick={() => openEditPlace(p)}
+                                                          >
+                                                            编辑
+                                                          </button>
+                                                          <button
+                                                            type="button"
+                                                            className="btnSort"
+                                                            disabled={busy || !activeBook}
+                                                            onClick={async () => {
+                                                              if (!activeBook) return;
+                                                              try {
+                                                                const { index } = await hideAuditPlace(activeBook, {
+                                                                  name: p.name,
+                                                                  hidden: true
+                                                                });
+                                                                setAuditPlacesIndex(index);
+                                                              } catch (e: any) {
+                                                                setStatus(e?.message || String(e));
+                                                              }
+                                                            }}
+                                                          >
+                                                            隐藏
+                                                          </button>
+                                                        </div>
+                                                      </div>
+                                                      <div className="placeBody">
+                                                        <div className="placeRow">
+                                                          <div className="placeLabel">简述</div>
+                                                          <div className="placeValue">{String(p.description || "").trim() || "—"}</div>
+                                                        </div>
+                                                        <div className="placeRow">
+                                                          <div className="placeLabel">本地发生</div>
+                                                          <div className="placeValue">
+                                                            <div className={expanded ? "placeNote" : "placeNote placeNoteClamp2"}>
+                                                              {noteText}
+                                                            </div>
+                                                            {noteNeedToggle ? (
+                                                              <button
+                                                                type="button"
+                                                                className="btnLinkMuted placeNoteToggle"
+                                                                onClick={() =>
+                                                                  setPlaceTextExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
+                                                                }
+                                                                disabled={busy}
+                                                              >
+                                                                {expanded ? "收起" : "…展开"}
+                                                              </button>
+                                                            ) : null}
+                                                          </div>
+                                                        </div>
+                                                        <div className="placeMeta muted">
+                                                          {p.lastChapter ? `最近出现：第 ${p.lastChapter} 章` : ""}
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                            ) : null}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                    <div className="muted auditHiddenSummary">
+                                      {(() => {
+                                        const hidden = all.filter((p) => hiddenSet.has(p.name));
+                                        if (!hidden.length) return null;
+                                        return (
+                                          <button
+                                            type="button"
+                                            className="btnLinkMuted"
+                                            disabled={busy || !activeBook}
+                                            onClick={() => setHiddenPlacePanelOpen(true)}
+                                          >
+                                            已隐藏 {hidden.length}/{all.length} 个地点，点击查看
+                                          </button>
+                                        );
+                                      })()}
+                                    </div>
+                                  </>
+                                );
+                              })()
+                            ) : (
+                              <div className="muted auditPanelEmpty">暂无地点卡。完成一次分析后会自动收集地点。</div>
+                            )}
+                          </div>
+                        ) : globalTab === "timeline" ? (
+                          <div className="timelinePanel">
+                            <div className="timelineTopRow">
+                              <button
+                                type="button"
+                                className="btnSort"
+                                disabled={busy || timelineBusy || !activeBook}
+                                onClick={() => activeBook && void refreshTimelineIndex(activeBook)}
+                              >
+                                刷新
+                              </button>
+                              <label className="toggle timelineToggle">
+                                <input
+                                  type="checkbox"
+                                  checked={timelineShowDoneEvents}
+                                  onChange={(e) => setTimelineShowDoneEvents(e.target.checked)}
+                                  disabled={busy}
+                                />
+                                显示已完成事件
+                              </label>
+                            </div>
+
+                            <div className="timelineSection">
+                              <div className="auditPanelTitle">推荐压缩区间</div>
+                              {timelineIndex?.compressionSuggestions?.length ? (
+                                <div className="timelineSuggestionList">
+                                  {timelineIndex.compressionSuggestions.map((s, i) => (
+                                    <button
+                                      key={`${s.startChapter}-${s.endChapter}-${i}`}
+                                      type="button"
+                                      className="timelineSuggestion"
+                                      disabled={busy || timelineBusy || !activeBook}
+                                      onClick={async () => {
+                                        if (!activeBook) return;
+                                        setTimelineCompressStart(String(s.startChapter));
+                                        setTimelineCompressEnd(String(s.endChapter));
+                                        setTimelineBusy(true);
+                                        try {
+                                          const { index } = await compressTimelineRange(activeBook, {
+                                            startChapter: s.startChapter,
+                                            endChapter: s.endChapter,
+                                            modelConfigId: activeModelId ?? null
+                                          });
+                                          setTimelineIndex(index);
+                                        } catch (e: any) {
+                                          setStatus(e?.message || String(e));
+                                        } finally {
+                                          setTimelineBusy(false);
+                                        }
+                                      }}
+                                      title={s.why}
+                                    >
+                                      压缩 第 {s.startChapter}-{s.endChapter} 章
+                                      <span className="muted timelineSuggestionWhy">{s.why}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="muted auditPanelEmpty">暂无推荐。完成一次分析后会自动生成。</div>
+                              )}
+                            </div>
+
+                            <div className="timelineSection">
+                              <div className="auditPanelTitle">压缩章节</div>
+                              <div className="timelineCompressRow">
+                                <input
+                                  className="timelineInput"
+                                  value={timelineCompressStart}
+                                  onChange={(e) => setTimelineCompressStart(e.target.value)}
+                                  placeholder="起始章号"
+                                  inputMode="numeric"
+                                  disabled={busy || timelineBusy || !activeBook}
+                                />
+                                <span className="muted">到</span>
+                                <input
+                                  className="timelineInput"
+                                  value={timelineCompressEnd}
+                                  onChange={(e) => setTimelineCompressEnd(e.target.value)}
+                                  placeholder="结束章号"
+                                  inputMode="numeric"
+                                  disabled={busy || timelineBusy || !activeBook}
+                                />
+                                <button
+                                  type="button"
+                                  className="btnSort"
+                                  disabled={busy || timelineBusy || !activeBook}
+                                  onClick={async () => {
+                                    if (!activeBook) return;
+                                    const a = parseInt(timelineCompressStart, 10);
+                                    const b = parseInt(timelineCompressEnd, 10);
+                                    if (!Number.isFinite(a) || !Number.isFinite(b) || a < 1 || b < 1) {
+                                      setStatus("请输入有效的起止章号。");
+                                      return;
+                                    }
+                                    setTimelineBusy(true);
+                                    try {
+                                      const { index } = await compressTimelineRange(activeBook, {
+                                        startChapter: a,
+                                        endChapter: b,
+                                        modelConfigId: activeModelId ?? null
+                                      });
+                                      setTimelineIndex(index);
+                                    } catch (e: any) {
+                                      setStatus(e?.message || String(e));
+                                    } finally {
+                                      setTimelineBusy(false);
+                                    }
+                                  }}
+                                >
+                                  {timelineBusy ? "压缩中…" : "压缩"}
+                                </button>
+                              </div>
+                              <div className="muted timelineHint">已压缩的区间可再次压缩（会覆盖更新）。</div>
+                            </div>
+
+                            <div className="timelineSection">
+                              <div className="auditPanelTitle">区间压缩摘要</div>
+                              {timelineIndex?.compressedRanges?.length ? (
+                                <div className="timelineRangeList">
+                                  {timelineIndex.compressedRanges.map((r, i) => (
+                                    <div key={`${r.startChapter}-${r.endChapter}-${i}`} className="timelineRangeItem">
+                                      <div className="timelineRangeTop">
+                                        <div className="timelineRangeTitle">
+                                          第 {r.startChapter}-{r.endChapter} 章
+                                        </div>
+                                        <button
+                                          type="button"
+                                          className="btnSort"
+                                          disabled={busy || timelineBusy || !activeBook}
+                                          onClick={async () => {
+                                            if (!activeBook) return;
+                                            setTimelineBusy(true);
+                                            try {
+                                              const { index } = await compressTimelineRange(activeBook, {
+                                                startChapter: r.startChapter,
+                                                endChapter: r.endChapter,
+                                                modelConfigId: activeModelId ?? null
+                                              });
+                                              setTimelineIndex(index);
+                                            } catch (e: any) {
+                                              setStatus(e?.message || String(e));
+                                            } finally {
+                                              setTimelineBusy(false);
+                                            }
+                                          }}
+                                        >
+                                          再次压缩
+                                        </button>
+                                      </div>
+                                      <div className="timelineRangeSummary">{r.summary}</div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="muted auditPanelEmpty">暂无压缩区间。</div>
+                              )}
+                            </div>
+
+                            <div className="timelineSection">
+                              <div className="auditPanelTitle">关键事件</div>
+                              {timelineIndex?.events?.length ? (
+                                <div className="timelineEventList">
+                                  {timelineIndex.events
+                                    .filter((e) => (timelineShowDoneEvents ? true : e.status !== "done"))
+                                    .filter((e) =>
+                                      timelineShowDoneEvents
+                                        ? true
+                                        : !(timelineIndex.manual?.doneEventIds ?? []).includes(e.id)
+                                    )
+                                    .slice(0, 200)
+                                    .map((e) => {
+                                      const done =
+                                        (timelineIndex.manual?.doneEventIds ?? []).includes(e.id) || e.status === "done";
+                                      return (
+                                        <div
+                                          key={e.id}
+                                          className={`timelineEventItem ${done ? "done" : ""}`}
+                                          data-event-id={e.id}
+                                        >
+                                          <div className="timelineEventTop">
+                                            <div className="timelineEventTitle">
+                                              第 {e.startChapter}
+                                              {e.endChapter !== e.startChapter ? `-${e.endChapter}` : ""} 章 · {e.title}
+                                            </div>
+                                            <button
+                                              type="button"
+                                              className="btnSort"
+                                              disabled={busy || timelineBusy || !activeBook}
+                                              onClick={async () => {
+                                                if (!activeBook) return;
+                                                setTimelineBusy(true);
+                                                try {
+                                                  const { index } = await markTimelineEvent(activeBook, {
+                                                    id: e.id,
+                                                    status: done ? "open" : "done"
+                                                  });
+                                                  setTimelineIndex(index);
+                                                } catch (err: any) {
+                                                  setStatus(err?.message || String(err));
+                                                } finally {
+                                                  setTimelineBusy(false);
+                                                }
+                                              }}
+                                            >
+                                              {done ? "取消完成" : "标记完成"}
+                                            </button>
+                                          </div>
+                                          <div className="timelineEventSummary muted">{e.summary}</div>
+                                        </div>
+                                      );
+                                    })}
+                                </div>
+                              ) : (
+                                <div className="muted auditPanelEmpty">事件将在后续版本中逐步补全（目前以每章摘要为主）。</div>
+                              )}
+                            </div>
+
+                            <div className="timelineSection">
+                              <div className="auditPanelTitle">每章摘要</div>
+                              {timelineIndex?.chapters?.length ? (
+                                <div className="timelineChapterList">
+                                  {[...timelineIndex.chapters]
+                                    .slice()
+                                    .reverse()
+                                    .slice(0, 80)
+                                    .map((c) => (
+                                      <div key={c.filename} className="timelineChapterItem">
+                                        <div className="timelineChapterTop">
+                                          <div className="timelineChapterTitle">
+                                            第 {c.chapter} 章 · {c.title}
+                                          </div>
+                                          <div className="muted timelineChapterMeta">{c.filename}</div>
+                                        </div>
+                                        <div className="timelineChapterGist">{c.gistL1}</div>
+                                      </div>
+                                    ))}
+                                </div>
+                              ) : (
+                                <div className="muted auditPanelEmpty">还没有章节摘要。对任意章节完成一次分析后，这里会出现。</div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="foreshadowPanel">
+                            {(() => {
+                              const all = Array.isArray(auditForeshadowsIndex?.foreshadows)
+                                ? (auditForeshadowsIndex.foreshadows as any[])
+                                    .map((f) => ({
+                                      ...f,
+                                      id: String(f?.id || "").trim(),
+                                      title: String(f?.title || "").trim()
+                                    }))
+                                    .filter((f) => f.id && f.title)
+                                : [];
+                              const hiddenSet = new Set(
+                                Array.isArray(auditForeshadowsIndex?.hiddenIds)
+                                  ? (auditForeshadowsIndex.hiddenIds as any[]).map((x) => String(x))
+                                  : []
+                              );
+                              const visible = all.filter((f) => !hiddenSet.has(f.id));
+                              const hidden = all.filter((f) => hiddenSet.has(f.id));
+                              const statusLabel = (s: string) =>
+                                s === "closed" ? "已回收" : s === "progress" ? "推进中" : "未回收";
+                              return (
+                                <>
+                                  <div className="foreshadowTopRow">
+                                    <button
+                                      type="button"
+                                      className="btnSort"
+                                      disabled={busy || !activeBook}
+                                      onClick={() => setForeshadowCreateOpen(true)}
+                                    >
+                                      新增伏笔
+                                    </button>
+                                    <div className="muted">自动来自审计：openLoops / closedLoops（你也可以手动维护）</div>
+                                  </div>
+
+                                  {visible.length ? (
+                                    <div className="foreshadowList">
+                                      {visible.map((f) => {
+                                        const st = String(f.status || "open");
+                                        const badgeCls =
+                                          st === "closed"
+                                            ? "foreshadowBadge foreshadowBadgeClosed"
+                                            : st === "progress"
+                                              ? "foreshadowBadge foreshadowBadgeProgress"
+                                              : "foreshadowBadge foreshadowBadgeOpen";
+                                        const first = Number.isFinite(Number(f.firstChapter)) ? Number(f.firstChapter) : null;
+                                        const last = Number.isFinite(Number(f.lastChapter)) ? Number(f.lastChapter) : null;
+                                        const expanded = Boolean(foreshadowExpanded[f.id]);
+                                        const lastProgressText = String(f.lastProgress || "").trim();
+                                        const noteText = String(f.note || "").trim();
+                                        const compactText = lastProgressText || noteText;
+                                        return (
+                                          <div key={f.id} className="foreshadowItem" data-foreshadow-id={f.id}>
+                                            <div className="foreshadowItemTop">
+                                              <button
+                                                type="button"
+                                                className="foreshadowExpandBtn"
+                                                disabled={busy}
+                                                onClick={() =>
+                                                  setForeshadowExpanded((prev) => ({
+                                                    ...prev,
+                                                    [f.id]: !Boolean(prev[f.id])
+                                                  }))
+                                                }
+                                                aria-expanded={expanded}
+                                                title={expanded ? "收起" : "展开查看"}
+                                              >
+                                                {expanded ? "▾" : "▸"}
+                                              </button>
+                                              <div className="foreshadowTitleRow">
+                                                <div className="foreshadowTitle">{f.title}</div>
+                                                <span className={badgeCls}>{statusLabel(st)}</span>
+                                              </div>
+                                              <div className="foreshadowItemRight row">
+                                                <button
+                                                  type="button"
+                                                  className="btnSort"
+                                                  disabled={busy || !activeBook}
+                                                  onClick={() => openEditForeshadow(f)}
+                                                >
+                                                  编辑
+                                                </button>
+                                                <button
+                                                  type="button"
+                                                  className="btnSort"
+                                                  disabled={busy || !activeBook}
+                                                  onClick={async () => {
+                                                    if (!activeBook) return;
+                                                    try {
+                                                      const { index } = await hideAuditForeshadow(activeBook, {
+                                                        id: f.id,
+                                                        hidden: true
+                                                      });
+                                                      setAuditForeshadowsIndex(index);
+                                                    } catch (e: any) {
+                                                      setStatus(e?.message || String(e));
+                                                    }
+                                                  }}
+                                                >
+                                                  隐藏
+                                                </button>
+                                              </div>
+                                            </div>
+
+                                            <div className="foreshadowMeta muted">
+                                              {first ? (
+                                                <button
+                                                  type="button"
+                                                  className="btnLinkMuted"
+                                                  disabled={busy || !activeBook}
+                                                  onClick={() => {
+                                                    const c = chapters.find((x) => x.id === String(first));
+                                                    if (c) void onOpenChapter(c);
+                                                  }}
+                                                >
+                                                  首次：第 {first} 章
+                                                </button>
+                                              ) : (
+                                                <span>首次：—</span>
+                                              )}
+                                              <span className="mutedDot">·</span>
+                                              {last ? (
+                                                <button
+                                                  type="button"
+                                                  className="btnLinkMuted"
+                                                  disabled={busy || !activeBook}
+                                                  onClick={() => {
+                                                    const c = chapters.find((x) => x.id === String(last));
+                                                    if (c) void onOpenChapter(c);
+                                                  }}
+                                                >
+                                                  最近：第 {last} 章
+                                                </button>
+                                              ) : (
+                                                <span>最近：—</span>
+                                              )}
+                                            </div>
+
+                                            {!expanded ? (
+                                              compactText ? <div className="foreshadowCompact muted">{compactText}</div> : null
+                                            ) : lastProgressText || noteText ? (
+                                              <div className="foreshadowDetails">
+                                                {lastProgressText ? (
+                                                  <div className="foreshadowRow">
+                                                    <div className="foreshadowLabel">最近推进</div>
+                                                    <div className="foreshadowValue">{lastProgressText}</div>
+                                                  </div>
+                                                ) : null}
+                                                {noteText ? (
+                                                  <div className="foreshadowRow">
+                                                    <div className="foreshadowLabel">备注</div>
+                                                    <div className="foreshadowValue">{noteText}</div>
+                                                  </div>
+                                                ) : null}
+                                              </div>
+                                            ) : null}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <div className="muted auditPanelEmpty">
+                                      暂无伏笔。完成一次审计后会自动沉淀；也可以手动新增。
+                                    </div>
+                                  )}
+
+                                  <div className="muted auditHiddenSummary">
+                                    {hidden.length ? (
+                                      <button
+                                        type="button"
+                                        className="btnLinkMuted"
+                                        disabled={busy || !activeBook}
+                                        onClick={() => setHiddenForeshadowPanelOpen(true)}
+                                      >
+                                        已隐藏 {hidden.length}/{all.length} 条伏笔，点击查看
+                                      </button>
+                                    ) : null}
+                                  </div>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </div>
@@ -3537,42 +4376,12 @@ export function App() {
                     <button
                       type="button"
                       role="tab"
-                      className={`browserTab ${rightTab === "auditCharacters" ? "active" : ""}`}
-                      aria-selected={rightTab === "auditCharacters"}
-                      onClick={() => setRightTab("auditCharacters")}
+                      className={`browserTab ${rightTab === "chapterEntities" ? "active" : ""}`}
+                      aria-selected={rightTab === "chapterEntities"}
+                      onClick={() => setRightTab("chapterEntities")}
                       disabled={busy}
                     >
-                      角色
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      className={`browserTab ${rightTab === "places" ? "active" : ""}`}
-                      aria-selected={rightTab === "places"}
-                      onClick={() => setRightTab("places")}
-                      disabled={busy}
-                    >
-                      地点
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      className={`browserTab ${rightTab === "timeline" ? "active" : ""}`}
-                      aria-selected={rightTab === "timeline"}
-                      onClick={() => setRightTab("timeline")}
-                      disabled={busy}
-                    >
-                      时间线
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      className={`browserTab ${rightTab === "foreshadows" ? "active" : ""}`}
-                      aria-selected={rightTab === "foreshadows"}
-                      onClick={() => setRightTab("foreshadows")}
-                      disabled={busy}
-                    >
-                      伏笔
+                      本章实体
                     </button>
                   </div>
                 </div>
@@ -3618,850 +4427,135 @@ export function App() {
                         <div className="muted auditPanelEmpty">暂无分析结果。选中章节后点击「分析」。</div>
                       )}
                     </div>
-                  ) : rightTab === "auditCharacters" ? (
-                    <>
-                      <div className="auditCharList">
-                        {Array.isArray(auditCharactersIndex?.characters) &&
-                        (auditCharactersIndex.characters as any[]).length ? (
-                          (() => {
-                            const all = (auditCharactersIndex.characters as any[])
-                              .map((c) => ({
-                                ...c,
-                                name: String(c?.name || "").trim()
-                              }))
-                              .filter((c) => c.name);
-                            const hiddenSet = new Set(
-                              Array.isArray(auditCharactersIndex?.hiddenNames)
-                                ? (auditCharactersIndex.hiddenNames as any[]).map((x) => String(x))
-                                : []
-                            );
-                            const visible = all.filter((c) => !hiddenSet.has(c.name));
-
-                            return (
-                              <>
-                                {visible.map((c) => {
-                                  const name = String(c?.name || "").trim() || "未命名";
-                                  const id = name;
-                                  const open = !!expandedAuditCharIds[id];
-                                  const roleStr = typeof c?.role === "string" && c.role.trim() ? c.role.trim() : "";
-                                  const st = c?.state && typeof c.state === "object" ? c.state : {};
-                                  const loc = String((st as any).location ?? "").trim();
-                                  const inj = String((st as any).injuries ?? "").trim();
-                                  const items = Array.isArray((st as any).items)
-                                    ? ((st as any).items as unknown[]).map((x) => String(x)).filter(Boolean)
-                                    : [];
-                                  const money = (st as any).moneyChange;
-                                  const tagArr = Array.isArray(c?.tags)
-                                    ? (c.tags as unknown[]).map((x) => String(x)).filter(Boolean)
-                                    : [];
-                                  const personality = String((c as any)?.personalityAnalysis ?? "").trim();
-
-                                  return (
-                                    <div key={id} className="auditCharCard" data-char-name={name}>
-                                      <div className="auditCharCardHeadRow">
-                                        <button
-                                          type="button"
-                                          className="auditCharCardHead"
-                                          aria-expanded={open}
-                                          onClick={() =>
-                                            setExpandedAuditCharIds((prev) => ({ ...prev, [id]: !prev[id] }))
-                                          }
-                                          onDoubleClick={() => {
-                                            openEditCharacter(c);
-                                          }}
-                                          disabled={busy}
-                                          title="双击可编辑角色属性"
-                                        >
-                                          <span className="auditCharIcon" aria-hidden>
-                                            ◎
-                                          </span>
-                                          <span className="auditCharName">{name}</span>
-                                          <span className="auditCharBadges">
-                                            {roleStr ? (
-                                              <span className={auditCharacterRoleClass(roleStr)}>{roleStr}</span>
-                                            ) : null}
-                                          </span>
-                                          <span className={`auditCharChevron ${open ? "open" : ""}`} aria-hidden>
-                                            ›
-                                          </span>
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="btnSort btnCharEdit"
-                                          disabled={busy || !activeBook}
-                                          onClick={() => openEditCharacter(c)}
-                                          title="编辑角色属性"
-                                        >
-                                          编辑
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="btnSort btnCharHide"
-                                          disabled={busy || !activeBook}
-                                          onClick={async () => {
-                                            if (!activeBook) return;
-                                            try {
-                                              const { index } = await hideAuditCharacter(activeBook, {
-                                                name,
-                                                hidden: true
-                                              });
-                                              setAuditCharactersIndex(index);
-                                            } catch (e: any) {
-                                              setStatus(e?.message || String(e));
-                                            }
-                                          }}
-                                          title="隐藏该角色（全书范围）"
-                                        >
-                                          隐藏
-                                        </button>
-                                      </div>
-
-                                      {open ? (
-                                        <div className="auditCharCardBody">
-                                          <div className="auditCharDetailRow">
-                                            <div className="auditCharDetailLabel">身份</div>
-                                            <div className="auditCharDetailValue">{roleStr || "—"}</div>
-                                          </div>
-                                          <div className="auditCharDetailRow">
-                                            <div className="auditCharDetailLabel">标签</div>
-                                            <div className="auditCharDetailValue">
-                                              {tagArr.length ? tagArr.join("、") : "—"}
-                                            </div>
-                                          </div>
-                                          <div className="auditCharDetailRow">
-                                            <div className="auditCharDetailLabel">地点</div>
-                                            <div className="auditCharDetailValue">{loc || "—"}</div>
-                                          </div>
-                                          <div className="auditCharDetailRow">
-                                            <div className="auditCharDetailLabel">伤势与状态</div>
-                                            <div className="auditCharDetailValue">{inj || "—"}</div>
-                                          </div>
-                                          <div className="auditCharDetailRow">
-                                            <div className="auditCharDetailLabel">随身物品</div>
-                                            <div className="auditCharDetailValue">
-                                              {items.length ? items.join("、") : "—"}
-                                            </div>
-                                          </div>
-                                          <div className="auditCharDetailRow">
-                                            <div className="auditCharDetailLabel">金钱变动</div>
-                                            <div className="auditCharDetailValue">
-                                              {money !== undefined && money !== null && money !== ""
-                                                ? String(money)
-                                                : "—"}
-                                            </div>
-                                          </div>
-                                          {auditCharStateExtraRows(st as Record<string, unknown>).map(([lk, lv], ri) => (
-                                            <div key={`st-${lk}-${ri}`} className="auditCharDetailRow">
-                                              <div className="auditCharDetailLabel">{lk}</div>
-                                              <div className="auditCharDetailValue">{lv}</div>
-                                            </div>
-                                          ))}
-                                          {auditCharTopExtraRows(c as Record<string, unknown>).map(([lk, lv], ri) => (
-                                            <div key={`ex-${lk}-${ri}`} className="auditCharDetailRow">
-                                              <div className="auditCharDetailLabel">{lk}</div>
-                                              <div className="auditCharDetailValue">{lv}</div>
-                                            </div>
-                                          ))}
-                                          <div className="auditCharQuotes">
-                                            <div className="auditCharDetailLabel">性格分析</div>
-                                            <div className="auditCharDetailValue">
-                                              {personality ? personality : "—"}
-                                            </div>
-                                          </div>
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  );
-                                })}
-
-                                <div className="muted auditHiddenSummary">
-                                  {(() => {
-                                    const hidden = all.filter((c) => hiddenSet.has(c.name));
-                                    if (!hidden.length) return null;
-                                    return (
-                                      <button
-                                        type="button"
-                                        className="btnLinkMuted"
-                                        disabled={busy || !activeBook}
-                                        onClick={() => setHiddenCharPanelOpen(true)}
-                                      >
-                                        已隐藏 {hidden.length}/{all.length} 个角色，点击查看
-                                      </button>
-                                    );
-                                  })()}
-                                </div>
-                              </>
-                            );
-                          })()
-                        ) : (
-                          <div className="muted auditPanelEmpty">暂无角色库。完成一次分析后会自动沉淀到这里。</div>
-                        )}
-                      </div>
-                    </>
-                  ) : rightTab === "places" ? (
-                    <div className="placePanel">
-                      {Array.isArray(auditPlacesIndex?.places) && (auditPlacesIndex.places as any[]).length ? (
-                        (() => {
-                          const all = (auditPlacesIndex.places as any[])
-                            .map((p) => ({ ...p, name: String(p?.name || "").trim() }))
-                            .filter((p) => p.name);
-                          const hiddenSet = new Set(
-                            Array.isArray(auditPlacesIndex?.hiddenNames)
-                              ? (auditPlacesIndex.hiddenNames as any[]).map((x) => String(x))
-                              : []
-                          );
-                          const visible = all.filter((p) => !hiddenSet.has(p.name));
-                          const inferGroup = (name: string) => {
-                            const n = String(name || "").trim();
-                            if (!n) return "未分组";
-                            // 常见写法：青石村·晒谷场 / 青石村-晒谷场 / 青石村 晒谷场
-                            const m = n.split(/[·•—\-\/\s]/).map((s) => s.trim()).filter(Boolean);
-                            return m[0] ? m[0] : "未分组";
-                          };
-                          const groups = new Map<string, any[]>();
-                          for (const p of visible) {
-                            const g = String((p as any).group || "").trim() || inferGroup(p.name);
-                            if (!groups.has(g)) groups.set(g, []);
-                            groups.get(g)!.push(p);
-                          }
-                          const groupNames = [...groups.keys()].sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
-                          return (
-                            <>
-                              <div className="placeList">
-                                {groupNames.map((g) => {
-                                  const list = groups.get(g) || [];
-                                  const collapsed = !!placeGroupCollapsed[g];
-                                  return (
-                                    <div key={g} className="placeGroup">
-                                      <button
-                                        type="button"
-                                        className="placeGroupHead"
-                                        onClick={() => setPlaceGroupCollapsed((prev) => ({ ...prev, [g]: !prev[g] }))}
-                                        disabled={busy}
-                                      >
-                                        <span className="placeGroupTitle">{g}</span>
-                                        <span className="muted placeGroupCount">{list.length}</span>
-                                        <span className={`placeGroupChevron ${collapsed ? "" : "open"}`} aria-hidden>
-                                          ›
-                                        </span>
-                                      </button>
-                                      {!collapsed ? (
-                                        <div className="placeGroupBody">
-                                          {list.map((p) => {
-                                            const key = `${g}::${p.name}`;
-                                            const expanded = !!placeTextExpanded[key];
-                                            const noteText = String(p.lastNote || "").trim() || "—";
-                                            const noteNeedToggle = noteText.length >= 36;
-                                            return (
-                                              <div key={p.name} className="placeCard" data-place-name={p.name}>
-                                                <div className="placeCardTop">
-                                                  <div className="placeName">{p.name}</div>
-                                                  <div className="row">
-                                                    <button
-                                                      type="button"
-                                                      className="btnSort"
-                                                      disabled={busy || !activeBook}
-                                                      onClick={() => openEditPlace(p)}
-                                                    >
-                                                      编辑
-                                                    </button>
-                                                    <button
-                                                      type="button"
-                                                      className="btnSort"
-                                                      disabled={busy || !activeBook}
-                                                      onClick={async () => {
-                                                        if (!activeBook) return;
-                                                        try {
-                                                          const { index } = await hideAuditPlace(activeBook, {
-                                                            name: p.name,
-                                                            hidden: true
-                                                          });
-                                                          setAuditPlacesIndex(index);
-                                                        } catch (e: any) {
-                                                          setStatus(e?.message || String(e));
-                                                        }
-                                                      }}
-                                                    >
-                                                      隐藏
-                                                    </button>
-                                                  </div>
-                                                </div>
-                                                <div className="placeBody">
-                                                  <div className="placeRow">
-                                                    <div className="placeLabel">简述</div>
-                                                    <div className="placeValue">
-                                                      {String(p.description || "").trim() || "—"}
-                                                    </div>
-                                                  </div>
-                                                  <div className="placeRow">
-                                                    <div className="placeLabel">本地发生</div>
-                                                    <div className="placeValue">
-                                                      <div className={expanded ? "placeNote" : "placeNote placeNoteClamp2"}>
-                                                        {noteText}
-                                                      </div>
-                                                      {noteNeedToggle ? (
-                                                        <button
-                                                          type="button"
-                                                          className="btnLinkMuted placeNoteToggle"
-                                                          onClick={() =>
-                                                            setPlaceTextExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
-                                                          }
-                                                          disabled={busy}
-                                                        >
-                                                          {expanded ? "收起" : "…展开"}
-                                                        </button>
-                                                      ) : null}
-                                                    </div>
-                                                  </div>
-                                                  <div className="placeMeta muted">
-                                                    {p.lastChapter ? `最近出现：第 ${p.lastChapter} 章` : ""}
-                                                  </div>
-                                                </div>
-                                              </div>
-                                            );
-                                          })}
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                              <div className="muted auditHiddenSummary">
-                                {(() => {
-                                  const hidden = all.filter((p) => hiddenSet.has(p.name));
-                                  if (!hidden.length) return null;
-                                  return (
-                                    <button
-                                      type="button"
-                                      className="btnLinkMuted"
-                                      disabled={busy || !activeBook}
-                                      onClick={() => setHiddenPlacePanelOpen(true)}
-                                    >
-                                      已隐藏 {hidden.length}/{all.length} 个地点，点击查看
-                                    </button>
-                                  );
-                                })()}
-                              </div>
-                            </>
-                          );
-                        })()
-                      ) : (
-                        <div className="muted auditPanelEmpty">暂无地点卡。完成一次分析后会自动收集地点。</div>
-                      )}
-                    </div>
-                  ) : rightTab === "story" ? (
-                    <div className="list">
-                      {storyFiles.map((f) => (
-                        <button
-                          key={f.path}
-                          data-story-path={f.path}
-                          className={`item ${selectedCard?.path === f.path ? "active" : ""}`}
-                          onClick={() => onOpenCard(f)}
-                          disabled={busy}
-                        >
-                          {f.title}
-                        </button>
-                      ))}
-                    </div>
-                  ) : rightTab === "timeline" ? (
-                    <div className="timelinePanel">
-                      <div className="timelineTopRow">
-                        <button
-                          type="button"
-                          className="btnSort"
-                          disabled={busy || timelineBusy || !activeBook}
-                          onClick={() => activeBook && void refreshTimelineIndex(activeBook)}
-                        >
-                          刷新
-                        </button>
-                        <label className="toggle timelineToggle">
-                          <input
-                            type="checkbox"
-                            checked={timelineShowDoneEvents}
-                            onChange={(e) => setTimelineShowDoneEvents(e.target.checked)}
-                            disabled={busy}
-                          />
-                          显示已完成事件
-                        </label>
-                      </div>
-
-                      <div className="timelineSection">
-                        <div className="auditPanelTitle">推荐压缩区间</div>
-                        {timelineIndex?.compressionSuggestions?.length ? (
-                          <div className="timelineSuggestionList">
-                            {timelineIndex.compressionSuggestions.map((s, i) => (
-                              <button
-                                key={`${s.startChapter}-${s.endChapter}-${i}`}
-                                type="button"
-                                className="timelineSuggestion"
-                                disabled={busy || timelineBusy || !activeBook}
-                                onClick={async () => {
-                                  if (!activeBook) return;
-                                  setTimelineCompressStart(String(s.startChapter));
-                                  setTimelineCompressEnd(String(s.endChapter));
-                                  setTimelineBusy(true);
-                                  try {
-                                    const { index } = await compressTimelineRange(activeBook, {
-                                      startChapter: s.startChapter,
-                                      endChapter: s.endChapter,
-                                      modelConfigId: activeModelId ?? null
-                                    });
-                                    setTimelineIndex(index);
-                                  } catch (e: any) {
-                                    setStatus(e?.message || String(e));
-                                  } finally {
-                                    setTimelineBusy(false);
-                                  }
-                                }}
-                                title={s.why}
-                              >
-                                压缩 第 {s.startChapter}-{s.endChapter} 章
-                                <span className="muted timelineSuggestionWhy">{s.why}</span>
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="muted auditPanelEmpty">暂无推荐。完成一次分析后会自动生成。</div>
-                        )}
-                      </div>
-
-                      <div className="timelineSection">
-                        <div className="auditPanelTitle">压缩章节</div>
-                        <div className="timelineCompressRow">
-                          <input
-                            className="timelineInput"
-                            value={timelineCompressStart}
-                            onChange={(e) => setTimelineCompressStart(e.target.value)}
-                            placeholder="起始章号"
-                            inputMode="numeric"
-                            disabled={busy || timelineBusy || !activeBook}
-                          />
-                          <span className="muted">到</span>
-                          <input
-                            className="timelineInput"
-                            value={timelineCompressEnd}
-                            onChange={(e) => setTimelineCompressEnd(e.target.value)}
-                            placeholder="结束章号"
-                            inputMode="numeric"
-                            disabled={busy || timelineBusy || !activeBook}
-                          />
-                          <button
-                            type="button"
-                            className="btnSort"
-                            disabled={busy || timelineBusy || !activeBook}
-                            onClick={async () => {
-                              if (!activeBook) return;
-                              const a = parseInt(timelineCompressStart, 10);
-                              const b = parseInt(timelineCompressEnd, 10);
-                              if (!Number.isFinite(a) || !Number.isFinite(b) || a < 1 || b < 1) {
-                                setStatus("请输入有效的起止章号。");
-                                return;
-                              }
-                              setTimelineBusy(true);
-                              try {
-                                const { index } = await compressTimelineRange(activeBook, {
-                                  startChapter: a,
-                                  endChapter: b,
-                                  modelConfigId: activeModelId ?? null
-                                });
-                                setTimelineIndex(index);
-                              } catch (e: any) {
-                                setStatus(e?.message || String(e));
-                              } finally {
-                                setTimelineBusy(false);
-                              }
-                            }}
-                          >
-                            {timelineBusy ? "压缩中…" : "压缩"}
-                          </button>
-                        </div>
-                        <div className="muted timelineHint">已压缩的区间可再次压缩（会覆盖更新）。</div>
-                      </div>
-
-                      <div className="timelineSection">
-                        <div className="auditPanelTitle">区间压缩摘要</div>
-                        {timelineIndex?.compressedRanges?.length ? (
-                          <div className="timelineRangeList">
-                            {timelineIndex.compressedRanges.map((r, i) => (
-                              <div key={`${r.startChapter}-${r.endChapter}-${i}`} className="timelineRangeItem">
-                                <div className="timelineRangeTop">
-                                  <div className="timelineRangeTitle">
-                                    第 {r.startChapter}-{r.endChapter} 章
-                                  </div>
-                                  <button
-                                    type="button"
-                                    className="btnSort"
-                                    disabled={busy || timelineBusy || !activeBook}
-                                    onClick={async () => {
-                                      if (!activeBook) return;
-                                      setTimelineBusy(true);
-                                      try {
-                                        const { index } = await compressTimelineRange(activeBook, {
-                                          startChapter: r.startChapter,
-                                          endChapter: r.endChapter,
-                                          modelConfigId: activeModelId ?? null
-                                        });
-                                        setTimelineIndex(index);
-                                      } catch (e: any) {
-                                        setStatus(e?.message || String(e));
-                                      } finally {
-                                        setTimelineBusy(false);
-                                      }
-                                    }}
-                                  >
-                                    再次压缩
-                                  </button>
-                                </div>
-                                <div className="timelineRangeSummary">{r.summary}</div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="muted auditPanelEmpty">暂无压缩区间。</div>
-                        )}
-                      </div>
-
-                      <div className="timelineSection">
-                        <div className="auditPanelTitle">关键事件</div>
-                        {timelineIndex?.events?.length ? (
-                          <div className="timelineEventList">
-                            {timelineIndex.events
-                              .filter((e) => (timelineShowDoneEvents ? true : e.status !== "done"))
-                              .filter((e) =>
-                                timelineShowDoneEvents
-                                  ? true
-                                  : !(timelineIndex.manual?.doneEventIds ?? []).includes(e.id)
-                              )
-                              .slice(0, 200)
-                              .map((e) => {
-                                const done = (timelineIndex.manual?.doneEventIds ?? []).includes(e.id) || e.status === "done";
-                                return (
-                                  <div
-                                    key={e.id}
-                                    className={`timelineEventItem ${done ? "done" : ""}`}
-                                    data-event-id={e.id}
-                                  >
-                                    <div className="timelineEventTop">
-                                      <div className="timelineEventTitle">
-                                        第 {e.startChapter}
-                                        {e.endChapter !== e.startChapter ? `-${e.endChapter}` : ""} 章 · {e.title}
-                                      </div>
-                                      <button
-                                        type="button"
-                                        className="btnSort"
-                                        disabled={busy || timelineBusy || !activeBook}
-                                        onClick={async () => {
-                                          if (!activeBook) return;
-                                          setTimelineBusy(true);
-                                          try {
-                                            const { index } = await markTimelineEvent(activeBook, {
-                                              id: e.id,
-                                              status: done ? "open" : "done"
-                                            });
-                                            setTimelineIndex(index);
-                                          } catch (err: any) {
-                                            setStatus(err?.message || String(err));
-                                          } finally {
-                                            setTimelineBusy(false);
-                                          }
-                                        }}
-                                      >
-                                        {done ? "取消完成" : "标记完成"}
-                                      </button>
-                                    </div>
-                                    <div className="timelineEventSummary muted">{e.summary}</div>
-                                  </div>
-                                );
-                              })}
-                          </div>
-                        ) : (
-                          <div className="muted auditPanelEmpty">事件将在后续版本中逐步补全（目前以每章摘要为主）。</div>
-                        )}
-                      </div>
-
-                      <div className="timelineSection">
-                        <div className="auditPanelTitle">每章摘要</div>
-                        {timelineIndex?.chapters?.length ? (
-                          <div className="timelineChapterList">
-                            {[...timelineIndex.chapters]
-                              .slice()
-                              .reverse()
-                              .slice(0, 80)
-                              .map((c) => (
-                                <div key={c.filename} className="timelineChapterItem">
-                                  <div className="timelineChapterTop">
-                                    <div className="timelineChapterTitle">
-                                      第 {c.chapter} 章 · {c.title}
-                                    </div>
-                                    <div className="muted timelineChapterMeta">{c.filename}</div>
-                                  </div>
-                                  <div className="timelineChapterGist">{c.gistL1}</div>
-                                </div>
-                              ))}
-                          </div>
-                        ) : (
-                          <div className="muted auditPanelEmpty">还没有章节摘要。对任意章节完成一次分析后，这里会出现。</div>
-                        )}
-                      </div>
-                    </div>
-                  ) : rightTab === "orgs" ? (
-                    <div className="placePanel">
-                      {Array.isArray(auditOrgsIndex?.orgs) && (auditOrgsIndex.orgs as any[]).length ? (
-                        (() => {
-                          const all = (auditOrgsIndex.orgs as any[])
-                            .map((o) => ({ ...o, name: String(o?.name || "").trim() }))
-                            .filter((o) => o.name);
-                          const hiddenSet = new Set(
-                            Array.isArray(auditOrgsIndex?.hiddenNames)
-                              ? (auditOrgsIndex.hiddenNames as any[]).map((x) => String(x))
-                              : []
-                          );
-                          const visible = all.filter((o) => !hiddenSet.has(o.name));
-                          return (
-                            <>
-                              <div className="placeList">
-                                {visible.map((o) => (
-                                  <div key={o.name} className="placeCard" data-org-name={o.name}>
-                                    <div className="placeCardTop">
-                                      <div className="placeName">{o.name}</div>
-                                      <div className="row">
-                                        <button
-                                          type="button"
-                                          className="btnSort"
-                                          disabled={busy || !activeBook}
-                                          onClick={() => openEditOrg(o)}
-                                        >
-                                          编辑
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="btnSort"
-                                          disabled={busy || !activeBook}
-                                          onClick={async () => {
-                                            if (!activeBook) return;
-                                            try {
-                                              const { index } = await hideAuditOrg(activeBook, {
-                                                name: o.name,
-                                                hidden: true
-                                              });
-                                              setAuditOrgsIndex(index);
-                                            } catch (e: any) {
-                                              setStatus(e?.message || String(e));
-                                            }
-                                          }}
-                                        >
-                                          隐藏
-                                        </button>
-                                      </div>
-                                    </div>
-                                    <div className="placeBody">
-                                      <div className="placeRow">
-                                        <div className="placeLabel">简述</div>
-                                        <div className="placeValue">{String(o.description || "").trim() || "—"}</div>
-                                      </div>
-                                      <div className="placeRow">
-                                        <div className="placeLabel">动态</div>
-                                        <div className="placeValue">{String(o.lastNote || "").trim() || "—"}</div>
-                                      </div>
-                                      <div className="placeMeta muted">
-                                        {o.lastChapter ? `最近出现：第 ${o.lastChapter} 章` : ""}
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                              <div className="muted auditHiddenSummary">
-                                {(() => {
-                                  const hidden = all.filter((o) => hiddenSet.has(o.name));
-                                  if (!hidden.length) return null;
-                                  return (
-                                    <button
-                                      type="button"
-                                      className="btnLinkMuted"
-                                      disabled={busy || !activeBook}
-                                      onClick={() => setHiddenOrgPanelOpen(true)}
-                                    >
-                                      已隐藏 {hidden.length}/{all.length} 个组织，点击查看
-                                    </button>
-                                  );
-                                })()}
-                              </div>
-                            </>
-                          );
-                        })()
-                      ) : (
-                        <div className="muted auditPanelEmpty">暂无组织卡。完成一次分析后会自动收集组织。</div>
-                      )}
-                    </div>
-                  ) : rightTab === "foreshadows" ? (
-                    <div className="foreshadowPanel">
+                  ) : rightTab === "chapterEntities" ? (
+                    <div className="chapterEntitiesPanel">
                       {(() => {
-                        const all = Array.isArray(auditForeshadowsIndex?.foreshadows)
-                          ? (auditForeshadowsIndex.foreshadows as any[])
-                              .map((f) => ({ ...f, id: String(f?.id || "").trim(), title: String(f?.title || "").trim() }))
-                              .filter((f) => f.id && f.title)
-                          : [];
-                        const hiddenSet = new Set(
-                          Array.isArray(auditForeshadowsIndex?.hiddenIds)
-                            ? (auditForeshadowsIndex.hiddenIds as any[]).map((x) => String(x))
-                            : []
-                        );
-                        const visible = all.filter((f) => !hiddenSet.has(f.id));
-                        const hidden = all.filter((f) => hiddenSet.has(f.id));
-                        const statusLabel = (s: string) => (s === "closed" ? "已回收" : s === "progress" ? "推进中" : "未回收");
+                        const chars = Array.isArray(auditRun?.entities?.characters) ? (auditRun.entities.characters as any[]) : [];
+                        const events = Array.isArray(auditRun?.entities?.events) ? (auditRun.entities.events as any[]) : [];
+                        const pickPlace = (ev: any) =>
+                          String(
+                            ev?.place ??
+                              ev?.location ??
+                              ev?.where ??
+                              ev?.["地点"] ??
+                              ev?.["发生地点"] ??
+                              ""
+                          ).trim();
+                        const pickOrg = (ev: any) =>
+                          String(
+                            ev?.org ??
+                              ev?.organization ??
+                              ev?.faction ??
+                              ev?.["组织"] ??
+                              ev?.["势力"] ??
+                              ""
+                          ).trim();
+                        const places = new Map<string, string>();
+                        const orgs = new Map<string, string>();
+                        for (const ev of events) {
+                          const pn = pickPlace(ev);
+                          const on = pickOrg(ev);
+                          const note = String(ev?.summary || ev?.what || ev?.event || auditRun?.gistL1 || "").trim();
+                          if (pn && !places.has(pn)) places.set(pn, note);
+                          if (on && !orgs.has(on)) orgs.set(on, note);
+                        }
                         return (
                           <>
-                            <div className="foreshadowTopRow">
-                              <button
-                                type="button"
-                                className="btnSort"
-                                disabled={busy || !activeBook}
-                                onClick={() => setForeshadowCreateOpen(true)}
-                              >
-                                新增伏笔
-                              </button>
-                              <div className="muted">
-                                自动来自审计：openLoops / closedLoops（你也可以手动维护）
+                            <div className="auditPanel">
+                              <div className="auditPanelBody">
+                                <div className="auditPanelTitle">本章角色</div>
+                                {chars.length ? (
+                                  <div className="chapterEntityList">
+                                    {chars
+                                      .map((c) => ({
+                                        name: String(c?.name || "").trim(),
+                                        role: String(c?.role || "").trim()
+                                      }))
+                                      .filter((c) => c.name)
+                                      .slice(0, 80)
+                                      .map((c) => (
+                                        <button
+                                          key={c.name}
+                                          type="button"
+                                          className="chapterEntityItem"
+                                          disabled={busy}
+                                          onClick={() => jumpToOrganize("auditCharacters", c.name)}
+                                          title="去左侧全局角色库查看"
+                                        >
+                                          <span className="chapterEntityName">{c.name}</span>
+                                          {c.role ? <span className="muted chapterEntityMeta">{c.role}</span> : null}
+                                        </button>
+                                      ))}
+                                  </div>
+                                ) : (
+                                  <div className="muted auditPanelEmpty">本章未抽取到角色。</div>
+                                )}
                               </div>
                             </div>
 
-                            {visible.length ? (
-                              <div className="foreshadowList">
-                                {visible.map((f) => {
-                                  const st = String(f.status || "open");
-                                  const badgeCls =
-                                    st === "closed"
-                                      ? "foreshadowBadge foreshadowBadgeClosed"
-                                      : st === "progress"
-                                        ? "foreshadowBadge foreshadowBadgeProgress"
-                                        : "foreshadowBadge foreshadowBadgeOpen";
-                                  const first = Number.isFinite(Number(f.firstChapter)) ? Number(f.firstChapter) : null;
-                                  const last = Number.isFinite(Number(f.lastChapter)) ? Number(f.lastChapter) : null;
-                                  const expanded = Boolean(foreshadowExpanded[f.id]);
-                                  const lastProgressText = String(f.lastProgress || "").trim();
-                                  const noteText = String(f.note || "").trim();
-                                  const compactText = lastProgressText || noteText;
-                                  return (
-                                    <div key={f.id} className="foreshadowItem" data-foreshadow-id={f.id}>
-                                      <div className="foreshadowItemTop">
-                                        <button
-                                          type="button"
-                                          className="foreshadowExpandBtn"
-                                          disabled={busy}
-                                          onClick={() =>
-                                            setForeshadowExpanded((prev) => ({ ...prev, [f.id]: !Boolean(prev[f.id]) }))
-                                          }
-                                          aria-expanded={expanded}
-                                          title={expanded ? "收起" : "展开查看"}
-                                        >
-                                          {expanded ? "▾" : "▸"}
-                                        </button>
-                                        <div className="foreshadowTitleRow">
-                                          <div className="foreshadowTitle">{f.title}</div>
-                                          <span className={badgeCls}>{statusLabel(st)}</span>
-                                        </div>
-                                        <div className="foreshadowItemRight row">
-                                          <button
-                                            type="button"
-                                            className="btnSort"
-                                            disabled={busy || !activeBook}
-                                            onClick={() => openEditForeshadow(f)}
-                                          >
-                                            编辑
-                                          </button>
-                                          <button
-                                            type="button"
-                                            className="btnSort"
-                                            disabled={busy || !activeBook}
-                                            onClick={async () => {
-                                              if (!activeBook) return;
-                                              try {
-                                                const { index } = await hideAuditForeshadow(activeBook, {
-                                                  id: f.id,
-                                                  hidden: true
-                                                });
-                                                setAuditForeshadowsIndex(index);
-                                              } catch (e: any) {
-                                                setStatus(e?.message || String(e));
-                                              }
-                                            }}
-                                          >
-                                            隐藏
-                                          </button>
-                                        </div>
-                                      </div>
-
-                                      <div className="foreshadowMeta muted">
-                                          {first ? (
-                                            <button
-                                              type="button"
-                                              className="btnLinkMuted"
-                                              disabled={busy || !activeBook}
-                                              onClick={() => {
-                                                const c = chapters.find((x) => x.id === String(first));
-                                                if (c) void onOpenChapter(c);
-                                              }}
-                                            >
-                                              首次：第 {first} 章
-                                            </button>
-                                          ) : (
-                                            <span>首次：—</span>
-                                          )}
-                                          <span className="mutedDot">·</span>
-                                          {last ? (
-                                            <button
-                                              type="button"
-                                              className="btnLinkMuted"
-                                              disabled={busy || !activeBook}
-                                              onClick={() => {
-                                                const c = chapters.find((x) => x.id === String(last));
-                                                if (c) void onOpenChapter(c);
-                                              }}
-                                            >
-                                              最近：第 {last} 章
-                                            </button>
-                                          ) : (
-                                            <span>最近：—</span>
-                                          )}
-                                      </div>
-
-                                      {!expanded ? (
-                                        compactText ? <div className="foreshadowCompact muted">{compactText}</div> : null
-                                      ) : lastProgressText || noteText ? (
-                                        <div className="foreshadowDetails">
-                                          {lastProgressText ? (
-                                            <div className="foreshadowRow">
-                                              <div className="foreshadowLabel">最近推进</div>
-                                              <div className="foreshadowValue">{lastProgressText}</div>
-                                            </div>
-                                          ) : null}
-                                          {noteText ? (
-                                            <div className="foreshadowRow">
-                                              <div className="foreshadowLabel">备注</div>
-                                              <div className="foreshadowValue">{noteText}</div>
-                                            </div>
-                                          ) : null}
-                                        </div>
-                                      ) : null}
-                                    </div>
-                                  );
-                                })}
+                            <div className="auditPanel">
+                              <div className="auditPanelBody">
+                                <div className="auditPanelTitle">本章地点</div>
+                                {places.size ? (
+                                  <div className="chapterEntityList">
+                                    {[...places.entries()].slice(0, 80).map(([name, note]) => (
+                                      <button
+                                        key={name}
+                                        type="button"
+                                        className="chapterEntityItem"
+                                        disabled={busy}
+                                        onClick={() => jumpToOrganize("places", name)}
+                                        title={note || "去左侧全局地点库查看"}
+                                      >
+                                        <span className="chapterEntityName">{name}</span>
+                                        {note ? <span className="muted chapterEntityMeta">{note}</span> : null}
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="muted auditPanelEmpty">本章未识别到地点。</div>
+                                )}
                               </div>
-                            ) : (
-                              <div className="muted auditPanelEmpty">暂无伏笔。完成一次审计后会自动沉淀；也可以手动新增。</div>
-                            )}
+                            </div>
 
-                            <div className="muted auditHiddenSummary">
-                              {hidden.length ? (
-                                <button
-                                  type="button"
-                                  className="btnLinkMuted"
-                                  disabled={busy || !activeBook}
-                                  onClick={() => setHiddenForeshadowPanelOpen(true)}
-                                >
-                                  已隐藏 {hidden.length}/{all.length} 条伏笔，点击查看
-                                </button>
-                              ) : null}
+                            <div className="auditPanel">
+                              <div className="auditPanelBody">
+                                <div className="auditPanelTitle">本章组织</div>
+                                {orgs.size ? (
+                                  <div className="chapterEntityList">
+                                    {[...orgs.entries()].slice(0, 80).map(([name, note]) => (
+                                      <div key={name} className="chapterEntityRow">
+                                        <div className="chapterEntityName">{name}</div>
+                                        {note ? <div className="muted chapterEntityMeta">{note}</div> : null}
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="muted auditPanelEmpty">本章未识别到组织。</div>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="auditPanel">
+                              <div className="auditPanelBody">
+                                <div className="auditPanelTitle">本章事件</div>
+                                {events.length ? (
+                                  <div className="chapterEventList">
+                                    {events.slice(0, 120).map((ev, i) => (
+                                      <div key={i} className="chapterEventItem">
+                                        <div className="chapterEventTop">
+                                          <div className="chapterEventType">{String(ev?.type || "").trim() || "事件"}</div>
+                                        </div>
+                                        <div className="chapterEventSummary">
+                                          {String(ev?.summary || ev?.what || ev?.event || "").trim() || "—"}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                  <div className="muted auditPanelEmpty">本章未抽取到事件。</div>
+                                )}
+                              </div>
                             </div>
                           </>
                         );

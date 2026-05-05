@@ -277,6 +277,152 @@ code {
   flex-direction: column;
 }
 
+.navLeftTabsBar {
+  margin: 8px 0 10px;
+}
+
+.navLeftTabsStrip,
+.navGlobalTabsStrip {
+  display: flex;
+  gap: 8px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
+}
+
+.navLeftTab,
+.navGlobalTab {
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  background: transparent;
+  color: color-mix(in srgb, var(--text) 84%, var(--muted));
+  padding: 6px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.navLeftTab:hover:not(:disabled),
+.navGlobalTab:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--panel2) 60%, transparent);
+  color: var(--text);
+}
+
+.navLeftTab.active,
+.navGlobalTab.active {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text);
+}
+
+.navLeftTab:disabled,
+.navGlobalTab:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.navGlobalTabsBar {
+  margin: 4px 0 10px;
+}
+
+.navGlobalScroll {
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.chapterEntitiesPanel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.chapterEntityList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chapterEntityItem {
+  width: 100%;
+  text-align: left;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  color: var(--text);
+  padding: 8px 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.chapterEntityItem:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--panel2) 72%, transparent);
+}
+
+.chapterEntityItem:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.chapterEntityName {
+  font-weight: 650;
+  font-size: 12px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.chapterEntityMeta {
+  font-size: 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.chapterEntityRow {
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.chapterEventList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chapterEventItem {
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+
+.chapterEventTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.chapterEventType {
+  font-weight: 650;
+  font-size: 12px;
+}
+
+.chapterEventSummary {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
 .navModelConfigSection {
   padding: 10px;
 }
