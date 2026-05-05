@@ -67,7 +67,7 @@ pnpm dev
 ```bash
 pnpm install
 pnpm build
-pnpm start
+pnpm dev
 ```
 
 ## 模型配置（AI）

@@ -231,21 +231,22 @@ code {
   flex: 1;
   display: grid;
   grid-template-columns: 360px 1fr;
-  gap: 14px;
-  padding: 14px;
+  gap: 10px;
+  padding: 10px;
 }
 
 .layout3 {
   flex: 1;
   display: grid;
-  grid-template-columns: 320px minmax(520px, 1fr) 420px;
-  gap: 14px;
-  padding: 14px;
+  /* 三栏 + 两条分割线（可拖拽调整宽度） */
+  grid-template-columns: var(--layout3-nav, 320px) 8px minmax(520px, 1fr) 8px var(--layout3-right, 420px);
+  gap: 0;
+  padding: 0;
   min-height: 0;
 }
 
 .layout3.layout3NavCollapsed {
-  grid-template-columns: 0 minmax(520px, 1fr) 420px;
+  grid-template-columns: 0 0 minmax(520px, 1fr) 8px var(--layout3-right, 420px);
 }
 
 .layout3.layout3NavCollapsed > .nav {
@@ -253,32 +254,61 @@ code {
   overflow: hidden;
 }
 
-@media (min-width: 1001px) {
-  /* nav 列宽为 0 时，grid 的 gap 仍会留出左侧空隙；这里抵消掉 */
-  .layout3.layout3NavCollapsed > .center {
-    margin-left: -14px;
-  }
+.layoutDivider {
+  position: relative;
+  min-width: 8px;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+}
+
+.layoutDivider::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  width: 1px;
+  height: 100%;
+  background: color-mix(in srgb, var(--border) 88%, transparent);
+}
+
+.layoutDivider:hover::before,
+.layoutDivider.dragging::before {
+  background: color-mix(in srgb, var(--accent) 55%, var(--border));
+  width: 2px;
+}
+
+.layoutDivider.hidden {
+  pointer-events: none;
+  cursor: default;
+}
+
+.layout3 .navSection,
+.layout3 .center,
+.layout3 .panel {
+  border-radius: 0;
 }
 
 .nav {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
 .navSection {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 12px;
+  border-radius: 0;
+  padding: 10px;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
 
 .navLeftTabsBar {
-  margin: 8px 0 10px;
+  margin: 6px 0 8px;
 }
 
 .navLeftTabsStrip,
@@ -322,7 +352,7 @@ code {
 }
 
 .navGlobalTabsBar {
-  margin: 4px 0 10px;
+  margin: 2px 0 8px;
 }
 
 .navGlobalScroll {
@@ -433,7 +463,7 @@ code {
 
 .navTitle {
   font-weight: 650;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .modelProviderGrid {
@@ -533,7 +563,7 @@ code {
 }
 
 .navChapterHeader {
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .navSubtitle {
@@ -644,11 +674,11 @@ code {
 .navShelfHint {
   font-size: 11px;
   line-height: 1.35;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .navNewBookRow {
-  margin-bottom: 10px;
+  margin-bottom: 8px;
 }
 
 .btnNewBookFull {
@@ -917,8 +947,10 @@ code {
   flex-direction: column;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 0;
   overflow: hidden;
+  border-left: 0;
+  border-right: 0;
 }
 
 .centerTop {
@@ -1129,7 +1161,7 @@ code {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 14px;
+  padding: 10px;
   gap: 8px;
 }
 
@@ -1145,7 +1177,7 @@ code {
   max-height: 220px;
   width: 100%;
   resize: vertical;
-  padding: 14px;
+  padding: 10px;
   font-size: 14px;
   line-height: 1.65;
   border-radius: 10px;
@@ -1281,7 +1313,7 @@ code {
   background: color-mix(in srgb, var(--panel2) 82%, transparent);
   border-radius: 12px;
   padding: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .auditPanelRow {
@@ -2439,7 +2471,7 @@ code {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 0;
 }
 
 .right > .panel {
@@ -2447,6 +2479,7 @@ code {
   min-height: 0;
   min-width: 0;
   overflow-x: clip;
+  border-left: 0;
 }
 
 .cards {
@@ -2500,7 +2533,7 @@ code {
 .panel {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: 0;
   padding: 12px;
   min-height: 0;
   display: flex;

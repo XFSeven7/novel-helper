@@ -67,6 +67,7 @@ type ThemePreference = "system" | "light" | "dark";
 
 const THEME_STORAGE_KEY = "novel-helper-theme";
 const NAV_COLLAPSED_STORAGE_KEY = "novel-helper-nav-collapsed";
+const LAYOUT3_SPLIT_STORAGE_KEY = "novel-helper-layout3-splits";
 const MODEL_CONFIGS_STORAGE_KEY = "novel-helper-model-configs";
 const MODEL_ACTIVE_ID_STORAGE_KEY = "novel-helper-model-active-id";
 
@@ -94,6 +95,10 @@ function auditCharacterRoleClass(role: string): string {
     default:
       return "auditCharRole auditCharRoleOther";
   }
+}
+
+function clamp(n: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, n));
 }
 
 function auditCharacterNewBadgeClass(v: string): string {
@@ -752,6 +757,24 @@ export function App() {
     }
   });
 
+  const [{ navW: layout3NavW, rightW: layout3RightW }, setLayout3Splits] = useState<{
+    navW: number;
+    rightW: number;
+  }>(() => {
+    try {
+      const raw = localStorage.getItem(LAYOUT3_SPLIT_STORAGE_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      const navW = typeof parsed?.navW === "number" ? parsed.navW : 320;
+      const rightW = typeof parsed?.rightW === "number" ? parsed.rightW : 420;
+      return { navW: clamp(navW, 240, 560), rightW: clamp(rightW, 320, 720) };
+    } catch {
+      return { navW: 320, rightW: 420 };
+    }
+  });
+
+  const [layout3Dragging, setLayout3Dragging] = useState<null | "nav" | "right">(null);
+  const layout3DragStartRef = useRef<{ kind: "nav" | "right"; x: number; navW: number; rightW: number } | null>(null);
+
   const [chapterAutosaveHint, setChapterAutosaveHint] = useState("");
   const [cardAutosaveHint, setCardAutosaveHint] = useState("");
   const [synopsisDraft, setSynopsisDraft] = useState("");
@@ -1051,6 +1074,40 @@ export function App() {
       // ignore
     }
   }, [navCollapsed]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LAYOUT3_SPLIT_STORAGE_KEY, JSON.stringify({ navW: layout3NavW, rightW: layout3RightW }));
+    } catch {
+      // ignore
+    }
+  }, [layout3NavW, layout3RightW]);
+
+  useEffect(() => {
+    if (!layout3Dragging) return;
+    const onMove = (ev: MouseEvent) => {
+      const st = layout3DragStartRef.current;
+      if (!st) return;
+      const dx = ev.clientX - st.x;
+      if (st.kind === "nav") {
+        const navW = clamp(st.navW + dx, 240, 560);
+        setLayout3Splits((v) => ({ ...v, navW }));
+      } else {
+        const rightW = clamp(st.rightW - dx, 320, 720);
+        setLayout3Splits((v) => ({ ...v, rightW }));
+      }
+    };
+    const onUp = () => {
+      setLayout3Dragging(null);
+      layout3DragStartRef.current = null;
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp, { once: true });
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [layout3Dragging]);
 
   useEffect(() => {
     try {
@@ -1615,7 +1672,18 @@ export function App() {
   }
 
   const jumpToOrganize = useCallback(
-    (tab: "chapterSummary" | "auditCharacters" | "places" | "orgs" | "timeline" | "story", key: string) => {
+    (
+      tab:
+        | "chapterSummary"
+        | "chapterEntities"
+        | "auditCharacters"
+        | "places"
+        | "timeline"
+        | "foreshadows"
+        | "story"
+        | "orgs",
+      key: string
+    ) => {
       if (tab === "auditCharacters") {
         setExpandedAuditCharIds((prev) => ({ ...prev, [key]: true }));
       }
@@ -1626,9 +1694,21 @@ export function App() {
         if (group) setPlaceGroupCollapsed((prev) => ({ ...prev, [group]: false }));
       }
 
-      setRightTab(tab);
+      if (tab === "chapterSummary" || tab === "chapterEntities") {
+        setRightTab(tab);
+      } else if (tab === "auditCharacters" || tab === "places" || tab === "timeline" || tab === "foreshadows") {
+        setLeftTab("global");
+        setGlobalTab(tab);
+      } else {
+        setStatus("该分类已取消（不再提供入口）。");
+        return;
+      }
+
       requestAnimationFrame(() => {
-        const root = document.querySelector(".organizeTabScroll") as HTMLElement | null;
+        const root =
+          tab === "chapterSummary" || tab === "chapterEntities"
+            ? (document.querySelector(".organizeTabScroll") as HTMLElement | null)
+            : (document.querySelector(".navGlobalScroll") as HTMLElement | null);
         if (!root) return;
         const esc = (s: string) => CSS.escape(s);
         const sel =
@@ -1638,11 +1718,9 @@ export function App() {
               ? `[data-place-name="${esc(key)}"]`
               : tab === "timeline"
                 ? `[data-event-id="${esc(key)}"]`
-                : tab === "story"
-                  ? `[data-story-path="${esc(key)}"]`
-                  : tab === "orgs"
-                    ? `[data-org-name="${esc(key)}"]`
-                    : "";
+                : tab === "foreshadows"
+                  ? `[data-foreshadow-id="${esc(key)}"]`
+                  : "";
         if (!sel) return;
         const el = root.querySelector(sel) as HTMLElement | null;
         if (!el) return;
@@ -2220,7 +2298,15 @@ export function App() {
         </div>
       </header>
 
-      <div className={`layout3 ${navCollapsed ? "layout3NavCollapsed" : ""}`}>
+      <div
+        className={`layout3 ${navCollapsed ? "layout3NavCollapsed" : ""}`}
+        style={
+          {
+            ["--layout3-nav" as any]: navCollapsed ? "0px" : `${layout3NavW}px`,
+            ["--layout3-right" as any]: `${layout3RightW}px`
+          } as React.CSSProperties
+        }
+      >
         <aside className="nav">
           {navCollapsed ? null : (
           <div className="panel navSectionMain">
@@ -2302,8 +2388,6 @@ export function App() {
                       空缺：{formatMissingChapterList(sortedActiveMissingChapterIndexes)} · 点此新建
                     </button>
                   ) : null}
-                  <div className="navSubtitle">{activeBookMeta?.slug ?? activeBook}</div>
-                  <div className="navHint">点击左上角 novel-helper 返回书架</div>
                 </div>
                 <div className="navOverviewBar">
                   <button
@@ -2385,6 +2469,19 @@ export function App() {
             </div>
           ) : null}
         </aside>
+
+        <div
+          className={`layoutDivider ${navCollapsed ? "hidden" : ""} ${layout3Dragging === "nav" ? "dragging" : ""}`}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整左侧栏宽度"
+          onMouseDown={(e) => {
+            if (navCollapsed) return;
+            e.preventDefault();
+            layout3DragStartRef.current = { kind: "nav", x: e.clientX, navW: layout3NavW, rightW: layout3RightW };
+            setLayout3Dragging("nav");
+          }}
+        />
 
         <main className="center">
           <div className="centerTop">
@@ -3352,6 +3449,18 @@ export function App() {
           {status ? <div className="status">{status}</div> : null}
         </main>
 
+        <div
+          className={`layoutDivider ${layout3Dragging === "right" ? "dragging" : ""}`}
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="调整右侧栏宽度"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            layout3DragStartRef.current = { kind: "right", x: e.clientX, navW: layout3NavW, rightW: layout3RightW };
+            setLayout3Dragging("right");
+          }}
+        />
+
         <aside className="right">
           <div className="panel">
             <div className="contentOrganizeHeader">
@@ -3454,42 +3563,12 @@ export function App() {
                     <button
                       type="button"
                       role="tab"
-                      className={`browserTab ${rightTab === "auditCharacters" ? "active" : ""}`}
-                      aria-selected={rightTab === "auditCharacters"}
-                      onClick={() => setRightTab("auditCharacters")}
+                      className={`browserTab ${rightTab === "chapterEntities" ? "active" : ""}`}
+                      aria-selected={rightTab === "chapterEntities"}
+                      onClick={() => setRightTab("chapterEntities")}
                       disabled={busy}
                     >
-                      角色
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      className={`browserTab ${rightTab === "places" ? "active" : ""}`}
-                      aria-selected={rightTab === "places"}
-                      onClick={() => setRightTab("places")}
-                      disabled={busy}
-                    >
-                      地点
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      className={`browserTab ${rightTab === "timeline" ? "active" : ""}`}
-                      aria-selected={rightTab === "timeline"}
-                      onClick={() => setRightTab("timeline")}
-                      disabled={busy}
-                    >
-                      时间线
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
-                      className={`browserTab ${rightTab === "foreshadows" ? "active" : ""}`}
-                      aria-selected={rightTab === "foreshadows"}
-                      onClick={() => setRightTab("foreshadows")}
-                      disabled={busy}
-                    >
-                      伏笔
+                      本章实体
                     </button>
                   </div>
                 </div>
@@ -3535,7 +3614,7 @@ export function App() {
                         <div className="muted auditPanelEmpty">暂无分析结果。选中章节后点击「分析」。</div>
                       )}
                     </div>
-                  ) : rightTab === "auditCharacters" ? (
+                  ) : rightTab === "chapterEntities" ? (
                     <>
                       <div className="auditCharList">
                         {Array.isArray(auditCharactersIndex?.characters) &&
@@ -3708,7 +3787,7 @@ export function App() {
                         )}
                       </div>
                     </>
-                  ) : rightTab === "places" ? (
+                  ) : rightTab === "__removed__" ? (
                     <div className="placePanel">
                       {Array.isArray(auditPlacesIndex?.places) && (auditPlacesIndex.places as any[]).length ? (
                         (() => {
@@ -3858,7 +3937,7 @@ export function App() {
                         <div className="muted auditPanelEmpty">暂无地点卡。完成一次分析后会自动收集地点。</div>
                       )}
                     </div>
-                  ) : rightTab === "story" ? (
+                  ) : rightTab === "__removed__" ? (
                     <div className="list">
                       {storyFiles.map((f) => (
                         <button
@@ -3872,7 +3951,7 @@ export function App() {
                         </button>
                       ))}
                     </div>
-                  ) : rightTab === "timeline" ? (
+                  ) : rightTab === "__removed__" ? (
                     <div className="timelinePanel">
                       <div className="timelineTopRow">
                         <button
@@ -4114,7 +4193,7 @@ export function App() {
                         )}
                       </div>
                     </div>
-                  ) : rightTab === "foreshadows" ? (
+                  ) : rightTab === "__removed__" ? (
                     <div className="foreshadowPanel">
                       {(() => {
                         const all = Array.isArray(auditForeshadowsIndex?.foreshadows)
