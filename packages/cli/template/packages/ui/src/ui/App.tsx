@@ -728,6 +728,7 @@ export function App() {
   const [mobileReading, setMobileReading] = useState(false);
   const [auditReadModeOn, setAuditReadModeOn] = useState(false);
   const [polishModeOn, setPolishModeOn] = useState(false);
+  const [expandModeOn, setExpandModeOn] = useState(false);
   const [mobilePreset, setMobilePreset] = useState<MobilePresetId>("iphone-14");
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => loadThemePreference());
   const [fullscreenOn, setFullscreenOn] = useState(false);
@@ -1107,6 +1108,12 @@ export function App() {
   const [polishPhase, setPolishPhase] = useState<PolishPhase>("idle");
   const [polishOriginal, setPolishOriginal] = useState("");
   const [polishDraft, setPolishDraft] = useState("");
+
+  const [expandModalOpen, setExpandModalOpen] = useState(false);
+  const [expandTargetWords, setExpandTargetWords] = useState("");
+  const [expandExtraContext, setExpandExtraContext] = useState("");
+  const [expandBusy, setExpandBusy] = useState(false);
+  const [expandDraft, setExpandDraft] = useState("");
   /** SSE 收到的完整思考缓冲（服务端可能一次推一大块）；界面用 RAF 逐段追上 */
   const auditThinkingBufferRef = useRef("");
   const auditDisplayedLenRef = useRef(0);
@@ -1727,6 +1734,79 @@ export function App() {
       setStatus(e?.message || String(e));
     } finally {
       setPolishBusy(false);
+    }
+  }
+
+  async function onExpandWithTargetWords(targetWords: number, extraContext: string) {
+    if (!activeBook || !selectedChapter) return;
+    if (!okModelConfigs.length) {
+      setStatus("没有可用模型：请先在「模型配置」里测试连接，连接成功后再扩写。");
+      return;
+    }
+    setExpandBusy(true);
+    setStatus("");
+    setExpandDraft("");
+    try {
+      await putModelConfigs({ configs: modelConfigs as any, activeId: activeModelId ?? null }).catch(() => {});
+      const res = await fetch(
+        `${(import.meta as any).env?.VITE_API_BASE || "http://127.0.0.1:3177"}/api/books/${encodeURIComponent(
+          activeBook
+        )}/chapters/${encodeURIComponent(selectedChapter.filename)}/expand/stream`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            modelConfigId: activeModelId ?? null,
+            original: chapterContent,
+            targetWords,
+            extraContext
+          })
+        }
+      );
+      if (!res.ok || !res.body) {
+        const t = await res.text().catch(() => "");
+        throw new Error(t || `HTTP ${res.status}`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buf = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf("\n\n")) >= 0) {
+          const chunk = buf.slice(0, idx);
+          buf = buf.slice(idx + 2);
+          const line = chunk
+            .split("\n")
+            .map((l) => l.trimEnd())
+            .find((l) => l.startsWith("data:"));
+          if (!line) continue;
+          const payloadText = line.replace(/^data:\s?/, "");
+          try {
+            const payload = JSON.parse(payloadText) as any;
+            if (payload.type === "delta") {
+              const d = String(payload.textDelta ?? "");
+              if (d) setExpandDraft((prev) => prev + d);
+            }
+            if (payload.type === "done") {
+              const t = String(payload.text ?? "");
+              if (t.trim()) setExpandDraft(t);
+            }
+            if (payload.type === "error") {
+              throw new Error(String(payload.message || "扩写失败"));
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+    } catch (e: any) {
+      setStatus(e?.message || String(e));
+    } finally {
+      setExpandBusy(false);
     }
   }
 
@@ -2440,7 +2520,7 @@ export function App() {
                     type="checkbox"
                     checked={mobileReading}
                     onChange={(e) => setMobileReading(e.target.checked)}
-                    disabled={busy || polishModeOn}
+                    disabled={busy || polishModeOn || expandModeOn}
                   />
                   移动端阅读
                 </label>
@@ -2452,6 +2532,7 @@ export function App() {
                     if (busy) return;
                     setMobileReading(false);
                     setAuditReadModeOn(false);
+                    setExpandModeOn(false);
                     setPolishModeOn((v) => {
                       const next = !v;
                       if (next) {
@@ -2466,6 +2547,21 @@ export function App() {
                   title={polishModeOn ? "退出润色对照" : "用 AI 润色本章并提供对照"}
                 >
                   {polishBusy ? "润色中…" : polishModeOn ? "退出润色" : "润色"}
+                </button>
+                <button
+                  type="button"
+                  className={`btnAuditRead ${expandModalOpen ? "active" : ""}`}
+                  disabled={busy || expandBusy}
+                  onClick={() => {
+                    if (busy || !selectedChapter) return;
+                    setExpandTargetWords(String(Math.max(200, chapterWordCount + 500)));
+                    setExpandExtraContext("");
+                    setExpandDraft("");
+                    setExpandModalOpen(true);
+                  }}
+                  title="快速扩写：输入目标字数并结合时间线摘要扩写本章"
+                >
+                  {expandBusy ? "扩写中…" : "扩写"}
                 </button>
                 <button
                   type="button"
@@ -2489,7 +2585,7 @@ export function App() {
                   className="select"
                   value={mobilePreset}
                   onChange={(e) => setMobilePreset(e.target.value as MobilePresetId)}
-                  disabled={busy || !mobileReading || polishModeOn}
+                  disabled={busy || !mobileReading || polishModeOn || expandModeOn}
                   title="常见机型尺寸预设"
                 >
                   {MOBILE_PRESETS.map((p) => (
@@ -2660,7 +2756,66 @@ export function App() {
                 className="mobilePhone"
                 style={{ width: `${mobileViewport.w}px`, height: `${mobileViewport.h}px` }}
               >
-                {polishModeOn ? (
+                {expandModeOn ? (
+                  <div className="polishSplit">
+                    <div className="polishHead">
+                      <div className="polishTitle">
+                        扩写对照
+                        <span className="polishCounts muted">
+                          原文 {approximateWordCount(chapterContent)} 字 · 扩写后 {approximateWordCount(expandDraft)} 字
+                        </span>
+                      </div>
+                      <div className="row">
+                        <button
+                          type="button"
+                          className="btnSort"
+                          disabled={busy || expandBusy}
+                          onClick={() => {
+                            setExpandModeOn(false);
+                            setExpandModalOpen(true);
+                          }}
+                          title="修改目标字数/补充信息并重新扩写"
+                        >
+                          重新扩写
+                        </button>
+                        <button
+                          type="button"
+                          className="btnSort"
+                          disabled={busy || expandBusy || !expandDraft.trim()}
+                          onClick={() => {
+                            setChapterContent(expandDraft);
+                            setExpandModeOn(false);
+                            setExpandDraft("");
+                          }}
+                          title="用扩写结果替换正文"
+                        >
+                          一键更换
+                        </button>
+                        <button
+                          type="button"
+                          className="btnSort"
+                          disabled={busy || expandBusy}
+                          onClick={() => {
+                            setExpandModeOn(false);
+                            setExpandDraft("");
+                          }}
+                        >
+                          退出扩写
+                        </button>
+                      </div>
+                    </div>
+                    <div className="polishCols">
+                      <div className="polishCol">
+                        <div className="polishColTitle muted">原文</div>
+                        <div className="polishText">{chapterContent}</div>
+                      </div>
+                      <div className="polishCol">
+                        <div className="polishColTitle muted">扩写后</div>
+                        <div className="polishText">{expandDraft || (expandBusy ? "扩写中…" : "—")}</div>
+                      </div>
+                    </div>
+                  </div>
+                ) : polishModeOn ? (
                   <div className="polishSplit">
                     <div className="polishHead">
                       <div className="polishTitle">
@@ -2842,7 +2997,66 @@ export function App() {
           ) : (
             <div className={`chapterSplit ${auditStreamOpen ? "open" : ""}`}>
               <div className="chapterSplitLeft">
-                {polishModeOn ? (
+                {expandModeOn ? (
+                  <div className="polishSplit">
+                    <div className="polishHead">
+                      <div className="polishTitle">
+                        扩写对照
+                        <span className="polishCounts muted">
+                          原文 {approximateWordCount(chapterContent)} 字 · 扩写后 {approximateWordCount(expandDraft)} 字
+                        </span>
+                      </div>
+                      <div className="row">
+                        <button
+                          type="button"
+                          className="btnSort"
+                          disabled={busy || expandBusy}
+                          onClick={() => {
+                            setExpandModeOn(false);
+                            setExpandModalOpen(true);
+                          }}
+                          title="修改目标字数/补充信息并重新扩写"
+                        >
+                          重新扩写
+                        </button>
+                        <button
+                          type="button"
+                          className="btnSort"
+                          disabled={busy || expandBusy || !expandDraft.trim()}
+                          onClick={() => {
+                            setChapterContent(expandDraft);
+                            setExpandModeOn(false);
+                            setExpandDraft("");
+                          }}
+                          title="用扩写结果替换正文"
+                        >
+                          一键更换
+                        </button>
+                        <button
+                          type="button"
+                          className="btnSort"
+                          disabled={busy || expandBusy}
+                          onClick={() => {
+                            setExpandModeOn(false);
+                            setExpandDraft("");
+                          }}
+                        >
+                          退出扩写
+                        </button>
+                      </div>
+                    </div>
+                    <div className="polishCols">
+                      <div className="polishCol">
+                        <div className="polishColTitle muted">原文</div>
+                        <div className="polishText">{chapterContent}</div>
+                      </div>
+                      <div className="polishCol">
+                        <div className="polishColTitle muted">扩写后</div>
+                        <div className="polishText">{expandDraft || (expandBusy ? "扩写中…" : "—")}</div>
+                      </div>
+                    </div>
+                  </div>
+                ) : polishModeOn ? (
                   <div className="polishSplit">
                     <div className="polishHead">
                       <div className="polishTitle">
@@ -4105,6 +4319,117 @@ export function App() {
               </button>
               <button type="button" className="btnModalPrimary" disabled={busy || !activeBook} onClick={() => void submitEditPlace()}>
                 保存
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {expandModalOpen ? (
+        <div
+          className="modalBackdrop"
+          role="presentation"
+          onClick={() => {
+            if (!expandBusy && !busy) setExpandModalOpen(false);
+          }}
+        >
+          <div
+            className="modalPanel modalPanelOpaque modalPanelLarge"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-expand-heading"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="modal-expand-heading" className="modalHeading">
+              快速扩写
+            </h2>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-expand-words">
+                目标字数
+              </label>
+              <input
+                id="modal-expand-words"
+                className="modalInput"
+                value={expandTargetWords}
+                onChange={(e) => setExpandTargetWords(e.target.value)}
+                disabled={busy || expandBusy}
+                placeholder="例如 2500"
+                inputMode="numeric"
+              />
+              <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
+                会自动把时间线“压缩摘要”投喂给模型作为已发生事件上下文。
+              </div>
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-expand-extra">
+                补充：当前发生的事情（可选）
+              </label>
+              <textarea
+                id="modal-expand-extra"
+                className="modalTextarea"
+                value={expandExtraContext}
+                onChange={(e) => setExpandExtraContext(e.target.value)}
+                disabled={busy || expandBusy}
+                rows={4}
+                placeholder="例如：本章此刻主角刚到青石村晒谷场，准备……"
+              />
+            </div>
+            {expandDraft.trim() ? (
+              <div className="modalField">
+                <label className="modalLabel">扩写结果预览（左原文 / 右扩写稿）</label>
+                <div className="polishCols" style={{ padding: 0 }}>
+                  <div className="polishCol" style={{ background: "transparent" }}>
+                    <div className="polishColTitle muted">原文</div>
+                    <div className="polishText">{chapterContent}</div>
+                  </div>
+                  <div className="polishCol" style={{ background: "transparent" }}>
+                    <div className="polishColTitle muted">扩写后</div>
+                    <div className="polishText">{expandDraft}</div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+            <div className="modalActions">
+              <button
+                type="button"
+                className="btnModalSecondary"
+                disabled={busy || expandBusy}
+                onClick={() => setExpandModalOpen(false)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="btnModalSecondary"
+                disabled={busy || expandBusy || !expandDraft.trim()}
+                onClick={() => {
+                  setChapterContent(expandDraft);
+                  setExpandModalOpen(false);
+                  setExpandDraft("");
+                }}
+                title="用扩写结果替换正文"
+              >
+                一键更换
+              </button>
+              <button
+                type="button"
+                className="btnModalPrimary"
+                disabled={busy || expandBusy}
+                onClick={() => {
+                  const n = Math.floor(Number(expandTargetWords.trim()));
+                  if (!Number.isFinite(n) || n < 200) {
+                    setStatus("目标字数需为 >=200 的数字。");
+                    return;
+                  }
+                  setExpandModalOpen(false);
+                  setMobileReading(false);
+                  setAuditReadModeOn(false);
+                  setPolishModeOn(false);
+                  setExpandModeOn(true);
+                  void onExpandWithTargetWords(n, expandExtraContext);
+                }}
+              >
+                {expandBusy ? "扩写中…" : "开始扩写"}
               </button>
             </div>
           </div>

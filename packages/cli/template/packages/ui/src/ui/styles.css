@@ -1359,7 +1359,10 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
 }
 
 .btnReadingNav {
@@ -1651,6 +1654,17 @@ button:disabled {
   padding: 10px 12px;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
   background: color-mix(in srgb, var(--panel) 85%, transparent);
+}
+
+.polishHead > .row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 0;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  white-space: nowrap;
 }
 
 .polishTitle {

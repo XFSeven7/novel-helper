@@ -821,6 +821,63 @@ async function performPolishWithAiSdk(input: {
   return { text: full };
 }
 
+async function performExpandWithAiSdk(input: {
+  slug: string;
+  filename: string;
+  modelConfigId: string | null | undefined;
+  original: string;
+  targetWords: number;
+  extraContext: string;
+  onDelta?: (textDelta: string) => void;
+}) {
+  const { slug, modelConfigId, onDelta, original, targetWords, extraContext } = input;
+  const settings = await readModelSettings();
+  const activeId = modelConfigId || settings.activeId;
+  const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+  if (!cfg) throw new Error("未配置模型");
+
+  const idx = normalizeTimelineIndex(await readTimelineIndex(dataDir, slug));
+  const compressed = (idx.compressedRanges || [])
+    .slice()
+    .sort((a, b) => (a.startChapter ?? 0) - (b.startChapter ?? 0))
+    .slice(-20)
+    .map((r) => `第${r.startChapter}-${r.endChapter}章：${String(r.summary || "").trim()}`)
+    .filter((s) => s.length > 0);
+
+  const prompt = [
+    "你是一位中文小说写作助手。请在不改变剧情事实与信息顺序的前提下，对下面的章节正文进行扩写。",
+    "要求：",
+    `- 目标字数：约 ${Math.max(200, Math.floor(targetWords))} 字（允许 ±10%）`,
+    "- 保留人名/地名/专有名词一致；不加戏、不引入新设定；不改变叙事视角",
+    "- 扩写方式：补充环境氛围、动作细节、心理活动、对话节奏、过渡段落，但不要啰嗦重复",
+    "- 输出只要扩写后的正文，不要解释、不要加标题",
+    "",
+    "【已发生的事情（时间线压缩摘要）】",
+    compressed.length ? compressed.join("\n") : "（暂无）",
+    "",
+    extraContext?.trim() ? "【补充信息（当前发生的事情）】\n" + extraContext.trim() : "",
+    extraContext?.trim() ? "" : "",
+    "【原文】",
+    original || "",
+    ""
+  ]
+    .filter((x) => x !== "")
+    .join("\\n");
+
+  const { model, providerOptions } = createAiSdkModel(cfg);
+  const r = await streamText({
+    model,
+    messages: [{ role: "user", content: prompt }],
+    providerOptions
+  } as any);
+
+  for await (const delta of r.textStream) {
+    onDelta?.(delta);
+  }
+  const full = await r.text;
+  return { text: full };
+}
+
 app.get("/api/settings/model-configs", async () => {
   return await readModelSettings();
 });
@@ -1096,6 +1153,50 @@ app.post("/api/books/:slug/chapters/:filename/polish/stream", async (req, reply)
       filename: params.filename,
       modelConfigId: body.modelConfigId,
       original: body.original || "",
+      onDelta: (d) => {
+        if (d) sseWrite(reply.raw, { type: "delta", textDelta: d });
+      }
+    });
+    sseWrite(reply.raw, { type: "done", text });
+  } catch (e: any) {
+    sseWrite(reply.raw, { type: "error", message: e?.message || String(e) });
+  } finally {
+    reply.raw.end();
+  }
+});
+
+app.post("/api/books/:slug/chapters/:filename/expand/stream", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1), filename: z.string().min(1) });
+  const bodySchema = z.object({
+    modelConfigId: z.string().nullable().optional(),
+    original: z.string().optional(),
+    targetWords: z.number().int().min(200),
+    extraContext: z.string().optional()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+
+  // @ts-ignore
+  reply.hijack();
+  reply.raw.writeHead(200, {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Methods": "POST, OPTIONS"
+  });
+  sseWrite(reply.raw, { type: "log", text: "连接已建立…\\n" });
+
+  try {
+    sseWrite(reply.raw, { type: "log", text: "开始扩写…\\n" });
+    const { text } = await performExpandWithAiSdk({
+      slug: params.slug,
+      filename: params.filename,
+      modelConfigId: body.modelConfigId,
+      original: body.original || "",
+      targetWords: body.targetWords,
+      extraContext: body.extraContext || "",
       onDelta: (d) => {
         if (d) sseWrite(reply.raw, { type: "delta", textDelta: d });
       }
