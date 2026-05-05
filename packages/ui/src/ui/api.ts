@@ -155,6 +155,59 @@ export async function getAuditCharacters(slug: string) {
   return await http<{ index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/characters`);
 }
 
+export type TimelineIndex = {
+  version: 1;
+  updatedAt: string;
+  chapters: Array<{
+    chapter: number;
+    filename: string;
+    title: string;
+    auditedAt: string;
+    gistL1: string;
+  }>;
+  compressedRanges: Array<{
+    startChapter: number;
+    endChapter: number;
+    summary: string;
+    lastCompressedAt: string;
+  }>;
+  events: Array<{
+    id: string;
+    title: string;
+    startChapter: number;
+    endChapter: number;
+    summary: string;
+    status: "open" | "done";
+    updatedAt: string;
+  }>;
+  compressionSuggestions: Array<{ startChapter: number; endChapter: number; why: string }>;
+  manual: { doneEventIds: string[] };
+};
+
+export async function getTimelineIndex(slug: string) {
+  return await http<{ index: TimelineIndex }>(`/api/books/${encodeURIComponent(slug)}/timeline/index`);
+}
+
+export async function compressTimelineRange(
+  slug: string,
+  input: { startChapter: number; endChapter: number; modelConfigId: string | null }
+) {
+  return await http<{ ok: true; index: TimelineIndex }>(`/api/books/${encodeURIComponent(slug)}/timeline/compress`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function markTimelineEvent(
+  slug: string,
+  input: { id: string; status: "open" | "done" }
+) {
+  return await http<{ ok: true; index: TimelineIndex }>(`/api/books/${encodeURIComponent(slug)}/timeline/event/mark`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
 export async function listStory(slug: string) {
   return await http<{ storyFiles: StoryFile[]; charFiles: StoryFile[] }>(
     `/api/books/${encodeURIComponent(slug)}/story`

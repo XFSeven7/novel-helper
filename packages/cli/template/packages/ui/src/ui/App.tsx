@@ -23,7 +23,11 @@ import {
   auditChapter,
   getAuditLatest,
   getAuditLedger,
-  getAuditCharacters
+  getAuditCharacters,
+  getTimelineIndex,
+  compressTimelineRange,
+  markTimelineEvent,
+  TimelineIndex
 } from "./api";
 
 type SelectedChapter = { bookSlug: string; filename: string } | null;
@@ -793,6 +797,11 @@ export function App() {
   }, [modelConfigs, activeModelId]);
 
   const [auditRun, setAuditRun] = useState<any | null>(null);
+  const [timelineIndex, setTimelineIndex] = useState<TimelineIndex | null>(null);
+  const [timelineBusy, setTimelineBusy] = useState(false);
+  const [timelineCompressStart, setTimelineCompressStart] = useState("");
+  const [timelineCompressEnd, setTimelineCompressEnd] = useState("");
+  const [timelineShowDoneEvents, setTimelineShowDoneEvents] = useState(false);
   const [auditBusy, setAuditBusy] = useState(false);
   const okModelConfigs = useMemo(() => modelConfigs.filter((c) => c.lastTestOk), [modelConfigs]);
   const [auditStreamOpen, setAuditStreamOpen] = useState(false);
@@ -937,6 +946,7 @@ export function App() {
     if (!activeBook) return;
     refreshChapters(activeBook).catch((e) => setStatus(String(e?.message || e)));
     refreshStory(activeBook).catch((e) => setStatus(String(e?.message || e)));
+    refreshTimelineIndex(activeBook).catch(() => {});
   }, [activeBook]);
 
   useEffect(() => {
@@ -1129,10 +1139,27 @@ export function App() {
 
   async function loadAuditArtifacts(slug: string, chapterFilename: string) {
     try {
-      const { run } = await getAuditLatest(slug, chapterFilename);
+      const [{ run }, { index: timelineIdx }] = await Promise.all([
+        getAuditLatest(slug, chapterFilename).catch(() => ({ run: null })),
+        getTimelineIndex(slug).catch(() => ({ index: null as any }))
+      ]);
       setAuditRun(run);
+      setTimelineIndex(timelineIdx);
     } catch {
       setAuditRun(null);
+    }
+  }
+
+  async function refreshTimelineIndex(slug: string) {
+    if (!slug) return;
+    setTimelineBusy(true);
+    try {
+      const { index } = await getTimelineIndex(slug);
+      setTimelineIndex(index);
+    } catch (e: any) {
+      setStatus(e?.message || String(e));
+    } finally {
+      setTimelineBusy(false);
     }
   }
 
@@ -1189,6 +1216,7 @@ export function App() {
             if (payload.type === "done") {
               if (payload.run) setAuditRun(payload.run);
               await loadAuditArtifacts(activeBook, selectedChapter.filename);
+              await refreshTimelineIndex(activeBook);
               setAuditStreamPhase("done");
             }
             if (payload.type === "error") {
@@ -1231,6 +1259,7 @@ export function App() {
 
       await refreshChapters(bookSlug);
       await refreshStory(bookSlug);
+      await refreshTimelineIndex(bookSlug).catch(() => {});
       await refreshBooks();
 
       setSelectedChapter({ bookSlug, filename: chapter.filename });
@@ -1238,6 +1267,14 @@ export function App() {
       setChapterContent(content);
       chapterBaselineRef.current = content;
       setChapterTitleEditing(false);
+
+      // 新建章节后：收起分析面板，并刷新右侧内容整理数据源
+      setAuditStreamOpen(false);
+      setAuditStreamPhase("idle");
+      resetAuditThinkingReveal();
+      setAuditRun(null);
+      setTimelineIndex(null);
+      void loadAuditArtifacts(bookSlug, chapter.filename);
       setStatus("已新建章节，并写入本地文件。");
     } catch (e: any) {
       setStatus(e?.message || String(e));
@@ -1257,6 +1294,16 @@ export function App() {
 
   async function onCreateChapter() {
     if (!activeBook || !chapterTitle.trim()) return;
+
+    // 点击“新增章节”立刻重置右侧内容整理（避免残留上一章的摘要/角色展开/时间线等）
+    setRightTab("chapterSummary");
+    setExpandedAuditCharIds({});
+    setSelectedCard(null);
+    setCardContent("");
+    cardBaselineRef.current = "";
+    setAuditRun(null);
+    setTimelineIndex(null);
+
     const gaps = normalizeChapterGapList(books.find((b) => b.slug === activeBook)?.missingChapterIndexes ?? []);
     if (gaps.length > 0) {
       setChapterGapModalBookSlug(activeBook);
@@ -1929,7 +1976,7 @@ export function App() {
                     : "打开分析面板（可在面板内开始本章分析）"
                 }
               >
-                {auditBusy ? "分析中…" : auditStreamOpen ? "收起分析" : "分析面板"}
+                {auditBusy ? "分析中…" : auditStreamOpen ? "收起面板" : "分析面板"}
               </button>
             ) : null}
           </div>
@@ -2125,42 +2172,27 @@ export function App() {
                             ? "分析完成"
                             : "分析面板"}
                     </div>
-                    <div className="row">
-                      <button
-                        type="button"
-                        className="btnSort"
-                        onClick={() => {
-                          try {
-                            void navigator.clipboard.writeText(
-                              auditThinkingBufferRef.current || auditStreamText || ""
-                            );
-                            setStatus("已复制分析正文。");
-                          } catch {
-                            setStatus("复制失败。");
-                          }
-                        }}
-                        disabled={!auditStreamText}
-                        title="复制 Markdown 原文"
-                      >
-                        复制
-                      </button>
-                      <button
-                        type="button"
-                        className="btnSort"
-                        onClick={() => {
-                          setAuditStreamOpen(false);
-                          setAuditStreamPhase("idle");
-                        }}
-                      >
-                        关闭
-                      </button>
-                    </div>
+                    {auditStreamPhase !== "running" && auditStreamText.trim() ? (
+                      <div className="row">
+                        <button
+                          type="button"
+                          className="btnSort"
+                          onClick={() => void onAuditSelectedChapter()}
+                          disabled={busy || auditBusy || !selectedChapter || !okModelConfigs.length}
+                          title={!okModelConfigs.length ? "请先在「模型配置」里测试连接" : "重新调用模型分析本章"}
+                        >
+                          重新分析
+                        </button>
+                      </div>
+                    ) : null}
                   </div>
-                  <div ref={auditStreamRef} className="auditStream auditStreamMd">
+                  <div ref={auditStreamRef} className="auditStream">
                     {auditStreamText.trim() ? (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{auditStreamText}</ReactMarkdown>
+                      <div className="auditStreamInner auditStreamMd">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{auditStreamText}</ReactMarkdown>
+                      </div>
                     ) : auditBusy ? (
-                      <span className="muted">请稍候…</span>
+                      <div className="auditStreamInner muted">请稍候…</div>
                     ) : (
                       <div className="auditStreamEmpty">
                         <button
@@ -2540,6 +2572,244 @@ export function App() {
                           {f.title}
                         </button>
                       ))}
+                    </div>
+                  ) : rightTab === "timeline" ? (
+                    <div className="timelinePanel">
+                      <div className="timelineTopRow">
+                        <button
+                          type="button"
+                          className="btnSort"
+                          disabled={busy || timelineBusy || !activeBook}
+                          onClick={() => activeBook && void refreshTimelineIndex(activeBook)}
+                        >
+                          刷新
+                        </button>
+                        <label className="toggle timelineToggle">
+                          <input
+                            type="checkbox"
+                            checked={timelineShowDoneEvents}
+                            onChange={(e) => setTimelineShowDoneEvents(e.target.checked)}
+                            disabled={busy}
+                          />
+                          显示已完成事件
+                        </label>
+                      </div>
+
+                      <div className="timelineSection">
+                        <div className="auditPanelTitle">推荐压缩区间</div>
+                        {timelineIndex?.compressionSuggestions?.length ? (
+                          <div className="timelineSuggestionList">
+                            {timelineIndex.compressionSuggestions.map((s, i) => (
+                              <button
+                                key={`${s.startChapter}-${s.endChapter}-${i}`}
+                                type="button"
+                                className="timelineSuggestion"
+                                disabled={busy || timelineBusy || !activeBook}
+                                onClick={async () => {
+                                  if (!activeBook) return;
+                                  setTimelineCompressStart(String(s.startChapter));
+                                  setTimelineCompressEnd(String(s.endChapter));
+                                  setTimelineBusy(true);
+                                  try {
+                                    const { index } = await compressTimelineRange(activeBook, {
+                                      startChapter: s.startChapter,
+                                      endChapter: s.endChapter,
+                                      modelConfigId: activeModelId ?? null
+                                    });
+                                    setTimelineIndex(index);
+                                  } catch (e: any) {
+                                    setStatus(e?.message || String(e));
+                                  } finally {
+                                    setTimelineBusy(false);
+                                  }
+                                }}
+                                title={s.why}
+                              >
+                                压缩 第 {s.startChapter}-{s.endChapter} 章
+                                <span className="muted timelineSuggestionWhy">{s.why}</span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="muted auditPanelEmpty">暂无推荐。完成一次分析后会自动生成。</div>
+                        )}
+                      </div>
+
+                      <div className="timelineSection">
+                        <div className="auditPanelTitle">压缩章节</div>
+                        <div className="timelineCompressRow">
+                          <input
+                            className="timelineInput"
+                            value={timelineCompressStart}
+                            onChange={(e) => setTimelineCompressStart(e.target.value)}
+                            placeholder="起始章号"
+                            inputMode="numeric"
+                            disabled={busy || timelineBusy || !activeBook}
+                          />
+                          <span className="muted">到</span>
+                          <input
+                            className="timelineInput"
+                            value={timelineCompressEnd}
+                            onChange={(e) => setTimelineCompressEnd(e.target.value)}
+                            placeholder="结束章号"
+                            inputMode="numeric"
+                            disabled={busy || timelineBusy || !activeBook}
+                          />
+                          <button
+                            type="button"
+                            className="btnSort"
+                            disabled={busy || timelineBusy || !activeBook}
+                            onClick={async () => {
+                              if (!activeBook) return;
+                              const a = parseInt(timelineCompressStart, 10);
+                              const b = parseInt(timelineCompressEnd, 10);
+                              if (!Number.isFinite(a) || !Number.isFinite(b) || a < 1 || b < 1) {
+                                setStatus("请输入有效的起止章号。");
+                                return;
+                              }
+                              setTimelineBusy(true);
+                              try {
+                                const { index } = await compressTimelineRange(activeBook, {
+                                  startChapter: a,
+                                  endChapter: b,
+                                  modelConfigId: activeModelId ?? null
+                                });
+                                setTimelineIndex(index);
+                              } catch (e: any) {
+                                setStatus(e?.message || String(e));
+                              } finally {
+                                setTimelineBusy(false);
+                              }
+                            }}
+                          >
+                            {timelineBusy ? "压缩中…" : "压缩"}
+                          </button>
+                        </div>
+                        <div className="muted timelineHint">已压缩的区间可再次压缩（会覆盖更新）。</div>
+                      </div>
+
+                      <div className="timelineSection">
+                        <div className="auditPanelTitle">区间压缩摘要</div>
+                        {timelineIndex?.compressedRanges?.length ? (
+                          <div className="timelineRangeList">
+                            {timelineIndex.compressedRanges.map((r, i) => (
+                              <div key={`${r.startChapter}-${r.endChapter}-${i}`} className="timelineRangeItem">
+                                <div className="timelineRangeTop">
+                                  <div className="timelineRangeTitle">
+                                    第 {r.startChapter}-{r.endChapter} 章
+                                  </div>
+                                  <button
+                                    type="button"
+                                    className="btnSort"
+                                    disabled={busy || timelineBusy || !activeBook}
+                                    onClick={async () => {
+                                      if (!activeBook) return;
+                                      setTimelineBusy(true);
+                                      try {
+                                        const { index } = await compressTimelineRange(activeBook, {
+                                          startChapter: r.startChapter,
+                                          endChapter: r.endChapter,
+                                          modelConfigId: activeModelId ?? null
+                                        });
+                                        setTimelineIndex(index);
+                                      } catch (e: any) {
+                                        setStatus(e?.message || String(e));
+                                      } finally {
+                                        setTimelineBusy(false);
+                                      }
+                                    }}
+                                  >
+                                    再次压缩
+                                  </button>
+                                </div>
+                                <div className="timelineRangeSummary">{r.summary}</div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="muted auditPanelEmpty">暂无压缩区间。</div>
+                        )}
+                      </div>
+
+                      <div className="timelineSection">
+                        <div className="auditPanelTitle">关键事件</div>
+                        {timelineIndex?.events?.length ? (
+                          <div className="timelineEventList">
+                            {timelineIndex.events
+                              .filter((e) => (timelineShowDoneEvents ? true : e.status !== "done"))
+                              .filter((e) =>
+                                timelineShowDoneEvents
+                                  ? true
+                                  : !(timelineIndex.manual?.doneEventIds ?? []).includes(e.id)
+                              )
+                              .slice(0, 200)
+                              .map((e) => {
+                                const done =
+                                  (timelineIndex.manual?.doneEventIds ?? []).includes(e.id) || e.status === "done";
+                                return (
+                                  <div key={e.id} className={`timelineEventItem ${done ? "done" : ""}`}>
+                                    <div className="timelineEventTop">
+                                      <div className="timelineEventTitle">
+                                        第 {e.startChapter}
+                                        {e.endChapter !== e.startChapter ? `-${e.endChapter}` : ""} 章 · {e.title}
+                                      </div>
+                                      <button
+                                        type="button"
+                                        className="btnSort"
+                                        disabled={busy || timelineBusy || !activeBook}
+                                        onClick={async () => {
+                                          if (!activeBook) return;
+                                          setTimelineBusy(true);
+                                          try {
+                                            const { index } = await markTimelineEvent(activeBook, {
+                                              id: e.id,
+                                              status: done ? "open" : "done"
+                                            });
+                                            setTimelineIndex(index);
+                                          } catch (err: any) {
+                                            setStatus(err?.message || String(err));
+                                          } finally {
+                                            setTimelineBusy(false);
+                                          }
+                                        }}
+                                      >
+                                        {done ? "取消完成" : "标记完成"}
+                                      </button>
+                                    </div>
+                                    <div className="timelineEventSummary muted">{e.summary}</div>
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        ) : (
+                          <div className="muted auditPanelEmpty">事件将在后续版本中逐步补全（目前以每章摘要为主）。</div>
+                        )}
+                      </div>
+
+                      <div className="timelineSection">
+                        <div className="auditPanelTitle">每章摘要</div>
+                        {timelineIndex?.chapters?.length ? (
+                          <div className="timelineChapterList">
+                            {[...timelineIndex.chapters]
+                              .slice()
+                              .reverse()
+                              .slice(0, 80)
+                              .map((c) => (
+                                <div key={c.filename} className="timelineChapterItem">
+                                  <div className="timelineChapterTop">
+                                    <div className="timelineChapterTitle">
+                                      第 {c.chapter} 章 · {c.title}
+                                    </div>
+                                    <div className="muted timelineChapterMeta">{c.filename}</div>
+                                  </div>
+                                  <div className="timelineChapterGist">{c.gistL1}</div>
+                                </div>
+                              ))}
+                          </div>
+                        ) : (
+                          <div className="muted auditPanelEmpty">还没有章节摘要。对任意章节完成一次分析后，这里会出现。</div>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div className="empty">该页签后续完善。</div>

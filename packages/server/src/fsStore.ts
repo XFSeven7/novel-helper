@@ -93,6 +93,49 @@ export type AuditRun = {
   uiInjection: { spotlightCharacters: string[]; spotlightTags: string[] };
 };
 
+export type TimelineCompressionSuggestion = {
+  startChapter: number;
+  endChapter: number;
+  why: string;
+};
+
+export type TimelineCompressedRange = {
+  startChapter: number;
+  endChapter: number;
+  summary: string;
+  lastCompressedAt: string;
+};
+
+export type TimelineEvent = {
+  id: string;
+  title: string;
+  /** 事件发生范围；单章也用相同表达 */
+  startChapter: number;
+  endChapter: number;
+  summary: string;
+  status: "open" | "done";
+  updatedAt: string;
+};
+
+export type TimelineIndex = {
+  version: 1;
+  updatedAt: string;
+  chapters: Array<{
+    chapter: number;
+    filename: string;
+    title: string;
+    auditedAt: string;
+    gistL1: string;
+  }>;
+  compressedRanges: TimelineCompressedRange[];
+  events: TimelineEvent[];
+  compressionSuggestions: TimelineCompressionSuggestion[];
+  manual: {
+    /** 人工标记完成的事件 id 集合（覆盖模型/自动状态） */
+    doneEventIds: string[];
+  };
+};
+
 async function exists(p: string) {
   try {
     await fs.access(p);
@@ -104,6 +147,120 @@ async function exists(p: string) {
 
 function auditDir(dataDir: string, novelSlug: string) {
   return path.join(dataDir, novelSlug, "meta", "audit");
+}
+
+function timelineIndexPath(dataDir: string, novelSlug: string) {
+  return path.join(auditDir(dataDir, novelSlug), "timelineIndex.json");
+}
+
+function storyTimelinePath(dataDir: string, novelSlug: string) {
+  return path.join(dataDir, novelSlug, "story", "timeline.md");
+}
+
+function parseChapterNumberFromFilename(filename: string): number {
+  const m = filename.match(CHAPTER_FILENAME_RE);
+  if (!m) return NaN;
+  const n = parseInt(m[1], 10);
+  return Number.isFinite(n) ? n : NaN;
+}
+
+export async function readTimelineIndex(dataDir: string, novelSlug: string): Promise<TimelineIndex> {
+  const p = timelineIndexPath(dataDir, novelSlug);
+  if (!(await exists(p))) {
+    return {
+      version: 1,
+      updatedAt: "",
+      chapters: [],
+      compressedRanges: [],
+      events: [],
+      compressionSuggestions: [],
+      manual: { doneEventIds: [] }
+    };
+  }
+  const raw = await fs.readFile(p, "utf8");
+  const parsed = JSON.parse(raw) as any;
+  return {
+    version: 1,
+    updatedAt: typeof parsed?.updatedAt === "string" ? parsed.updatedAt : "",
+    chapters: Array.isArray(parsed?.chapters) ? parsed.chapters : [],
+    compressedRanges: Array.isArray(parsed?.compressedRanges) ? parsed.compressedRanges : [],
+    events: Array.isArray(parsed?.events) ? parsed.events : [],
+    compressionSuggestions: Array.isArray(parsed?.compressionSuggestions) ? parsed.compressionSuggestions : [],
+    manual: {
+      doneEventIds: Array.isArray(parsed?.manual?.doneEventIds) ? parsed.manual.doneEventIds : []
+    }
+  };
+}
+
+export async function writeTimelineIndex(dataDir: string, novelSlug: string, idx: TimelineIndex) {
+  const dir = auditDir(dataDir, novelSlug);
+  await ensureDir(dir);
+  const p = timelineIndexPath(dataDir, novelSlug);
+  await fs.writeFile(p, JSON.stringify(idx, null, 2), "utf8");
+}
+
+function renderTimelineMarkdown(idx: TimelineIndex): string {
+  const doneIds = new Set(idx.manual?.doneEventIds ?? []);
+  const events = (idx.events ?? []).filter((e) => (e?.status ?? "open") !== "done" && !doneIds.has(String(e?.id)));
+  const sortedChapters = [...(idx.chapters ?? [])].sort((a, b) => (a.chapter ?? 0) - (b.chapter ?? 0));
+  const ranges = [...(idx.compressedRanges ?? [])].sort((a, b) => a.startChapter - b.startChapter);
+
+  const lines: string[] = ["# 时间线", ""];
+
+  lines.push("## 章节摘要", "");
+  if (!sortedChapters.length) {
+    lines.push("- （暂无摘要）", "");
+  } else {
+    for (const c of sortedChapters) {
+      const n = c.chapter ?? parseChapterNumberFromFilename(String(c.filename || ""));
+      const title = String(c.title || c.filename || "");
+      const gist = String(c.gistL1 || "").trim();
+      lines.push(`- 第 ${n} 章 · ${title}${gist ? `：${gist}` : ""}`);
+    }
+    lines.push("");
+  }
+
+  lines.push("## 区间压缩摘要", "");
+  if (!ranges.length) {
+    lines.push("- （暂无压缩区间）", "");
+  } else {
+    for (const r of ranges) {
+      const sum = String(r.summary || "").trim();
+      lines.push(`- 第 ${r.startChapter}-${r.endChapter} 章：${sum || "（空）"}`);
+    }
+    lines.push("");
+  }
+
+  lines.push("## 关键事件（未完成）", "");
+  if (!events.length) {
+    lines.push("- （暂无）", "");
+  } else {
+    for (const e of events) {
+      const range = e.startChapter === e.endChapter ? `第 ${e.startChapter} 章` : `第 ${e.startChapter}-${e.endChapter} 章`;
+      const title = String(e.title || "").trim() || "事件";
+      const sum = String(e.summary || "").trim();
+      lines.push(`- ${range} · ${title}${sum ? `：${sum}` : ""}`);
+    }
+    lines.push("");
+  }
+
+  lines.push("## 推荐压缩区间", "");
+  if (!(idx.compressionSuggestions ?? []).length) {
+    lines.push("- （暂无）", "");
+  } else {
+    for (const s of idx.compressionSuggestions) {
+      lines.push(`- 建议压缩 第 ${s.startChapter}-${s.endChapter} 章：${String(s.why || "").trim() || "—"}`);
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+export async function writeStoryTimelineMarkdownFromIndex(dataDir: string, novelSlug: string, idx: TimelineIndex) {
+  const p = storyTimelinePath(dataDir, novelSlug);
+  await ensureDir(path.dirname(p));
+  await fs.writeFile(p, renderTimelineMarkdown(idx), "utf8");
 }
 
 export async function writeAuditRun(dataDir: string, novelSlug: string, chapterFilename: string, run: AuditRun) {

@@ -28,7 +28,11 @@ import {
   readAuditLedger,
   writeAuditLedger,
   readAuditCharactersIndex,
-  writeAuditCharactersIndex
+  writeAuditCharactersIndex,
+  readTimelineIndex,
+  writeTimelineIndex,
+  writeStoryTimelineMarkdownFromIndex,
+  TimelineIndex
 } from "./fsStore.js";
 import { resolveDataDir, safeSlug } from "./paths.js";
 
@@ -253,6 +257,13 @@ type ReasoningStreamEvent =
   | { type: "done"; run: any }
   | { type: "error"; message: string };
 
+function parseChapterNumberFromFilename(filename: string): number {
+  const m = String(filename || "").match(/^(\d+)_/);
+  if (!m) return NaN;
+  const n = parseInt(m[1], 10);
+  return Number.isFinite(n) ? n : NaN;
+}
+
 /** 防止把「审计 JSON」误当作思考过程推给前端（常见于模型未遵守禁止 JSON 的提示）。 */
 function looksLikeAuditJsonFragment(s: string): boolean {
   const t = s.trim();
@@ -316,7 +327,8 @@ async function streamThinkingTraceWithAiSdk(input: {
   emitLog("AI SDK：开始流式输出思考过程…");
   const result = await streamText({
     model,
-    prompt,
+    // 用 messages 走 chat/completions 流式；Ollama 的流式输出更稳定
+    messages: [{ role: "user", content: prompt }],
     ...(cfg.provider === "ollama" ? {} : { reasoning: "high" as const }),
     providerOptions
   } as any);
@@ -380,7 +392,7 @@ async function generateAuditJsonWithAiSdk(input: { cfg: ModelConfig; prompt: str
 
   const { text } = await generateText({
     model,
-    prompt,
+    messages: [{ role: "user", content: prompt }],
     temperature: 0.2,
     ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
     providerOptions
@@ -388,6 +400,157 @@ async function generateAuditJsonWithAiSdk(input: { cfg: ModelConfig; prompt: str
 
   if (!text?.trim()) throw new Error("模型未返回审计 JSON");
   return text;
+}
+
+type TimelineModelOutput = {
+  compressionSuggestions?: Array<{ startChapter: number; endChapter: number; why?: string }>;
+  events?: Array<{
+    id?: string;
+    title?: string;
+    startChapter?: number;
+    endChapter?: number;
+    summary?: string;
+    status?: "open" | "done";
+  }>;
+};
+
+function buildTimelineUpdatePrompt(input: {
+  bookSlug: string;
+  recentChapterSummaries: Array<{ chapter: number; title: string; gistL1: string }>;
+  compressedRanges: Array<{ startChapter: number; endChapter: number; summary: string }>;
+  doneEventIds: string[];
+  closedLoops: any[];
+}) {
+  return [
+    "你是小说写作助手，负责维护「时间线 Timeline」与「压缩摘要」索引。",
+    "你会收到：最近若干章的摘要（gistL1）、已存在的压缩区间摘要、以及已完成事件列表。",
+    "",
+    "任务：",
+    "1) 给出 1-3 个「推荐压缩章节区间」：例如 3-7 章，并说明 why（简短）。",
+    "2) （可选）给出少量关键事件 events（用于时间线），但**不要重复已完成事件**；无法确定可输出空数组。",
+    "",
+    "严格输出 JSON，不要解释、不要 markdown、不要代码块。JSON schema：",
+    JSON.stringify(
+      {
+        compressionSuggestions: [{ startChapter: 3, endChapter: 7, why: "为什么适合压缩（不超过 40 字）" }],
+        events: [
+          {
+            id: "evt-xxx（可选）",
+            title: "事件标题",
+            startChapter: 3,
+            endChapter: 3,
+            summary: "事件摘要（不超过 80 字）",
+            status: "open"
+          }
+        ]
+      },
+      null,
+      2
+    ),
+    "",
+    "输入（recentChapterSummaries）：",
+    JSON.stringify(input.recentChapterSummaries, null, 2),
+    "",
+    "输入（compressedRanges）：",
+    JSON.stringify(input.compressedRanges, null, 2),
+    "",
+    "输入（doneEventIds）：",
+    JSON.stringify(input.doneEventIds, null, 2),
+    "",
+    "输入（closedLoops）：",
+    JSON.stringify(input.closedLoops, null, 2)
+  ].join("\n");
+}
+
+async function generateTimelineUpdateWithAiSdk(input: { cfg: ModelConfig; prompt: string }): Promise<TimelineModelOutput> {
+  const { cfg, prompt } = input;
+  const { model, providerOptions } = createAiSdkModel(cfg);
+  const { text } = await generateText({
+    model,
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.2,
+    ...(cfg.provider === "ollama" ? {} : { reasoning: "low" as const }),
+    providerOptions
+  } as any);
+  const jsonText = stripJsonFence(text || "");
+  try {
+    return JSON.parse(jsonText) as TimelineModelOutput;
+  } catch {
+    return {};
+  }
+}
+
+function normalizeTimelineIndex(idx: TimelineIndex): TimelineIndex {
+  const chapters = Array.isArray(idx.chapters) ? idx.chapters : [];
+  const compressedRanges = Array.isArray(idx.compressedRanges) ? idx.compressedRanges : [];
+  const events = Array.isArray(idx.events) ? idx.events : [];
+  const compressionSuggestions = Array.isArray(idx.compressionSuggestions) ? idx.compressionSuggestions : [];
+  const manual = idx.manual && typeof idx.manual === "object" ? idx.manual : ({ doneEventIds: [] } as any);
+  manual.doneEventIds = Array.isArray((manual as any).doneEventIds) ? (manual as any).doneEventIds : [];
+  return {
+    version: 1,
+    updatedAt: typeof idx.updatedAt === "string" ? idx.updatedAt : "",
+    chapters,
+    compressedRanges,
+    events,
+    compressionSuggestions,
+    manual
+  };
+}
+
+async function updateTimelineIndexAfterAudit(input: {
+  cfg: ModelConfig;
+  slug: string;
+  filename: string;
+  run: any;
+  ledger: any;
+}): Promise<TimelineIndex> {
+  const { cfg, slug, filename, run, ledger } = input;
+  const idx = normalizeTimelineIndex(await readTimelineIndex(dataDir, slug));
+  const n = parseChapterNumberFromFilename(filename);
+  const title = String(run?.chapter?.title || filename.replace(/\.md$/, ""));
+  const auditedAt = String(run?.chapter?.auditedAt || new Date().toISOString());
+  const gistL1 = String(run?.gistL1 || "").trim();
+
+  // upsert chapter summary
+  const existingI = idx.chapters.findIndex((c) => c.filename === filename);
+  const row = { chapter: Number.isFinite(n) ? n : 0, filename, title, auditedAt, gistL1 };
+  if (existingI >= 0) idx.chapters[existingI] = row;
+  else idx.chapters.push(row);
+  idx.chapters.sort((a, b) => (a.chapter ?? 0) - (b.chapter ?? 0));
+
+  // generate suggestions/events using recent summaries
+  const recent = [...idx.chapters].slice(-40).map((c) => ({
+    chapter: c.chapter,
+    title: c.title,
+    gistL1: c.gistL1
+  }));
+  const prompt = buildTimelineUpdatePrompt({
+    bookSlug: slug,
+    recentChapterSummaries: recent,
+    compressedRanges: (idx.compressedRanges ?? []).slice(-20).map((r) => ({
+      startChapter: r.startChapter,
+      endChapter: r.endChapter,
+      summary: r.summary
+    })),
+    doneEventIds: idx.manual?.doneEventIds ?? [],
+    closedLoops: ledger?.closedLoops ?? []
+  });
+  const out = await generateTimelineUpdateWithAiSdk({ cfg, prompt });
+  if (Array.isArray(out.compressionSuggestions)) {
+    idx.compressionSuggestions = out.compressionSuggestions
+      .map((s) => ({
+        startChapter: Math.max(1, Math.floor(Number(s.startChapter || 0))),
+        endChapter: Math.max(1, Math.floor(Number(s.endChapter || 0))),
+        why: String(s.why || "").trim() || "—"
+      }))
+      .filter((s) => Number.isFinite(s.startChapter) && Number.isFinite(s.endChapter) && s.endChapter >= s.startChapter)
+      .slice(0, 3);
+  }
+  idx.updatedAt = auditedAt;
+  await writeTimelineIndex(dataDir, slug, idx);
+  await writeStoryTimelineMarkdownFromIndex(dataDir, slug, idx);
+  return idx;
 }
 
 function sseWrite(res: any, payload: any) {
@@ -477,7 +640,11 @@ async function performAuditWithAiSdk(input: {
 
   const rawJson = await generateAuditJsonWithAiSdk({ cfg, prompt: auditPrompt });
   const jsonText = stripJsonFence(rawJson);
-  return await finalizeAuditFromJsonText(slug, filename, jsonText);
+  const run = await finalizeAuditFromJsonText(slug, filename, jsonText);
+  const ledger = await readAuditLedger(dataDir, slug);
+  // 每次分析后自动更新时间线索引与推荐压缩区间
+  await updateTimelineIndexAfterAudit({ cfg, slug, filename, run, ledger }).catch(() => {});
+  return run;
 }
 
 async function performAudit(slug: string, filename: string, modelConfigId: string | null | undefined) {
@@ -802,6 +969,93 @@ app.get("/api/books/:slug/audit/characters", async (req) => {
   const params = paramsSchema.parse((req as any).params);
   const idx = await readAuditCharactersIndex(dataDir, params.slug);
   return { index: idx };
+});
+
+app.get("/api/books/:slug/timeline/index", async (req) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const params = paramsSchema.parse((req as any).params);
+  const idx = await readTimelineIndex(dataDir, params.slug);
+  return { index: idx };
+});
+
+app.post("/api/books/:slug/timeline/event/mark", async (req) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({ id: z.string().min(1), status: z.enum(["open", "done"]) });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+
+  const idx = normalizeTimelineIndex(await readTimelineIndex(dataDir, params.slug));
+  const set = new Set(idx.manual?.doneEventIds ?? []);
+  if (body.status === "done") set.add(body.id);
+  else set.delete(body.id);
+  idx.manual.doneEventIds = [...set];
+  idx.updatedAt = new Date().toISOString();
+  await writeTimelineIndex(dataDir, params.slug, idx);
+  await writeStoryTimelineMarkdownFromIndex(dataDir, params.slug, idx);
+  return { ok: true, index: idx };
+});
+
+app.post("/api/books/:slug/timeline/compress", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({
+    startChapter: z.number().int().min(1),
+    endChapter: z.number().int().min(1),
+    modelConfigId: z.string().nullable().optional()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+
+  const settings = await readModelSettings();
+  const activeId = body.modelConfigId || settings.activeId;
+  const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+  if (!cfg) return reply.code(400).send({ message: "未配置模型" });
+
+  const a = Math.min(body.startChapter, body.endChapter);
+  const b = Math.max(body.startChapter, body.endChapter);
+
+  const idx = normalizeTimelineIndex(await readTimelineIndex(dataDir, params.slug));
+  const chapters = idx.chapters.filter((c) => c.chapter >= a && c.chapter <= b);
+  if (chapters.length === 0) return reply.code(400).send({ message: "该区间没有已分析的章节摘要" });
+
+  const prompt = [
+    "你是小说写作助手，负责把多个章节的摘要压缩成一个更高层级的区间摘要。",
+    "要求：",
+    "- 用中文输出，不要 markdown，不要列表编号，控制在 250-500 字。",
+    "- 不要重复已完成事件；如果无法判断完成与否，保持中性描述。",
+    "",
+    `区间：第 ${a}-${b} 章`,
+    "",
+    "该区间内每章摘要（gistL1）：",
+    JSON.stringify(
+      chapters.map((c) => ({ chapter: c.chapter, title: c.title, gistL1: c.gistL1 })),
+      null,
+      2
+    )
+  ].join("\n");
+
+  const { model, providerOptions } = createAiSdkModel(cfg);
+  const { text } = await generateText({
+    model,
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.2,
+    ...(cfg.provider === "ollama" ? {} : { reasoning: "low" as const }),
+    providerOptions
+  } as any);
+
+  const summary = String(text || "").trim();
+  if (!summary) return reply.code(400).send({ message: "模型未返回区间摘要" });
+
+  const now = new Date().toISOString();
+  const i = idx.compressedRanges.findIndex((r) => r.startChapter === a && r.endChapter === b);
+  const row = { startChapter: a, endChapter: b, summary, lastCompressedAt: now };
+  if (i >= 0) idx.compressedRanges[i] = row;
+  else idx.compressedRanges.push(row);
+  idx.compressedRanges.sort((x, y) => x.startChapter - y.startChapter || x.endChapter - y.endChapter);
+  idx.updatedAt = now;
+
+  await writeTimelineIndex(dataDir, params.slug, idx);
+  await writeStoryTimelineMarkdownFromIndex(dataDir, params.slug, idx);
+  return { ok: true, index: idx };
 });
 
 // 兼容旧路由：novels -> books

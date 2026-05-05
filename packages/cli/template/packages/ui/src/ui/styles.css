@@ -1755,6 +1755,7 @@ button:disabled {
 .chapterSplitRightTitle {
   font-size: 13px;
   font-weight: 650;
+  padding-left: 12px;
   color: var(--text);
 }
 
@@ -1762,7 +1763,7 @@ button:disabled {
   flex: 1;
   min-height: 0;
   margin: 0;
-  padding: 10px;
+  padding: 0;
   overflow: auto;
   font-size: 13px;
   line-height: 1.55;
@@ -1770,6 +1771,10 @@ button:disabled {
   overflow-wrap: anywhere;
   word-break: break-word;
   color: color-mix(in srgb, var(--text) 92%, var(--muted));
+}
+
+.auditStreamInner {
+  padding: 10px;
 }
 
 .auditStreamMd p {
@@ -1873,6 +1878,146 @@ button:disabled {
   margin-bottom: 0 !important;
   flex: 1;
   min-width: 0;
+}
+
+.timelinePanel {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.timelineTopRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.timelineToggle {
+  flex-shrink: 0;
+}
+
+.timelineSection {
+  min-width: 0;
+}
+
+.timelineSuggestionList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.timelineSuggestion {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 10px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--panel2) 82%, transparent);
+  cursor: pointer;
+  text-align: left;
+}
+
+.timelineSuggestion:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--panel2) 92%, transparent);
+}
+
+.timelineSuggestionWhy {
+  flex: 1;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.timelineCompressRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.timelineInput {
+  width: 110px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  outline: none;
+  font-size: 12px;
+}
+
+.timelineHint {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.timelineRangeList,
+.timelineEventList,
+.timelineChapterList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.timelineRangeItem,
+.timelineEventItem,
+.timelineChapterItem {
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--panel2) 82%, transparent);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.timelineRangeTop,
+.timelineEventTop,
+.timelineChapterTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.timelineRangeTitle,
+.timelineEventTitle,
+.timelineChapterTitle {
+  font-weight: 650;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.timelineRangeSummary,
+.timelineChapterGist {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  color: color-mix(in srgb, var(--text) 92%, var(--muted));
+}
+
+.timelineEventSummary {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.timelineEventItem.done {
+  opacity: 0.72;
+}
+
+.timelineChapterMeta {
+  flex-shrink: 0;
 }
 
 .auditModelPickerHeader {
