@@ -1186,6 +1186,22 @@ export function App() {
   const [editCharTags, setEditCharTags] = useState("");
   const [editCharStateJson, setEditCharStateJson] = useState("");
   const [editCharPersonality, setEditCharPersonality] = useState("");
+  const [editCharSocialProfession, setEditCharSocialProfession] = useState("");
+  const [editCharSocialClass, setEditCharSocialClass] = useState("");
+  const [editCharSocialTitles, setEditCharSocialTitles] = useState("");
+  const [editCharSocialOther, setEditCharSocialOther] = useState("");
+  const [editCharHistoricalDebts, setEditCharHistoricalDebts] = useState("");
+  const [editCharWant, setEditCharWant] = useState("");
+  const [editCharNeed, setEditCharNeed] = useState("");
+  const [editCharMoralCompass, setEditCharMoralCompass] = useState("");
+  const [editCharFlaws, setEditCharFlaws] = useState("");
+  const [editCharBlindSpots, setEditCharBlindSpots] = useState("");
+  const [editCharLinguisticStyle, setEditCharLinguisticStyle] = useState("");
+  const [editCharCatchphrases, setEditCharCatchphrases] = useState("");
+  const [editCharMannerisms, setEditCharMannerisms] = useState("");
+  const [editCharMaskLines, setEditCharMaskLines] = useState("");
+  const [editCharRelationsLines, setEditCharRelationsLines] = useState("");
+  const [editCharRelationsFreeText, setEditCharRelationsFreeText] = useState("");
   const [timelineIndex, setTimelineIndex] = useState<TimelineIndex | null>(null);
   const [timelineBusy, setTimelineBusy] = useState(false);
   const [timelineCompressStart, setTimelineCompressStart] = useState("");
@@ -1895,6 +1911,77 @@ export function App() {
       setEditCharStateJson(String(st || ""));
     }
     setEditCharPersonality(String(c?.personalityAnalysis || "").trim());
+    const social = c?.socialTags && typeof c.socialTags === "object" ? c.socialTags : {};
+    setEditCharSocialProfession(String((social as any)?.profession || "").trim());
+    setEditCharSocialClass(String((social as any)?.class || "").trim());
+    setEditCharSocialTitles(
+      Array.isArray((social as any)?.titles) ? (social as any).titles.map((x: any) => String(x).trim()).filter(Boolean).join("\n") : ""
+    );
+    setEditCharSocialOther(
+      Array.isArray((social as any)?.other) ? (social as any).other.map((x: any) => String(x).trim()).filter(Boolean).join("\n") : ""
+    );
+    setEditCharHistoricalDebts(
+      Array.isArray(c?.historicalDebts) ? (c.historicalDebts as any[]).map((x) => String(x).trim()).filter(Boolean).join("\n") : ""
+    );
+    const nd = c?.narrativeDrives && typeof c.narrativeDrives === "object" ? c.narrativeDrives : {};
+    setEditCharWant(String((nd as any)?.want || "").trim());
+    setEditCharNeed(String((nd as any)?.need || "").trim());
+    setEditCharMoralCompass(String((nd as any)?.moralCompass || "").trim());
+    setEditCharFlaws(
+      Array.isArray((nd as any)?.flaws) ? (nd as any).flaws.map((x: any) => String(x).trim()).filter(Boolean).join("\n") : ""
+    );
+    setEditCharBlindSpots(
+      Array.isArray((nd as any)?.blindSpots)
+        ? (nd as any).blindSpots.map((x: any) => String(x).trim()).filter(Boolean).join("\n")
+        : ""
+    );
+    const fp = c?.fingerprints && typeof c.fingerprints === "object" ? c.fingerprints : {};
+    setEditCharLinguisticStyle(
+      Array.isArray((fp as any)?.linguisticStyle)
+        ? (fp as any).linguisticStyle.map((x: any) => String(x).trim()).filter(Boolean).join("\n")
+        : ""
+    );
+    setEditCharCatchphrases(
+      Array.isArray((fp as any)?.catchphrases)
+        ? (fp as any).catchphrases.map((x: any) => String(x).trim()).filter(Boolean).join("\n")
+        : ""
+    );
+    setEditCharMannerisms(
+      Array.isArray((fp as any)?.mannerisms) ? (fp as any).mannerisms.map((x: any) => String(x).trim()).filter(Boolean).join("\n") : ""
+    );
+    setEditCharMaskLines(
+      Array.isArray((fp as any)?.mask)
+        ? (fp as any).mask
+            .map((m: any) => ({
+              context: String(m?.context || "").trim(),
+              persona: String(m?.persona || "").trim()
+            }))
+            .filter((m: any) => m.context || m.persona)
+            .map((m: any) => `${m.context || ""}=${m.persona || ""}`.trim())
+            .join("\n")
+        : ""
+    );
+    const rh = c?.relationalHooks && typeof c.relationalHooks === "object" ? c.relationalHooks : {};
+    setEditCharRelationsFreeText(String((rh as any)?.freeText || "").trim());
+    setEditCharRelationsLines(
+      Array.isArray((rh as any)?.relations)
+        ? (rh as any).relations
+            .map((r: any) => ({
+              targetName: String(r?.targetName || "").trim(),
+              emotionalPolarity: String(r?.emotionalPolarity || "").trim(),
+              conflictIndex: String(r?.conflictIndex || "").trim(),
+              sharedSecrets: Array.isArray(r?.sharedSecrets)
+                ? r.sharedSecrets.map((x: any) => String(x).trim()).filter(Boolean)
+                : []
+            }))
+            .filter((r: any) => r.targetName)
+            .map(
+              (r: any) =>
+                `${r.targetName}|${r.emotionalPolarity || ""}|${r.conflictIndex || ""}|${r.sharedSecrets.join(",")}`.trim()
+            )
+            .join("\n")
+        : ""
+    );
     setEditCharOpen(true);
   }
 
@@ -1917,12 +2004,89 @@ export function App() {
       .map((s) => s.trim())
       .filter(Boolean)
       .slice(0, 30);
+    const lines = (t: string) =>
+      t
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    const socialTags = {
+      profession: editCharSocialProfession.trim() || undefined,
+      class: editCharSocialClass.trim() || undefined,
+      titles: lines(editCharSocialTitles).slice(0, 60),
+      other: lines(editCharSocialOther).slice(0, 60)
+    };
+    const historicalDebts = lines(editCharHistoricalDebts).slice(0, 120);
+    const narrativeDrives = {
+      want: editCharWant.trim() || undefined,
+      need: editCharNeed.trim() || undefined,
+      moralCompass: editCharMoralCompass.trim() || undefined,
+      flaws: lines(editCharFlaws).slice(0, 60),
+      blindSpots: lines(editCharBlindSpots).slice(0, 60)
+    };
+    const parseMask = () => {
+      const out: Array<{ context: string; persona: string }> = [];
+      for (const ln of lines(editCharMaskLines)) {
+        const i = ln.indexOf("=");
+        if (i >= 0) {
+          const context = ln.slice(0, i).trim();
+          const persona = ln.slice(i + 1).trim();
+          if (context || persona) out.push({ context, persona });
+        } else {
+          out.push({ context: "", persona: ln });
+        }
+      }
+      return out;
+    };
+    const fingerprints = {
+      linguisticStyle: lines(editCharLinguisticStyle).slice(0, 60),
+      catchphrases: lines(editCharCatchphrases).slice(0, 60),
+      mannerisms: lines(editCharMannerisms).slice(0, 60),
+      mask: parseMask()
+    };
+    const parseRelations = () => {
+      const out: Array<{
+        targetName: string;
+        emotionalPolarity?: string;
+        conflictIndex?: string;
+        sharedSecrets?: string[];
+      }> = [];
+      for (const ln of lines(editCharRelationsLines)) {
+        const parts = ln.split("|");
+        const targetName = String(parts[0] || "").trim();
+        if (!targetName) continue;
+        const emotionalPolarity = String(parts[1] || "").trim();
+        const conflictIndex = String(parts[2] || "").trim();
+        const secretsRaw = String(parts[3] || "").trim();
+        const sharedSecrets = secretsRaw
+          ? secretsRaw
+              .split(/[,，、]/)
+              .map((s) => s.trim())
+              .filter(Boolean)
+          : [];
+        out.push({
+          targetName,
+          emotionalPolarity: emotionalPolarity || undefined,
+          conflictIndex: conflictIndex || undefined,
+          sharedSecrets: sharedSecrets.length ? sharedSecrets : undefined
+        });
+      }
+      return out;
+    };
+    const relationalHooks = {
+      relations: parseRelations(),
+      freeText: editCharRelationsFreeText.trim() || undefined
+    };
     try {
       const { index } = await updateAuditCharacter(activeBook, {
         name,
         role: editCharRole.trim(),
         tags,
         state,
+        socialTags,
+        historicalDebts,
+        narrativeDrives,
+        fingerprints,
+        relationalHooks,
         personalityAnalysis: editCharPersonality.trim()
       });
       setAuditCharactersIndex(index);
@@ -2705,38 +2869,193 @@ export function App() {
 
                                             {open ? (
                                               <div className="auditCharCardBody">
-                                                <div className="auditCharDetailRow">
-                                                  <div className="auditCharDetailLabel">身份</div>
-                                                  <div className="auditCharDetailValue">{roleStr || "—"}</div>
-                                                </div>
-                                                <div className="auditCharDetailRow">
-                                                  <div className="auditCharDetailLabel">标签</div>
-                                                  <div className="auditCharDetailValue">
-                                                    {tagArr.length ? tagArr.join("、") : "—"}
+                                                {/* Logic & Status（账本最关心） */}
+                                                {roleStr ? (
+                                                  <div className="auditCharDetailRow">
+                                                    <div className="auditCharDetailLabel">身份</div>
+                                                    <div className="auditCharDetailValue">{roleStr}</div>
                                                   </div>
-                                                </div>
-                                                <div className="auditCharDetailRow">
-                                                  <div className="auditCharDetailLabel">地点</div>
-                                                  <div className="auditCharDetailValue">{loc || "—"}</div>
-                                                </div>
-                                                <div className="auditCharDetailRow">
-                                                  <div className="auditCharDetailLabel">伤势与状态</div>
-                                                  <div className="auditCharDetailValue">{inj || "—"}</div>
-                                                </div>
-                                                <div className="auditCharDetailRow">
-                                                  <div className="auditCharDetailLabel">随身物品</div>
-                                                  <div className="auditCharDetailValue">
-                                                    {items.length ? items.join("、") : "—"}
+                                                ) : null}
+                                                {tagArr.length ? (
+                                                  <div className="auditCharDetailRow">
+                                                    <div className="auditCharDetailLabel">标签</div>
+                                                    <div className="auditCharDetailValue">{tagArr.join("、")}</div>
                                                   </div>
-                                                </div>
-                                                <div className="auditCharDetailRow">
-                                                  <div className="auditCharDetailLabel">金钱变动</div>
-                                                  <div className="auditCharDetailValue">
-                                                    {money !== undefined && money !== null && money !== ""
-                                                      ? String(money)
-                                                      : "—"}
+                                                ) : null}
+                                                {loc ? (
+                                                  <div className="auditCharDetailRow">
+                                                    <div className="auditCharDetailLabel">地点</div>
+                                                    <div className="auditCharDetailValue">{loc}</div>
                                                   </div>
-                                                </div>
+                                                ) : null}
+                                                {inj ? (
+                                                  <div className="auditCharDetailRow">
+                                                    <div className="auditCharDetailLabel">伤势与状态</div>
+                                                    <div className="auditCharDetailValue">{inj}</div>
+                                                  </div>
+                                                ) : null}
+                                                {items.length ? (
+                                                  <div className="auditCharDetailRow">
+                                                    <div className="auditCharDetailLabel">随身物品</div>
+                                                    <div className="auditCharDetailValue">{items.join("、")}</div>
+                                                  </div>
+                                                ) : null}
+                                                {money !== undefined && money !== null && money !== "" ? (
+                                                  <div className="auditCharDetailRow">
+                                                    <div className="auditCharDetailLabel">金钱变动</div>
+                                                    <div className="auditCharDetailValue">{String(money)}</div>
+                                                  </div>
+                                                ) : null}
+
+                                                {(() => {
+                                                  const social = (c as any)?.socialTags;
+                                                  if (!social || typeof social !== "object") return null;
+                                                  const profession = String((social as any)?.profession || "").trim();
+                                                  const cls = String((social as any)?.class || "").trim();
+                                                  const titles = Array.isArray((social as any)?.titles)
+                                                    ? (social as any).titles.map((x: any) => String(x).trim()).filter(Boolean)
+                                                    : [];
+                                                  const other = Array.isArray((social as any)?.other)
+                                                    ? (social as any).other.map((x: any) => String(x).trim()).filter(Boolean)
+                                                    : [];
+                                                  const lines: string[] = [];
+                                                  if (profession) lines.push(`职业：${profession}`);
+                                                  if (cls) lines.push(`阶级：${cls}`);
+                                                  if (titles.length) lines.push(`头衔：${titles.join("、")}`);
+                                                  if (other.length) lines.push(`其他：${other.join("、")}`);
+                                                  if (!lines.length) return null;
+                                                  return (
+                                                    <div className="auditCharDetailRow">
+                                                      <div className="auditCharDetailLabel">社会身份</div>
+                                                      <div className="auditCharDetailValue">{lines.join("；")}</div>
+                                                    </div>
+                                                  );
+                                                })()}
+
+                                                {Array.isArray((c as any)?.historicalDebts) && (c as any).historicalDebts.length ? (
+                                                  <div className="auditCharQuotes">
+                                                    <div className="auditCharDetailLabel">历史债</div>
+                                                    <div className="auditCharDetailValue">
+                                                      {(c as any).historicalDebts
+                                                        .map((x: any) => String(x).trim())
+                                                        .filter(Boolean)
+                                                        .map((t: string, i: number) => (
+                                                          <div key={`debt-${i}`}>- {t}</div>
+                                                        ))}
+                                                    </div>
+                                                  </div>
+                                                ) : null}
+
+                                                {/* Narrative Drives */}
+                                                {(() => {
+                                                  const nd = (c as any)?.narrativeDrives;
+                                                  if (!nd || typeof nd !== "object") return null;
+                                                  const want = String((nd as any)?.want || "").trim();
+                                                  const need = String((nd as any)?.need || "").trim();
+                                                  const moral = String((nd as any)?.moralCompass || "").trim();
+                                                  const flaws = Array.isArray((nd as any)?.flaws)
+                                                    ? (nd as any).flaws.map((x: any) => String(x).trim()).filter(Boolean)
+                                                    : [];
+                                                  const blind = Array.isArray((nd as any)?.blindSpots)
+                                                    ? (nd as any).blindSpots.map((x: any) => String(x).trim()).filter(Boolean)
+                                                    : [];
+                                                  if (!want && !need && !moral && !flaws.length && !blind.length) return null;
+                                                  return (
+                                                    <div className="auditCharQuotes">
+                                                      <div className="auditCharDetailLabel">叙事驱动力</div>
+                                                      <div className="auditCharDetailValue">
+                                                        {want ? <div>Want：{want}</div> : null}
+                                                        {need ? <div>Need：{need}</div> : null}
+                                                        {moral ? <div>道德罗盘：{moral}</div> : null}
+                                                        {flaws.length ? (
+                                                          <div>
+                                                            缺陷：{flaws.join("、")}
+                                                          </div>
+                                                        ) : null}
+                                                        {blind.length ? (
+                                                          <div>
+                                                            盲点：{blind.join("、")}
+                                                          </div>
+                                                        ) : null}
+                                                      </div>
+                                                    </div>
+                                                  );
+                                                })()}
+
+                                                {/* Fingerprints */}
+                                                {(() => {
+                                                  const fp = (c as any)?.fingerprints;
+                                                  if (!fp || typeof fp !== "object") return null;
+                                                  const ling = Array.isArray((fp as any)?.linguisticStyle)
+                                                    ? (fp as any).linguisticStyle.map((x: any) => String(x).trim()).filter(Boolean)
+                                                    : [];
+                                                  const catchp = Array.isArray((fp as any)?.catchphrases)
+                                                    ? (fp as any).catchphrases.map((x: any) => String(x).trim()).filter(Boolean)
+                                                    : [];
+                                                  const man = Array.isArray((fp as any)?.mannerisms)
+                                                    ? (fp as any).mannerisms.map((x: any) => String(x).trim()).filter(Boolean)
+                                                    : [];
+                                                  const mask = Array.isArray((fp as any)?.mask) ? (fp as any).mask : [];
+                                                  const maskLines = mask
+                                                    .map((m: any) => ({
+                                                      context: String(m?.context || "").trim(),
+                                                      persona: String(m?.persona || "").trim()
+                                                    }))
+                                                    .filter((m: any) => m.context || m.persona)
+                                                    .map((m: any) => `${m.context || "（场景）"}：${m.persona || "（人设）"}`);
+                                                  if (!ling.length && !catchp.length && !man.length && !maskLines.length) return null;
+                                                  return (
+                                                    <div className="auditCharQuotes">
+                                                      <div className="auditCharDetailLabel">表现力指纹</div>
+                                                      <div className="auditCharDetailValue">
+                                                        {ling.length ? <div>语气/句式：{ling.join("、")}</div> : null}
+                                                        {catchp.length ? <div>口癖：{catchp.join("、")}</div> : null}
+                                                        {man.length ? <div>动作：{man.join("、")}</div> : null}
+                                                        {maskLines.length ? <div>面具：{maskLines.join("；")}</div> : null}
+                                                      </div>
+                                                    </div>
+                                                  );
+                                                })()}
+
+                                                {/* Relational Hooks */}
+                                                {(() => {
+                                                  const rh = (c as any)?.relationalHooks;
+                                                  if (!rh || typeof rh !== "object") return null;
+                                                  const rel = Array.isArray((rh as any)?.relations) ? (rh as any).relations : [];
+                                                  const freeText = String((rh as any)?.freeText || "").trim();
+                                                  const relRows = rel
+                                                    .map((r: any) => ({
+                                                      targetName: String(r?.targetName || "").trim(),
+                                                      emotionalPolarity: String(r?.emotionalPolarity || "").trim(),
+                                                      conflictIndex: String(r?.conflictIndex || "").trim(),
+                                                      sharedSecrets: Array.isArray(r?.sharedSecrets)
+                                                        ? r.sharedSecrets.map((x: any) => String(x).trim()).filter(Boolean)
+                                                        : []
+                                                    }))
+                                                    .filter((r: any) => r.targetName);
+                                                  if (!relRows.length && !freeText) return null;
+                                                  return (
+                                                    <div className="auditCharQuotes">
+                                                      <div className="auditCharDetailLabel">关系钩子</div>
+                                                      <div className="auditCharDetailValue">
+                                                        {relRows.length ? (
+                                                          <div>
+                                                            {relRows.map((r: any, i: number) => (
+                                                              <div key={`rel-${r.targetName}-${i}`}>
+                                                                - {r.targetName}
+                                                                {r.emotionalPolarity ? ` · 情感：${r.emotionalPolarity}` : ""}
+                                                                {r.conflictIndex ? ` · 冲突：${r.conflictIndex}` : ""}
+                                                                {r.sharedSecrets.length ? ` · 秘密：${r.sharedSecrets.join("、")}` : ""}
+                                                              </div>
+                                                            ))}
+                                                          </div>
+                                                        ) : null}
+                                                        {freeText ? <div style={{ marginTop: relRows.length ? 6 : 0 }}>{freeText}</div> : null}
+                                                      </div>
+                                                    </div>
+                                                  );
+                                                })()}
+
                                                 {auditCharStateExtraRows(st as Record<string, unknown>).map(([lk, lv], ri) => (
                                                   <div key={`st-${lk}-${ri}`} className="auditCharDetailRow">
                                                     <div className="auditCharDetailLabel">{lk}</div>
@@ -2749,12 +3068,12 @@ export function App() {
                                                     <div className="auditCharDetailValue">{lv}</div>
                                                   </div>
                                                 ))}
-                                                <div className="auditCharQuotes">
-                                                  <div className="auditCharDetailLabel">性格分析</div>
-                                                  <div className="auditCharDetailValue">
-                                                    {personality ? personality : "—"}
+                                                {personality ? (
+                                                  <div className="auditCharQuotes">
+                                                    <div className="auditCharDetailLabel">性格分析</div>
+                                                    <div className="auditCharDetailValue">{personality}</div>
                                                   </div>
-                                                </div>
+                                                ) : null}
                                               </div>
                                             ) : null}
                                           </div>
@@ -5436,6 +5755,230 @@ export function App() {
                 onChange={(e) => setEditCharPersonality(e.target.value)}
                 placeholder="性格、动机、弱点、行为模式…"
                 disabled={busy}
+              />
+            </div>
+
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-social-prof">
+                社会身份：职业
+              </label>
+              <input
+                id="modal-edit-char-social-prof"
+                className="modalInput"
+                value={editCharSocialProfession}
+                onChange={(e) => setEditCharSocialProfession(e.target.value)}
+                placeholder="如：老兵/捕快/商人…"
+                disabled={busy}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-social-class">
+                社会身份：阶级
+              </label>
+              <input
+                id="modal-edit-char-social-class"
+                className="modalInput"
+                value={editCharSocialClass}
+                onChange={(e) => setEditCharSocialClass(e.target.value)}
+                placeholder="如：贵族/平民/宗门内门…"
+                disabled={busy}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-social-titles">
+                社会身份：头衔<span className="modalOptional">（一行一个）</span>
+              </label>
+              <textarea
+                id="modal-edit-char-social-titles"
+                className="modalTextarea"
+                value={editCharSocialTitles}
+                onChange={(e) => setEditCharSocialTitles(e.target.value)}
+                placeholder={"如：镇北将军\n青石村猎户…"}
+                disabled={busy}
+                rows={4}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-social-other">
+                社会身份：其他标签<span className="modalOptional">（一行一个）</span>
+              </label>
+              <textarea
+                id="modal-edit-char-social-other"
+                className="modalTextarea"
+                value={editCharSocialOther}
+                onChange={(e) => setEditCharSocialOther(e.target.value)}
+                placeholder={"如：军功在身\n被通缉…"}
+                disabled={busy}
+                rows={4}
+              />
+            </div>
+
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-debts">
+                历史债<span className="modalOptional">（一行一个）</span>
+              </label>
+              <textarea
+                id="modal-edit-char-debts"
+                className="modalTextarea"
+                value={editCharHistoricalDebts}
+                onChange={(e) => setEditCharHistoricalDebts(e.target.value)}
+                placeholder={"如：第5章曾杀过人\n欠某人一条命…"}
+                disabled={busy}
+                rows={5}
+              />
+            </div>
+
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-want">
+                Want<span className="modalOptional">（显性目标）</span>
+              </label>
+              <input
+                id="modal-edit-char-want"
+                className="modalInput"
+                value={editCharWant}
+                onChange={(e) => setEditCharWant(e.target.value)}
+                placeholder="如：复仇/变强/赚一千万…"
+                disabled={busy}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-need">
+                Need<span className="modalOptional">（隐性成长）</span>
+              </label>
+              <input
+                id="modal-edit-char-need"
+                className="modalInput"
+                value={editCharNeed}
+                onChange={(e) => setEditCharNeed(e.target.value)}
+                placeholder="如：学会信任/面对恐惧…"
+                disabled={busy}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-moral">
+                道德罗盘
+              </label>
+              <input
+                id="modal-edit-char-moral"
+                className="modalInput"
+                value={editCharMoralCompass}
+                onChange={(e) => setEditCharMoralCompass(e.target.value)}
+                placeholder="如：利己/集体主义/底线…"
+                disabled={busy}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-flaws">
+                缺陷<span className="modalOptional">（一行一个）</span>
+              </label>
+              <textarea
+                id="modal-edit-char-flaws"
+                className="modalTextarea"
+                value={editCharFlaws}
+                onChange={(e) => setEditCharFlaws(e.target.value)}
+                placeholder={"如：冲动\n不善表达…"}
+                disabled={busy}
+                rows={4}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-blind">
+                盲点<span className="modalOptional">（一行一个）</span>
+              </label>
+              <textarea
+                id="modal-edit-char-blind"
+                className="modalTextarea"
+                value={editCharBlindSpots}
+                onChange={(e) => setEditCharBlindSpots(e.target.value)}
+                placeholder={"如：误以为某人可信\n不了解某势力真实目的…"}
+                disabled={busy}
+                rows={4}
+              />
+            </div>
+
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-ling">
+                语气/句式特征<span className="modalOptional">（一行一个，3-7条即可）</span>
+              </label>
+              <textarea
+                id="modal-edit-char-ling"
+                className="modalTextarea"
+                value={editCharLinguisticStyle}
+                onChange={(e) => setEditCharLinguisticStyle(e.target.value)}
+                placeholder={"如：短句居多\n爱反问…"}
+                disabled={busy}
+                rows={4}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-catch">
+                口癖<span className="modalOptional">（一行一个）</span>
+              </label>
+              <textarea
+                id="modal-edit-char-catch"
+                className="modalTextarea"
+                value={editCharCatchphrases}
+                onChange={(e) => setEditCharCatchphrases(e.target.value)}
+                placeholder={"如：懂？\n别急…"}
+                disabled={busy}
+                rows={3}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-man">
+                标志性动作<span className="modalOptional">（一行一个）</span>
+              </label>
+              <textarea
+                id="modal-edit-char-man"
+                className="modalTextarea"
+                value={editCharMannerisms}
+                onChange={(e) => setEditCharMannerisms(e.target.value)}
+                placeholder={"如：思考时揉指关节\n紧张时摸刀柄…"}
+                disabled={busy}
+                rows={4}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-mask">
+                社交面具<span className="modalOptional">（一行一个：场景=人设）</span>
+              </label>
+              <textarea
+                id="modal-edit-char-mask"
+                className="modalTextarea"
+                value={editCharMaskLines}
+                onChange={(e) => setEditCharMaskLines(e.target.value)}
+                placeholder={"如：在部下面前=严厉\n在妻子面前=温柔…"}
+                disabled={busy}
+                rows={4}
+              />
+            </div>
+
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-relations">
+                关系钩子：结构化<span className="modalOptional">（一行一个：对方|情感|冲突|秘密1,秘密2）</span>
+              </label>
+              <textarea
+                id="modal-edit-char-relations"
+                className="modalTextarea"
+                value={editCharRelationsLines}
+                onChange={(e) => setEditCharRelationsLines(e.target.value)}
+                placeholder="如：张三|亏欠|债务纠葛|暗号,家族秘闻"
+                disabled={busy}
+                rows={5}
+              />
+            </div>
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-rel-free">
+                关系钩子：自由文本<span className="modalOptional">（兜底）</span>
+              </label>
+              <textarea
+                id="modal-edit-char-rel-free"
+                className="modalTextarea"
+                value={editCharRelationsFreeText}
+                onChange={(e) => setEditCharRelationsFreeText(e.target.value)}
+                placeholder="无法结构化的关系线索…"
+                disabled={busy}
+                rows={4}
               />
             </div>
             <div className="modalField">

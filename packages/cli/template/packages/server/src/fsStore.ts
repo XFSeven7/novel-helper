@@ -151,6 +151,89 @@ export type ForeshadowsIndex = {
   hiddenIds: string[];
 };
 
+export type CharacterSocialTags = {
+  profession?: string;
+  class?: string;
+  titles?: string[];
+  other?: string[];
+};
+
+export type CharacterNarrativeDrives = {
+  want?: string;
+  need?: string;
+  moralCompass?: string;
+  flaws?: string[];
+  blindSpots?: string[];
+};
+
+export type CharacterFingerprints = {
+  linguisticStyle?: string[];
+  catchphrases?: string[];
+  mannerisms?: string[];
+  mask?: Array<{ context: string; persona: string }>;
+};
+
+export type CharacterRelationalHooks = {
+  relations?: Array<{
+    targetName: string;
+    emotionalPolarity?: string;
+    conflictIndex?: string;
+    sharedSecrets?: string[];
+  }>;
+  freeText?: string;
+};
+
+export type CharacterProfile = {
+  name: string;
+  role?: string;
+  tags?: string[];
+  state?: Record<string, any>;
+  socialTags?: CharacterSocialTags;
+  historicalDebts?: string[];
+  narrativeDrives?: CharacterNarrativeDrives;
+  fingerprints?: CharacterFingerprints;
+  relationalHooks?: CharacterRelationalHooks;
+  personalityAnalysis?: string;
+  updatedAt: string;
+};
+
+export type AuditCharactersIndexV2 = {
+  version: 2;
+  updatedAt: string;
+  characters: CharacterProfile[];
+  hiddenNames: string[];
+};
+
+function normalizeAuditCharactersIndexV2(parsed: any): AuditCharactersIndexV2 {
+  const version = Number(parsed?.version);
+  const updatedAt = typeof parsed?.updatedAt === "string" ? parsed.updatedAt : "";
+  const hiddenNames = Array.isArray(parsed?.hiddenNames) ? parsed.hiddenNames.map((x: any) => String(x)) : [];
+  const rawChars = Array.isArray(parsed?.characters) ? parsed.characters : [];
+  const characters: CharacterProfile[] = rawChars
+    .map((c: any) => ({
+      ...(c && typeof c === "object" ? c : {}),
+      name: String(c?.name || "").trim(),
+      role: c?.role,
+      tags: Array.isArray(c?.tags) ? c.tags.map((x: any) => String(x)).filter(Boolean) : c?.tags,
+      state: c?.state && typeof c.state === "object" ? c.state : undefined,
+      socialTags: c?.socialTags && typeof c.socialTags === "object" ? c.socialTags : undefined,
+      historicalDebts: Array.isArray(c?.historicalDebts)
+        ? c.historicalDebts.map((x: any) => String(x)).map((s: string) => s.trim()).filter(Boolean)
+        : undefined,
+      narrativeDrives: c?.narrativeDrives && typeof c.narrativeDrives === "object" ? c.narrativeDrives : undefined,
+      fingerprints: c?.fingerprints && typeof c.fingerprints === "object" ? c.fingerprints : undefined,
+      relationalHooks: c?.relationalHooks && typeof c.relationalHooks === "object" ? c.relationalHooks : undefined,
+      personalityAnalysis: typeof c?.personalityAnalysis === "string" ? c.personalityAnalysis : c?.personalityAnalysis,
+      updatedAt: typeof c?.updatedAt === "string" ? c.updatedAt : updatedAt
+    }))
+    .filter((c: any) => c.name);
+
+  if (version === 2) {
+    return { version: 2, updatedAt, characters, hiddenNames };
+  }
+  return { version: 2, updatedAt, characters, hiddenNames };
+}
+
 async function exists(p: string) {
   try {
     await fs.access(p);
@@ -304,19 +387,22 @@ export async function writeAuditLedger(dataDir: string, novelSlug: string, ledge
   await fs.writeFile(p, JSON.stringify(ledger, null, 2), "utf8");
 }
 
-export async function readAuditCharactersIndex(dataDir: string, novelSlug: string): Promise<any> {
+export async function readAuditCharactersIndex(dataDir: string, novelSlug: string): Promise<AuditCharactersIndexV2> {
   const p = path.join(auditDir(dataDir, novelSlug), "charactersIndex.json");
-  if (!(await exists(p))) return { characters: [], hiddenNames: [], updatedAt: "" };
+  if (!(await exists(p))) return { version: 2, updatedAt: "", characters: [], hiddenNames: [] };
   const parsed = JSON.parse(await fs.readFile(p, "utf8"));
-  if (parsed && typeof parsed === "object") {
-    if (!Array.isArray((parsed as any).characters)) (parsed as any).characters = [];
-    if (!Array.isArray((parsed as any).hiddenNames)) (parsed as any).hiddenNames = [];
-    if (typeof (parsed as any).updatedAt !== "string") (parsed as any).updatedAt = "";
+  const idx = normalizeAuditCharactersIndexV2(parsed);
+  try {
+    if (Number((parsed as any)?.version) !== 2) {
+      await fs.writeFile(p, JSON.stringify(idx, null, 2), "utf8");
+    }
+  } catch {
+    // ignore
   }
-  return parsed;
+  return idx;
 }
 
-export async function writeAuditCharactersIndex(dataDir: string, novelSlug: string, idx: any) {
+export async function writeAuditCharactersIndex(dataDir: string, novelSlug: string, idx: AuditCharactersIndexV2) {
   const dir = auditDir(dataDir, novelSlug);
   await ensureDir(dir);
   const p = path.join(dir, "charactersIndex.json");

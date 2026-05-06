@@ -176,6 +176,35 @@ export async function updateAuditCharacter(
     role?: string;
     tags?: string[];
     state?: any;
+    socialTags?: {
+      profession?: string;
+      class?: string;
+      titles?: string[];
+      other?: string[];
+    };
+    historicalDebts?: string[];
+    narrativeDrives?: {
+      want?: string;
+      need?: string;
+      moralCompass?: string;
+      flaws?: string[];
+      blindSpots?: string[];
+    };
+    fingerprints?: {
+      linguisticStyle?: string[];
+      catchphrases?: string[];
+      mannerisms?: string[];
+      mask?: Array<{ context?: string; persona?: string }>;
+    };
+    relationalHooks?: {
+      relations?: Array<{
+        targetName: string;
+        emotionalPolarity?: string;
+        conflictIndex?: string;
+        sharedSecrets?: string[];
+      }>;
+      freeText?: string;
+    };
     personalityAnalysis?: string;
   }
 ) {

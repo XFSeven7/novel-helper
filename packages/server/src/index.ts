@@ -107,6 +107,13 @@ function buildAuditPrompt(input: {
     "你是小说写作助手，负责“章节审计(Chapter Auditing)”工作流。",
     "请严格输出 JSON（不要解释、不要 markdown、不要代码块），字段需符合下面 schema。",
     "",
+    "你需要对角色做“降噪提取（带保质期）”：",
+    "- 基础设定（姓名/种族/出身等）：仅在首次出现或你非常确定时才填；不确定就留空。",
+    "- 业力账本（状态/伤疤/仇恨/承诺/历史债）：每次审计都尽量更新为“最新状态”。",
+    "- 瞬时情绪（愤怒/尴尬/激动等）：不要写入角色画像（可忽略）。",
+    "- 对话风格/口癖：采样保留，只提炼 3-7 条关键特征即可。",
+    "- 关系钩子：优先结构化到 relations（按对方角色名）；无法结构化时再写到 freeText。",
+    "",
     "已知角色名单（仅供参考，可能不全）：",
     input.knownCharacters.length ? input.knownCharacters.join("、") : "（空）",
     "",
@@ -133,6 +140,32 @@ function buildAuditPrompt(input: {
               name: "角色名",
               newOrExisting: "new/existing/unknown",
               state: { location: "", injuries: "", items: [], moneyChange: 0 },
+              socialTags: { profession: "", class: "", titles: ["头衔"], other: ["其他社会标签"] },
+              historicalDebts: ["重大决策/承诺/债（列表）"],
+              narrativeDrives: {
+                want: "显性目标",
+                need: "隐性成长",
+                moralCompass: "道德罗盘/默认倾向",
+                flaws: ["缺陷/盲点"],
+                blindSpots: ["认知局限/误以为正确的事"]
+              },
+              fingerprints: {
+                linguisticStyle: ["句式/语气特征（3-7条）"],
+                catchphrases: ["口头禅（可空）"],
+                mannerisms: ["标志性动作（可空）"],
+                mask: [{ context: "在谁面前/什么场景", persona: "呈现出的面具/人设" }]
+              },
+              relationalHooks: {
+                relations: [
+                  {
+                    targetName: "对方角色名",
+                    emotionalPolarity: "喜爱/厌恶/恐惧/亏欠/复杂等",
+                    conflictIndex: "资源/信念/目标冲突点",
+                    sharedSecrets: ["共享秘密（可空）"]
+                  }
+                ],
+                freeText: "无法结构化的关系线索（可空）"
+              },
               evidenceQuotes: ["原文证据短句"]
             }
           ],
@@ -582,20 +615,162 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
   await writeAuditRun(dataDir, slug, filename, run);
 
   const idx = await readAuditCharactersIndex(dataDir, slug);
-  const existing = new Set((idx.characters || []).map((c: any) => String(c.name)));
-  const chars = (run.entities.characters || [])
-    .map((c: any) => ({
-      name: String(c.name || "").trim(),
-      role: c.role,
-      tags: c.tags,
-      state: c.state,
-      updatedAt: run.chapter.auditedAt
-    }))
-    .filter((c: any) => c.name);
-  for (const c of chars) {
-    if (!existing.has(c.name)) (idx.characters ||= []).push(c);
+  const auditedAtIso = String(run?.chapter?.auditedAt || new Date().toISOString());
+  const normStr = (v: any) => (typeof v === "string" ? v.trim() : "");
+  const uniqStrs = (arr: any) =>
+    [...new Set((Array.isArray(arr) ? arr : []).map((x) => String(x).trim()).filter(Boolean))];
+  const mergeStrArr = (a: any, b: any) => uniqStrs([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]);
+  const hasVal = (v: any) => {
+    if (v === null || v === undefined) return false;
+    if (typeof v === "string") return v.trim().length > 0;
+    if (typeof v === "number") return Number.isFinite(v);
+    if (typeof v === "boolean") return true;
+    if (Array.isArray(v)) return v.length > 0;
+    if (typeof v === "object") return Object.keys(v).length > 0;
+    return false;
+  };
+  const mergeObjNonEmpty = (prev: any, next: any) => {
+    const out: any = { ...(prev && typeof prev === "object" ? prev : {}) };
+    if (!next || typeof next !== "object") return out;
+    for (const [k, v] of Object.entries(next)) {
+      if (!hasVal(v)) continue;
+      out[k] = v;
+    }
+    return out;
+  };
+  const mergeMask = (a: any, b: any) => {
+    const arrA = Array.isArray(a) ? a : [];
+    const arrB = Array.isArray(b) ? b : [];
+    const out: any[] = [];
+    const seen = new Set<string>();
+    for (const it of [...arrA, ...arrB]) {
+      const ctx = normStr((it as any)?.context);
+      const persona = normStr((it as any)?.persona);
+      if (!ctx && !persona) continue;
+      const key = `${ctx}@@${persona}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ context: ctx, persona });
+    }
+    return out;
+  };
+  const mergeRelations = (a: any, b: any) => {
+    const arrA = Array.isArray(a) ? a : [];
+    const arrB = Array.isArray(b) ? b : [];
+    const byTarget = new Map<string, any>();
+    for (const r of [...arrA, ...arrB]) {
+      const targetName = normStr((r as any)?.targetName);
+      if (!targetName) continue;
+      const prev = byTarget.get(targetName) || { targetName };
+      const merged = {
+        ...prev,
+        targetName,
+        emotionalPolarity: hasVal((r as any)?.emotionalPolarity) ? normStr((r as any)?.emotionalPolarity) : prev.emotionalPolarity,
+        conflictIndex: hasVal((r as any)?.conflictIndex) ? normStr((r as any)?.conflictIndex) : prev.conflictIndex,
+        sharedSecrets: mergeStrArr(prev.sharedSecrets, (r as any)?.sharedSecrets)
+      };
+      byTarget.set(targetName, merged);
+    }
+    return [...byTarget.values()].sort((x, y) => String(x.targetName).localeCompare(String(y.targetName), "zh-Hans-CN"));
+  };
+  const mergeFreeText = (a: any, b: any) => {
+    const ta = normStr(a);
+    const tb = normStr(b);
+    if (!tb) return ta;
+    if (!ta) return tb;
+    if (ta.includes(tb)) return ta;
+    return `${ta}\n${tb}`;
+  };
+
+  const byName = new Map<string, any>(
+    (idx.characters || [])
+      .map((c: any) => ({ ...(c && typeof c === "object" ? c : {}), name: normStr(c?.name) }))
+      .filter((c: any) => c.name)
+      .map((c: any) => [c.name, c])
+  );
+
+  for (const raw of run?.entities?.characters || []) {
+    const name = normStr(raw?.name);
+    if (!name) continue;
+    const prev = byName.get(name);
+    const next = raw && typeof raw === "object" ? raw : {};
+
+    const merged: any = prev ? { ...prev } : { name, updatedAt: auditedAtIso };
+
+    // 基础字段
+    if (hasVal(next.role)) merged.role = normStr(next.role);
+    if (Array.isArray(next.tags)) merged.tags = mergeStrArr(prev?.tags, next.tags);
+
+    // 状态 / 业力账本
+    if (next.state && typeof next.state === "object") merged.state = mergeObjNonEmpty(prev?.state, next.state);
+
+    // 社会身份标签
+    if (next.socialTags && typeof next.socialTags === "object") {
+      const stPrev = prev?.socialTags && typeof prev.socialTags === "object" ? prev.socialTags : {};
+      const stNext = next.socialTags as any;
+      merged.socialTags = {
+        ...stPrev,
+        ...(hasVal(stNext.profession) ? { profession: normStr(stNext.profession) } : null),
+        ...(hasVal(stNext.class) ? { class: normStr(stNext.class) } : null),
+        ...(Array.isArray(stNext.titles) ? { titles: mergeStrArr(stPrev.titles, stNext.titles) } : null),
+        ...(Array.isArray(stNext.other) ? { other: mergeStrArr(stPrev.other, stNext.other) } : null)
+      };
+    }
+
+    // 历史债（列表）
+    if (Array.isArray(next.historicalDebts)) merged.historicalDebts = mergeStrArr(prev?.historicalDebts, next.historicalDebts);
+
+    // 叙事驱动力
+    if (next.narrativeDrives && typeof next.narrativeDrives === "object") {
+      const ndPrev = prev?.narrativeDrives && typeof prev.narrativeDrives === "object" ? prev.narrativeDrives : {};
+      const ndNext = next.narrativeDrives as any;
+      merged.narrativeDrives = {
+        ...ndPrev,
+        ...(hasVal(ndNext.want) ? { want: normStr(ndNext.want) } : null),
+        ...(hasVal(ndNext.need) ? { need: normStr(ndNext.need) } : null),
+        ...(hasVal(ndNext.moralCompass) ? { moralCompass: normStr(ndNext.moralCompass) } : null),
+        ...(Array.isArray(ndNext.flaws) ? { flaws: mergeStrArr(ndPrev.flaws, ndNext.flaws) } : null),
+        ...(Array.isArray(ndNext.blindSpots) ? { blindSpots: mergeStrArr(ndPrev.blindSpots, ndNext.blindSpots) } : null)
+      };
+    }
+
+    // 表现力指纹
+    if (next.fingerprints && typeof next.fingerprints === "object") {
+      const fpPrev = prev?.fingerprints && typeof prev.fingerprints === "object" ? prev.fingerprints : {};
+      const fpNext = next.fingerprints as any;
+      merged.fingerprints = {
+        ...fpPrev,
+        ...(Array.isArray(fpNext.linguisticStyle) ? { linguisticStyle: mergeStrArr(fpPrev.linguisticStyle, fpNext.linguisticStyle) } : null),
+        ...(Array.isArray(fpNext.catchphrases) ? { catchphrases: mergeStrArr(fpPrev.catchphrases, fpNext.catchphrases) } : null),
+        ...(Array.isArray(fpNext.mannerisms) ? { mannerisms: mergeStrArr(fpPrev.mannerisms, fpNext.mannerisms) } : null),
+        ...(Array.isArray(fpNext.mask) ? { mask: mergeMask(fpPrev.mask, fpNext.mask) } : null)
+      };
+    }
+
+    // 关系钩子（结构化 + 兜底自由文本）
+    if (next.relationalHooks && typeof next.relationalHooks === "object") {
+      const rhPrev = prev?.relationalHooks && typeof prev.relationalHooks === "object" ? prev.relationalHooks : {};
+      const rhNext = next.relationalHooks as any;
+      merged.relationalHooks = {
+        ...rhPrev,
+        ...(Array.isArray(rhNext.relations) ? { relations: mergeRelations(rhPrev.relations, rhNext.relations) } : null),
+        ...(hasVal(rhNext.freeText) ? { freeText: mergeFreeText(rhPrev.freeText, rhNext.freeText) } : null)
+      };
+    }
+
+    // 兼容旧字段：性格分析
+    if (hasVal(next.personalityAnalysis)) merged.personalityAnalysis = normStr(next.personalityAnalysis);
+
+    merged.name = name;
+    merged.updatedAt = auditedAtIso;
+    byName.set(name, merged);
   }
-  idx.updatedAt = run.chapter.auditedAt;
+
+  idx.characters = [...byName.values()].sort((a: any, b: any) =>
+    String(a?.name || "").localeCompare(String(b?.name || ""), "zh-Hans-CN")
+  );
+  idx.updatedAt = auditedAtIso;
+  (idx as any).version = 2;
   await writeAuditCharactersIndex(dataDir, slug, idx);
 
   // 自动抽取地点：全书共享 placesIndex.json
@@ -1398,6 +1573,47 @@ app.post("/api/books/:slug/audit/characters/update", async (req, reply) => {
     role: z.string().optional(),
     tags: z.array(z.string()).optional(),
     state: z.any().optional(),
+    socialTags: z
+      .object({
+        profession: z.string().optional(),
+        class: z.string().optional(),
+        titles: z.array(z.string()).optional(),
+        other: z.array(z.string()).optional()
+      })
+      .optional(),
+    historicalDebts: z.array(z.string()).optional(),
+    narrativeDrives: z
+      .object({
+        want: z.string().optional(),
+        need: z.string().optional(),
+        moralCompass: z.string().optional(),
+        flaws: z.array(z.string()).optional(),
+        blindSpots: z.array(z.string()).optional()
+      })
+      .optional(),
+    fingerprints: z
+      .object({
+        linguisticStyle: z.array(z.string()).optional(),
+        catchphrases: z.array(z.string()).optional(),
+        mannerisms: z.array(z.string()).optional(),
+        mask: z.array(z.object({ context: z.string().optional(), persona: z.string().optional() })).optional()
+      })
+      .optional(),
+    relationalHooks: z
+      .object({
+        relations: z
+          .array(
+            z.object({
+              targetName: z.string().min(1),
+              emotionalPolarity: z.string().optional(),
+              conflictIndex: z.string().optional(),
+              sharedSecrets: z.array(z.string()).optional()
+            })
+          )
+          .optional(),
+        freeText: z.string().optional()
+      })
+      .optional(),
     personalityAnalysis: z.string().optional()
   });
   const params = paramsSchema.parse((req as any).params);
@@ -1409,12 +1625,148 @@ app.post("/api/books/:slug/audit/characters/update", async (req, reply) => {
   if (i < 0) return reply.code(404).send({ message: "角色不存在" });
   const now = new Date().toISOString();
   const prev = idx.characters[i] || {};
+  const normStr = (v: any) => (typeof v === "string" ? v.trim() : "");
+  const uniqStrs = (arr: any) =>
+    [...new Set((Array.isArray(arr) ? arr : []).map((x) => String(x).trim()).filter(Boolean))];
+  const mergeStrArr = (a: any, b: any) => uniqStrs([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]);
+  const hasVal = (v: any) => {
+    if (v === null || v === undefined) return false;
+    if (typeof v === "string") return v.trim().length > 0;
+    if (typeof v === "number") return Number.isFinite(v);
+    if (typeof v === "boolean") return true;
+    if (Array.isArray(v)) return v.length > 0;
+    if (typeof v === "object") return Object.keys(v).length > 0;
+    return false;
+  };
+  const mergeObjNonEmpty = (p: any, n: any) => {
+    const out: any = { ...(p && typeof p === "object" ? p : {}) };
+    if (!n || typeof n !== "object") return out;
+    for (const [k, v] of Object.entries(n)) {
+      if (!hasVal(v)) continue;
+      out[k] = v;
+    }
+    return out;
+  };
+  const mergeMask = (a: any, b: any) => {
+    const arrA = Array.isArray(a) ? a : [];
+    const arrB = Array.isArray(b) ? b : [];
+    const out: any[] = [];
+    const seen = new Set<string>();
+    for (const it of [...arrA, ...arrB]) {
+      const ctx = normStr((it as any)?.context);
+      const persona = normStr((it as any)?.persona);
+      if (!ctx && !persona) continue;
+      const key = `${ctx}@@${persona}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ context: ctx, persona });
+    }
+    return out;
+  };
+  const mergeRelations = (a: any, b: any) => {
+    const arrA = Array.isArray(a) ? a : [];
+    const arrB = Array.isArray(b) ? b : [];
+    const byTarget = new Map<string, any>();
+    for (const r of [...arrA, ...arrB]) {
+      const targetName = normStr((r as any)?.targetName);
+      if (!targetName) continue;
+      const prevR = byTarget.get(targetName) || { targetName };
+      const mergedR = {
+        ...prevR,
+        targetName,
+        emotionalPolarity: hasVal((r as any)?.emotionalPolarity) ? normStr((r as any)?.emotionalPolarity) : prevR.emotionalPolarity,
+        conflictIndex: hasVal((r as any)?.conflictIndex) ? normStr((r as any)?.conflictIndex) : prevR.conflictIndex,
+        sharedSecrets: mergeStrArr(prevR.sharedSecrets, (r as any)?.sharedSecrets)
+      };
+      byTarget.set(targetName, mergedR);
+    }
+    return [...byTarget.values()].sort((x, y) => String(x.targetName).localeCompare(String(y.targetName), "zh-Hans-CN"));
+  };
+  const mergeFreeText = (a: any, b: any) => {
+    const ta = normStr(a);
+    const tb = normStr(b);
+    if (!tb) return ta;
+    if (!ta) return tb;
+    if (ta.includes(tb)) return ta;
+    return `${ta}\n${tb}`;
+  };
+
   idx.characters[i] = {
     ...prev,
     name,
     role: body.role !== undefined ? body.role : prev.role,
-    tags: body.tags !== undefined ? body.tags : prev.tags,
-    state: body.state !== undefined ? body.state : prev.state,
+    tags: body.tags !== undefined ? mergeStrArr(prev.tags, body.tags) : prev.tags,
+    state: body.state !== undefined ? mergeObjNonEmpty(prev.state, body.state) : prev.state,
+    socialTags:
+      body.socialTags !== undefined
+        ? {
+            ...(prev.socialTags && typeof prev.socialTags === "object" ? prev.socialTags : {}),
+            ...(hasVal((body as any).socialTags?.profession) ? { profession: normStr((body as any).socialTags?.profession) } : null),
+            ...(hasVal((body as any).socialTags?.class) ? { class: normStr((body as any).socialTags?.class) } : null),
+            ...(Array.isArray((body as any).socialTags?.titles)
+              ? {
+                  titles: mergeStrArr((prev.socialTags as any)?.titles, (body as any).socialTags?.titles)
+                }
+              : null),
+            ...(Array.isArray((body as any).socialTags?.other)
+              ? {
+                  other: mergeStrArr((prev.socialTags as any)?.other, (body as any).socialTags?.other)
+                }
+              : null)
+          }
+        : prev.socialTags,
+    historicalDebts: body.historicalDebts !== undefined ? mergeStrArr(prev.historicalDebts, body.historicalDebts) : prev.historicalDebts,
+    narrativeDrives:
+      body.narrativeDrives !== undefined
+        ? {
+            ...(prev.narrativeDrives && typeof prev.narrativeDrives === "object" ? prev.narrativeDrives : {}),
+            ...(hasVal((body as any).narrativeDrives?.want) ? { want: normStr((body as any).narrativeDrives?.want) } : null),
+            ...(hasVal((body as any).narrativeDrives?.need) ? { need: normStr((body as any).narrativeDrives?.need) } : null),
+            ...(hasVal((body as any).narrativeDrives?.moralCompass)
+              ? { moralCompass: normStr((body as any).narrativeDrives?.moralCompass) }
+              : null),
+            ...(Array.isArray((body as any).narrativeDrives?.flaws)
+              ? { flaws: mergeStrArr((prev.narrativeDrives as any)?.flaws, (body as any).narrativeDrives?.flaws) }
+              : null),
+            ...(Array.isArray((body as any).narrativeDrives?.blindSpots)
+              ? {
+                  blindSpots: mergeStrArr((prev.narrativeDrives as any)?.blindSpots, (body as any).narrativeDrives?.blindSpots)
+                }
+              : null)
+          }
+        : prev.narrativeDrives,
+    fingerprints:
+      body.fingerprints !== undefined
+        ? {
+            ...(prev.fingerprints && typeof prev.fingerprints === "object" ? prev.fingerprints : {}),
+            ...(Array.isArray((body as any).fingerprints?.linguisticStyle)
+              ? {
+                  linguisticStyle: mergeStrArr((prev.fingerprints as any)?.linguisticStyle, (body as any).fingerprints?.linguisticStyle)
+                }
+              : null),
+            ...(Array.isArray((body as any).fingerprints?.catchphrases)
+              ? { catchphrases: mergeStrArr((prev.fingerprints as any)?.catchphrases, (body as any).fingerprints?.catchphrases) }
+              : null),
+            ...(Array.isArray((body as any).fingerprints?.mannerisms)
+              ? { mannerisms: mergeStrArr((prev.fingerprints as any)?.mannerisms, (body as any).fingerprints?.mannerisms) }
+              : null),
+            ...(Array.isArray((body as any).fingerprints?.mask)
+              ? { mask: mergeMask((prev.fingerprints as any)?.mask, (body as any).fingerprints?.mask) }
+              : null)
+          }
+        : prev.fingerprints,
+    relationalHooks:
+      body.relationalHooks !== undefined
+        ? {
+            ...(prev.relationalHooks && typeof prev.relationalHooks === "object" ? prev.relationalHooks : {}),
+            ...(Array.isArray((body as any).relationalHooks?.relations)
+              ? { relations: mergeRelations((prev.relationalHooks as any)?.relations, (body as any).relationalHooks?.relations) }
+              : null),
+            ...(hasVal((body as any).relationalHooks?.freeText)
+              ? { freeText: mergeFreeText((prev.relationalHooks as any)?.freeText, (body as any).relationalHooks?.freeText) }
+              : null)
+          }
+        : prev.relationalHooks,
     personalityAnalysis:
       body.personalityAnalysis !== undefined ? body.personalityAnalysis : prev.personalityAnalysis,
     updatedAt: now
