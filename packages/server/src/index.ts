@@ -1071,7 +1071,7 @@ async function performAuditWithAiSdk(input: {
     knownCharacters
   });
 
-  emitPhase(2, "输出思考过程（流式）");
+  emitPhase(2, "正在思考中...");
   await streamThinkingTraceWithAiSdk({
     cfg,
     prompt: thinkingPrompt,
