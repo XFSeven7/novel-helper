@@ -190,6 +190,7 @@ export type CharacterProfile = {
   state?: Record<string, any>;
   socialTags?: CharacterSocialTags;
   historicalDebts?: string[];
+  occurredNotes?: string[];
   narrativeDrives?: CharacterNarrativeDrives;
   fingerprints?: CharacterFingerprints;
   relationalHooks?: CharacterRelationalHooks;
@@ -219,6 +220,9 @@ function normalizeAuditCharactersIndexV2(parsed: any): AuditCharactersIndexV2 {
       socialTags: c?.socialTags && typeof c.socialTags === "object" ? c.socialTags : undefined,
       historicalDebts: Array.isArray(c?.historicalDebts)
         ? c.historicalDebts.map((x: any) => String(x)).map((s: string) => s.trim()).filter(Boolean)
+        : undefined,
+      occurredNotes: Array.isArray(c?.occurredNotes)
+        ? c.occurredNotes.map((x: any) => String(x)).map((s: string) => s.trim()).filter(Boolean)
         : undefined,
       narrativeDrives: c?.narrativeDrives && typeof c.narrativeDrives === "object" ? c.narrativeDrives : undefined,
       fingerprints: c?.fingerprints && typeof c.fingerprints === "object" ? c.fingerprints : undefined,

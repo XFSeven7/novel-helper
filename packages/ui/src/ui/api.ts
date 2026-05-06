@@ -206,6 +206,7 @@ export async function updateAuditCharacter(
       }>;
       freeText?: string;
     };
+    occurredNotes?: string[];
     personalityAnalysis?: string;
   }
 ) {

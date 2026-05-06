@@ -423,7 +423,23 @@ function auditCharStateExtraRows(st: Record<string, unknown>): Array<[string, st
 }
 
 function auditCharTopExtraRows(c: Record<string, unknown>): Array<[string, string]> {
-  const skip = new Set(["name", "role", "tags", "newOrExisting", "state", "evidenceQuotes"]);
+  const skip = new Set([
+    "name",
+    "role",
+    "tags",
+    "newOrExisting",
+    "state",
+    "evidenceQuotes",
+    "updatedAt",
+    // 角色画像字段：已在 UI 以分组方式专门渲染，避免这里把 object 展示成一行导致“格式乱”
+    "socialTags",
+    "historicalDebts",
+    "occurredNotes",
+    "narrativeDrives",
+    "fingerprints",
+    "relationalHooks",
+    "personalityAnalysis"
+  ]);
   const rows: Array<[string, string]> = [];
   for (const [k, v] of Object.entries(c)) {
     if (skip.has(k)) continue;
@@ -1191,6 +1207,7 @@ export function App() {
   const [editCharSocialTitles, setEditCharSocialTitles] = useState("");
   const [editCharSocialOther, setEditCharSocialOther] = useState("");
   const [editCharHistoricalDebts, setEditCharHistoricalDebts] = useState("");
+  const [editCharOccurredNotes, setEditCharOccurredNotes] = useState("");
   const [editCharWant, setEditCharWant] = useState("");
   const [editCharNeed, setEditCharNeed] = useState("");
   const [editCharMoralCompass, setEditCharMoralCompass] = useState("");
@@ -1923,6 +1940,11 @@ export function App() {
     setEditCharHistoricalDebts(
       Array.isArray(c?.historicalDebts) ? (c.historicalDebts as any[]).map((x) => String(x).trim()).filter(Boolean).join("\n") : ""
     );
+    setEditCharOccurredNotes(
+      Array.isArray((c as any)?.occurredNotes)
+        ? ((c as any).occurredNotes as any[]).map((x) => String(x).trim()).filter(Boolean).join("\n")
+        : ""
+    );
     const nd = c?.narrativeDrives && typeof c.narrativeDrives === "object" ? c.narrativeDrives : {};
     setEditCharWant(String((nd as any)?.want || "").trim());
     setEditCharNeed(String((nd as any)?.need || "").trim());
@@ -2016,6 +2038,7 @@ export function App() {
       other: lines(editCharSocialOther).slice(0, 60)
     };
     const historicalDebts = lines(editCharHistoricalDebts).slice(0, 120);
+    const occurredNotes = lines(editCharOccurredNotes).slice(0, 6000);
     const narrativeDrives = {
       want: editCharWant.trim() || undefined,
       need: editCharNeed.trim() || undefined,
@@ -2084,6 +2107,7 @@ export function App() {
         state,
         socialTags,
         historicalDebts,
+        occurredNotes,
         narrativeDrives,
         fingerprints,
         relationalHooks,
@@ -2941,6 +2965,20 @@ export function App() {
                                                         .filter(Boolean)
                                                         .map((t: string, i: number) => (
                                                           <div key={`debt-${i}`}>- {t}</div>
+                                                        ))}
+                                                    </div>
+                                                  </div>
+                                                ) : null}
+
+                                                {Array.isArray((c as any)?.occurredNotes) && (c as any).occurredNotes.length ? (
+                                                  <div className="auditCharQuotes">
+                                                    <div className="auditCharDetailLabel">发生过的事情</div>
+                                                    <div className="auditCharDetailValue">
+                                                      {(c as any).occurredNotes
+                                                        .map((x: any) => String(x).trim())
+                                                        .filter(Boolean)
+                                                        .map((t: string, i: number) => (
+                                                          <div key={`occ-${i}`}>- {t}</div>
                                                         ))}
                                                     </div>
                                                   </div>
@@ -5825,6 +5863,21 @@ export function App() {
                 placeholder={"如：第5章曾杀过人\n欠某人一条命…"}
                 disabled={busy}
                 rows={5}
+              />
+            </div>
+
+            <div className="modalField">
+              <label className="modalLabel" htmlFor="modal-edit-char-occurred">
+                发生过的事情<span className="modalOptional">（一行一个）</span>
+              </label>
+              <textarea
+                id="modal-edit-char-occurred"
+                className="modalTextarea"
+                value={editCharOccurredNotes}
+                onChange={(e) => setEditCharOccurredNotes(e.target.value)}
+                placeholder={"如：第8章与某人对峙\n在村口救下孩子…"}
+                disabled={busy}
+                rows={6}
               />
             </div>
 

@@ -842,6 +842,12 @@ code {
   font-family: ui-serif, "PingFang SC", "Noto Serif SC", serif;
 }
 
+/* 编辑弹窗：输入控件统一直角 */
+.modalPanel input.modalInput,
+.modalPanel textarea.modalTextarea {
+  border-radius: 0 !important;
+}
+
 .modalActions {
   display: flex;
   justify-content: flex-end;
@@ -2781,7 +2787,7 @@ code {
   flex: 1;
   min-width: 0;
   font-weight: 650;
-  font-size: 13px;
+  font-size: 14px;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -2809,7 +2815,7 @@ code {
 }
 
 .auditCharCardBody {
-  padding: 4px 12px 12px;
+  padding: 2px 10px 10px;
   border-top: 1px solid color-mix(in srgb, var(--border) 52%, transparent);
 }
 
@@ -2818,8 +2824,8 @@ code {
   grid-template-columns: 52px minmax(0, 1fr);
   gap: 8px;
   align-items: start;
-  margin-top: 8px;
-  font-size: 12px;
+  margin-top: 6px;
+  font-size: 13px;
   line-height: 1.55;
 }
 
@@ -2835,11 +2841,16 @@ code {
 }
 
 .auditCharQuotes {
-  margin-top: 10px;
+  margin-top: 8px;
+}
+
+.auditCharQuotes .auditCharDetailValue {
+  font-size: 12px;
+  line-height: 1.55;
 }
 
 .auditCharQuotes > .auditCharDetailLabel {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .auditCharQuoteList {
@@ -2851,7 +2862,7 @@ code {
 }
 
 .auditCharQuoteList li {
-  margin: 4px 0;
+  margin: 2px 0;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -2954,7 +2965,7 @@ code {
 input {
   width: 100%;
   padding: 10px 10px;
-  border-radius: 10px;
+  border-radius: 0;
   border: 1px solid var(--border);
   background: rgba(255, 255, 255, 0.06);
   color: var(--text);

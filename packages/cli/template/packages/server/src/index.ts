@@ -705,6 +705,21 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
 
     if (Array.isArray(next.historicalDebts)) merged.historicalDebts = mergeStrArr(prev?.historicalDebts, next.historicalDebts);
 
+    {
+      const extracted: string[] = [];
+      for (const ev of run?.entities?.events || []) {
+        if (!ev || typeof ev !== "object") continue;
+        const ps = Array.isArray((ev as any).participants) ? (ev as any).participants : [];
+        const hit = ps.some((p: any) => String(p || "").trim() === name);
+        if (!hit) continue;
+        const txt =
+          String((ev as any).summary || (ev as any).what || (ev as any).event || (ev as any).item || "").trim() ||
+          "";
+        if (txt) extracted.push(txt);
+      }
+      if (extracted.length) merged.occurredNotes = mergeStrArr(prev?.occurredNotes, extracted);
+    }
+
     if (next.narrativeDrives && typeof next.narrativeDrives === "object") {
       const ndPrev = prev?.narrativeDrives && typeof prev.narrativeDrives === "object" ? prev.narrativeDrives : {};
       const ndNext = next.narrativeDrives as any;
@@ -1570,6 +1585,7 @@ app.post("/api/books/:slug/audit/characters/update", async (req, reply) => {
         freeText: z.string().optional()
       })
       .optional(),
+    occurredNotes: z.array(z.string()).optional(),
     personalityAnalysis: z.string().optional()
   });
   const params = paramsSchema.parse((req as any).params);
@@ -1662,6 +1678,7 @@ app.post("/api/books/:slug/audit/characters/update", async (req, reply) => {
             freeText: normStr((body as any).relationalHooks?.freeText) || undefined
           }
         : prev.relationalHooks,
+    occurredNotes: (body as any).occurredNotes !== undefined ? uniqStrs((body as any).occurredNotes) : prev.occurredNotes,
     personalityAnalysis:
       body.personalityAnalysis !== undefined ? body.personalityAnalysis : prev.personalityAnalysis,
     updatedAt: now

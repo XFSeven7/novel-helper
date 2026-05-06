@@ -720,6 +720,22 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
     // 历史债（列表）
     if (Array.isArray(next.historicalDebts)) merged.historicalDebts = mergeStrArr(prev?.historicalDebts, next.historicalDebts);
 
+    // 发生过的事情：从本章事件按 participants 命中自动抽取（增量 + 去重）
+    {
+      const extracted: string[] = [];
+      for (const ev of run?.entities?.events || []) {
+        if (!ev || typeof ev !== "object") continue;
+        const ps = Array.isArray((ev as any).participants) ? (ev as any).participants : [];
+        const hit = ps.some((p: any) => String(p || "").trim() === name);
+        if (!hit) continue;
+        const txt =
+          String((ev as any).summary || (ev as any).what || (ev as any).event || (ev as any).item || "").trim() ||
+          "";
+        if (txt) extracted.push(txt);
+      }
+      if (extracted.length) merged.occurredNotes = mergeStrArr(prev?.occurredNotes, extracted);
+    }
+
     // 叙事驱动力
     if (next.narrativeDrives && typeof next.narrativeDrives === "object") {
       const ndPrev = prev?.narrativeDrives && typeof prev.narrativeDrives === "object" ? prev.narrativeDrives : {};
@@ -1614,6 +1630,7 @@ app.post("/api/books/:slug/audit/characters/update", async (req, reply) => {
         freeText: z.string().optional()
       })
       .optional(),
+    occurredNotes: z.array(z.string()).optional(),
     personalityAnalysis: z.string().optional()
   });
   const params = paramsSchema.parse((req as any).params);
@@ -1767,6 +1784,7 @@ app.post("/api/books/:slug/audit/characters/update", async (req, reply) => {
               : null)
           }
         : prev.relationalHooks,
+    occurredNotes: body.occurredNotes !== undefined ? mergeStrArr(prev.occurredNotes, body.occurredNotes) : prev.occurredNotes,
     personalityAnalysis:
       body.personalityAnalysis !== undefined ? body.personalityAnalysis : prev.personalityAnalysis,
     updatedAt: now

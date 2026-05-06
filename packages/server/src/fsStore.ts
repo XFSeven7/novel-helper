@@ -204,6 +204,8 @@ export type CharacterProfile = {
   socialTags?: CharacterSocialTags;
   /** 历史债/承诺/重大决策（列表） */
   historicalDebts?: string[];
+  /** 发生过的事情（全书范围增量沉淀；列表） */
+  occurredNotes?: string[];
   /** 叙事驱动力：want/need/道德罗盘/认知局限等 */
   narrativeDrives?: CharacterNarrativeDrives;
   /** 表现力指纹：口癖/句式/动作/面具等 */
@@ -237,6 +239,9 @@ function normalizeAuditCharactersIndexV2(parsed: any): AuditCharactersIndexV2 {
       socialTags: c?.socialTags && typeof c.socialTags === "object" ? c.socialTags : undefined,
       historicalDebts: Array.isArray(c?.historicalDebts)
         ? c.historicalDebts.map((x: any) => String(x)).map((s: string) => s.trim()).filter(Boolean)
+        : undefined,
+      occurredNotes: Array.isArray(c?.occurredNotes)
+        ? c.occurredNotes.map((x: any) => String(x)).map((s: string) => s.trim()).filter(Boolean)
         : undefined,
       narrativeDrives: c?.narrativeDrives && typeof c.narrativeDrives === "object" ? c.narrativeDrives : undefined,
       fingerprints: c?.fingerprints && typeof c.fingerprints === "object" ? c.fingerprints : undefined,
