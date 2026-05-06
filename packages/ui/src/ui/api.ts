@@ -358,6 +358,16 @@ export async function compressTimelineRange(
   });
 }
 
+export async function deleteTimelineRange(
+  slug: string,
+  input: { startChapter: number; endChapter: number }
+) {
+  return await http<{ ok: true; index: TimelineIndex }>(`/api/books/${encodeURIComponent(slug)}/timeline/range/delete`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
 export async function markTimelineEvent(
   slug: string,
   input: { id: string; status: "open" | "done" }

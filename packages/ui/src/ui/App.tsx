@@ -39,6 +39,7 @@ import {
   hideAuditForeshadow,
   getTimelineIndex,
   compressTimelineRange,
+  deleteTimelineRange,
   markTimelineEvent,
   TimelineIndex
 } from "./api";
@@ -1233,6 +1234,10 @@ export function App() {
   const [timelineCompressStart, setTimelineCompressStart] = useState("");
   const [timelineCompressEnd, setTimelineCompressEnd] = useState("");
   const [timelineShowDoneEvents, setTimelineShowDoneEvents] = useState(false);
+  const [memoryTab, setMemoryTab] = useState<"chapters" | "ranges">("chapters");
+  const [memoryExpanded, setMemoryExpanded] = useState<Record<string, boolean>>({});
+  const [memoryChaptersSortDesc, setMemoryChaptersSortDesc] = useState(true);
+  const [memoryRangesSortDesc, setMemoryRangesSortDesc] = useState(true);
   const [auditBusy, setAuditBusy] = useState(false);
   const auditedChapterFilenameSet = useMemo(() => {
     const arr = (timelineIndex as any)?.chapters;
@@ -1866,6 +1871,70 @@ export function App() {
       setTimelineIndex(index);
     } catch (e: any) {
       setStatus(e?.message || String(e));
+    } finally {
+      setTimelineBusy(false);
+    }
+  }
+
+  async function compressMemoryRangeWithMerge(startChapter: number, endChapter: number) {
+    if (!activeBook) return;
+    const a = Math.min(startChapter, endChapter);
+    const b = Math.max(startChapter, endChapter);
+    if (!Number.isFinite(a) || !Number.isFinite(b) || a < 1 || b < 1) return;
+
+    setTimelineBusy(true);
+    setStatus("");
+    const existing = Array.isArray(timelineIndex?.compressedRanges) ? timelineIndex!.compressedRanges : [];
+    const overlaps = existing.filter((r: any) => {
+      const s = Number(r?.startChapter);
+      const e = Number(r?.endChapter);
+      if (!Number.isFinite(s) || !Number.isFinite(e)) return false;
+      const rs = Math.min(s, e);
+      const re = Math.max(s, e);
+      const hit = Math.max(a, rs) <= Math.min(b, re);
+      return hit && !(rs === a && re === b);
+    });
+
+    let targetA = a;
+    let targetB = b;
+
+    if (overlaps.length) {
+      const unionA = Math.min(a, ...overlaps.map((r: any) => Number(r.startChapter)));
+      const unionB = Math.max(b, ...overlaps.map((r: any) => Number(r.endChapter)));
+      const list = overlaps
+        .map((r: any) => `${r.startChapter}-${r.endChapter}`)
+        .sort((x: string, y: string) => x.localeCompare(y, "zh-Hans-CN"))
+        .join("、");
+      const ok = window.confirm(
+        `你要压缩的区间第 ${a}-${b} 章与已有多章概要重叠：${list}\n\n是否合并为更粗区间：第 ${unionA}-${unionB} 章？\n（合并后会删除上述旧区间，仅保留并集区间摘要）`
+      );
+      if (!ok) {
+        setTimelineBusy(false);
+        return;
+      }
+      targetA = unionA;
+      targetB = unionB;
+
+      // union_replace：先删旧区间再压缩新并集
+      for (const r of overlaps) {
+        try {
+          const { index } = await deleteTimelineRange(activeBook, { startChapter: r.startChapter, endChapter: r.endChapter });
+          setTimelineIndex(index);
+        } catch (e: any) {
+          setStatus(e?.message || String(e));
+          setTimelineBusy(false);
+          return;
+        }
+      }
+    }
+
+    try {
+      const { index } = await compressTimelineRange(activeBook, {
+        startChapter: targetA,
+        endChapter: targetB,
+        modelConfigId: activeModelId ?? null
+      });
+      setTimelineIndex(index);
     } finally {
       setTimelineBusy(false);
     }
@@ -2828,7 +2897,7 @@ export function App() {
                             onClick={() => setGlobalTab("timeline")}
                             disabled={busy}
                           >
-                            时间线
+                            全书记忆
                           </button>
                           <button
                             type="button"
@@ -3464,236 +3533,335 @@ export function App() {
                               >
                                 刷新
                               </button>
-                              <label className="toggle timelineToggle">
-                                <input
-                                  type="checkbox"
-                                  checked={timelineShowDoneEvents}
-                                  onChange={(e) => setTimelineShowDoneEvents(e.target.checked)}
+                              <div className="row">
+                                <button
+                                  type="button"
+                                  className={`btnSort ${memoryTab === "chapters" ? "active" : ""}`}
                                   disabled={busy}
-                                />
-                                显示已完成事件
-                              </label>
-                            </div>
-
-                            <div className="timelineSection">
-                              <div className="auditPanelTitle">推荐压缩区间</div>
-                              {timelineIndex?.compressionSuggestions?.length ? (
-                                <div className="timelineSuggestionList">
-                                  {timelineIndex.compressionSuggestions.map((s, i) => (
-                                    <button
-                                      key={`${s.startChapter}-${s.endChapter}-${i}`}
-                                      type="button"
-                                      className="timelineSuggestion"
-                                      disabled={busy || timelineBusy || !activeBook}
-                                      onClick={async () => {
-                                        if (!activeBook) return;
-                                        setTimelineCompressStart(String(s.startChapter));
-                                        setTimelineCompressEnd(String(s.endChapter));
-                                        setTimelineBusy(true);
-                                        try {
-                                          const { index } = await compressTimelineRange(activeBook, {
-                                            startChapter: s.startChapter,
-                                            endChapter: s.endChapter,
-                                            modelConfigId: activeModelId ?? null
-                                          });
-                                          setTimelineIndex(index);
-                                        } catch (e: any) {
-                                          setStatus(e?.message || String(e));
-                                        } finally {
-                                          setTimelineBusy(false);
-                                        }
-                                      }}
-                                      title={s.why}
-                                    >
-                                      压缩 第 {s.startChapter}-{s.endChapter} 章
-                                      <span className="muted timelineSuggestionWhy">{s.why}</span>
-                                    </button>
-                                  ))}
-                                </div>
-                              ) : (
-                                <div className="muted auditPanelEmpty">暂无推荐。完成一次分析后会自动生成。</div>
-                              )}
-                            </div>
-
-                            <div className="timelineSection">
-                              <div className="auditPanelTitle">压缩章节</div>
-                              <div className="timelineCompressRow">
-                                <input
-                                  className="timelineInput"
-                                  value={timelineCompressStart}
-                                  onChange={(e) => setTimelineCompressStart(e.target.value)}
-                                  placeholder="起始章号"
-                                  inputMode="numeric"
-                                  disabled={busy || timelineBusy || !activeBook}
-                                />
-                                <span className="muted">到</span>
-                                <input
-                                  className="timelineInput"
-                                  value={timelineCompressEnd}
-                                  onChange={(e) => setTimelineCompressEnd(e.target.value)}
-                                  placeholder="结束章号"
-                                  inputMode="numeric"
-                                  disabled={busy || timelineBusy || !activeBook}
-                                />
+                                  onClick={() => setMemoryTab("chapters")}
+                                >
+                                  章节概要
+                                </button>
+                                <button
+                                  type="button"
+                                  className={`btnSort ${memoryTab === "ranges" ? "active" : ""}`}
+                                  disabled={busy}
+                                  onClick={() => setMemoryTab("ranges")}
+                                >
+                                  多章概要
+                                </button>
                                 <button
                                   type="button"
                                   className="btnSort"
-                                  disabled={busy || timelineBusy || !activeBook}
-                                  onClick={async () => {
-                                    if (!activeBook) return;
-                                    const a = parseInt(timelineCompressStart, 10);
-                                    const b = parseInt(timelineCompressEnd, 10);
-                                    if (!Number.isFinite(a) || !Number.isFinite(b) || a < 1 || b < 1) {
-                                      setStatus("请输入有效的起止章号。");
-                                      return;
-                                    }
-                                    setTimelineBusy(true);
-                                    try {
-                                      const { index } = await compressTimelineRange(activeBook, {
-                                        startChapter: a,
-                                        endChapter: b,
-                                        modelConfigId: activeModelId ?? null
-                                      });
-                                      setTimelineIndex(index);
-                                    } catch (e: any) {
-                                      setStatus(e?.message || String(e));
-                                    } finally {
-                                      setTimelineBusy(false);
-                                    }
-                                  }}
+                                  disabled={busy}
+                                  onClick={() =>
+                                    setMemoryChaptersSortDesc((v) => (memoryTab === "chapters" ? !v : v))
+                                  }
+                                  style={{ display: memoryTab === "chapters" ? undefined : "none" }}
+                                  title="切换章节概要排序"
                                 >
-                                  {timelineBusy ? "压缩中…" : "压缩"}
+                                  {memoryChaptersSortDesc ? "降序" : "升序"}
+                                </button>
+                                <button
+                                  type="button"
+                                  className="btnSort"
+                                  disabled={busy}
+                                  onClick={() => setMemoryRangesSortDesc((v) => (memoryTab === "ranges" ? !v : v))}
+                                  style={{ display: memoryTab === "ranges" ? undefined : "none" }}
+                                  title="切换多章概要排序"
+                                >
+                                  {memoryRangesSortDesc ? "降序" : "升序"}
                                 </button>
                               </div>
-                              <div className="muted timelineHint">已压缩的区间可再次压缩（会覆盖更新）。</div>
                             </div>
 
-                            <div className="timelineSection">
-                              <div className="auditPanelTitle">区间压缩摘要</div>
-                              {timelineIndex?.compressedRanges?.length ? (
-                                <div className="timelineRangeList">
-                                  {timelineIndex.compressedRanges.map((r, i) => (
-                                    <div key={`${r.startChapter}-${r.endChapter}-${i}`} className="timelineRangeItem">
-                                      <div className="timelineRangeTop">
-                                        <div className="timelineRangeTitle">
-                                          第 {r.startChapter}-{r.endChapter} 章
-                                        </div>
+                            {memoryTab === "ranges" ? (
+                              <>
+                                <label className="toggle timelineToggle">
+                                  <input
+                                    type="checkbox"
+                                    checked={timelineShowDoneEvents}
+                                    onChange={(e) => setTimelineShowDoneEvents(e.target.checked)}
+                                    disabled={busy}
+                                  />
+                                  显示已完成事件
+                                </label>
+
+                                <div className="timelineSection">
+                                  <div className="auditPanelTitle">推荐压缩区间</div>
+                                  {timelineIndex?.compressionSuggestions?.length ? (
+                                    <div className="timelineSuggestionList">
+                                      {timelineIndex.compressionSuggestions.map((s, i) => (
                                         <button
+                                          key={`${s.startChapter}-${s.endChapter}-${i}`}
                                           type="button"
-                                          className="btnSort"
+                                          className="timelineSuggestion"
                                           disabled={busy || timelineBusy || !activeBook}
-                                          onClick={async () => {
-                                            if (!activeBook) return;
-                                            setTimelineBusy(true);
-                                            try {
-                                              const { index } = await compressTimelineRange(activeBook, {
-                                                startChapter: r.startChapter,
-                                                endChapter: r.endChapter,
-                                                modelConfigId: activeModelId ?? null
-                                              });
-                                              setTimelineIndex(index);
-                                            } catch (e: any) {
-                                              setStatus(e?.message || String(e));
-                                            } finally {
-                                              setTimelineBusy(false);
-                                            }
+                                          onClick={() => {
+                                            setTimelineCompressStart(String(s.startChapter));
+                                            setTimelineCompressEnd(String(s.endChapter));
+                                            void compressMemoryRangeWithMerge(s.startChapter, s.endChapter);
                                           }}
+                                          title={s.why}
                                         >
-                                          再次压缩
+                                          压缩 第 {s.startChapter}-{s.endChapter} 章
+                                          <span className="muted timelineSuggestionWhy">{s.why}</span>
                                         </button>
-                                      </div>
-                                      <div className="timelineRangeSummary">{r.summary}</div>
+                                      ))}
                                     </div>
-                                  ))}
+                                  ) : (
+                                    <div className="muted auditPanelEmpty">暂无推荐。完成一次分析后会自动生成。</div>
+                                  )}
                                 </div>
-                              ) : (
-                                <div className="muted auditPanelEmpty">暂无压缩区间。</div>
-                              )}
-                            </div>
 
-                            <div className="timelineSection">
-                              <div className="auditPanelTitle">关键事件</div>
-                              {timelineIndex?.events?.length ? (
-                                <div className="timelineEventList">
-                                  {timelineIndex.events
-                                    .filter((e) => (timelineShowDoneEvents ? true : e.status !== "done"))
-                                    .filter((e) =>
-                                      timelineShowDoneEvents
-                                        ? true
-                                        : !(timelineIndex.manual?.doneEventIds ?? []).includes(e.id)
-                                    )
-                                    .slice(0, 200)
-                                    .map((e) => {
-                                      const done =
-                                        (timelineIndex.manual?.doneEventIds ?? []).includes(e.id) || e.status === "done";
-                                      return (
-                                        <div
-                                          key={e.id}
-                                          className={`timelineEventItem ${done ? "done" : ""}`}
-                                          data-event-id={e.id}
-                                        >
-                                          <div className="timelineEventTop">
-                                            <div className="timelineEventTitle">
-                                              第 {e.startChapter}
-                                              {e.endChapter !== e.startChapter ? `-${e.endChapter}` : ""} 章 · {e.title}
+                                <div className="timelineSection">
+                                  <div className="auditPanelTitle">压缩章节</div>
+                                  <div className="timelineCompressRow">
+                                    <input
+                                      className="timelineInput"
+                                      value={timelineCompressStart}
+                                      onChange={(e) => setTimelineCompressStart(e.target.value)}
+                                      placeholder="起始章号"
+                                      inputMode="numeric"
+                                      disabled={busy || timelineBusy || !activeBook}
+                                    />
+                                    <span className="muted">到</span>
+                                    <input
+                                      className="timelineInput"
+                                      value={timelineCompressEnd}
+                                      onChange={(e) => setTimelineCompressEnd(e.target.value)}
+                                      placeholder="结束章号"
+                                      inputMode="numeric"
+                                      disabled={busy || timelineBusy || !activeBook}
+                                    />
+                                    <button
+                                      type="button"
+                                      className="btnSort"
+                                      disabled={busy || timelineBusy || !activeBook}
+                                      onClick={() => {
+                                        const a = parseInt(timelineCompressStart, 10);
+                                        const b = parseInt(timelineCompressEnd, 10);
+                                        if (!Number.isFinite(a) || !Number.isFinite(b) || a < 1 || b < 1) {
+                                          setStatus("请输入有效的起止章号。");
+                                          return;
+                                        }
+                                        void compressMemoryRangeWithMerge(a, b);
+                                      }}
+                                    >
+                                      {timelineBusy ? "压缩中…" : "压缩"}
+                                    </button>
+                                  </div>
+                                  <div className="muted timelineHint">已压缩的区间可再次压缩（会覆盖更新）。</div>
+                                </div>
+
+                                <div className="timelineSection">
+                                  <div className="auditPanelTitle">区间压缩摘要</div>
+                                  {timelineIndex?.compressedRanges?.length ? (
+                                    <div className="timelineRangeList">
+                                      {([...timelineIndex.compressedRanges] as any[])
+                                        .slice()
+                                        .sort((x: any, y: any) => {
+                                          const ax = Number(x?.startChapter);
+                                          const ay = Number(y?.startChapter);
+                                          const bx = Number(x?.endChapter);
+                                          const by = Number(y?.endChapter);
+                                          const dx = (Number.isFinite(ax) ? ax : 0) - (Number.isFinite(ay) ? ay : 0);
+                                          const dy = (Number.isFinite(bx) ? bx : 0) - (Number.isFinite(by) ? by : 0);
+                                          const v = dx || dy;
+                                          return memoryRangesSortDesc ? -v : v;
+                                        })
+                                        .map((r: any, i: number) => {
+                                        const key = `range:${r.startChapter}-${r.endChapter}`;
+                                        const expanded = Boolean(memoryExpanded[key]);
+                                        const txt = String(r.summary || "").trim();
+                                        const needToggle = txt.length >= 60;
+                                        return (
+                                          <div key={`${r.startChapter}-${r.endChapter}-${i}`} className="timelineRangeItem">
+                                            <div className="timelineRangeTop">
+                                              <div className="timelineRangeTitle">
+                                                第 {r.startChapter}-{r.endChapter} 章
+                                              </div>
+                                              <button
+                                                type="button"
+                                                className="btnSort"
+                                                disabled={busy || timelineBusy || !activeBook}
+                                                onClick={() => void compressMemoryRangeWithMerge(r.startChapter, r.endChapter)}
+                                              >
+                                                再次压缩
+                                              </button>
+                                              <button
+                                                type="button"
+                                                className="btnSort"
+                                                disabled={busy || timelineBusy || !activeBook}
+                                                onClick={async () => {
+                                                  if (!activeBook) return;
+                                                  const ok = window.confirm(
+                                                    `确认删除第 ${r.startChapter}-${r.endChapter} 章的多章概要？\n（不会影响章节概要）`
+                                                  );
+                                                  if (!ok) return;
+                                                  setTimelineBusy(true);
+                                                  try {
+                                                    const { index } = await deleteTimelineRange(activeBook, {
+                                                      startChapter: r.startChapter,
+                                                      endChapter: r.endChapter
+                                                    });
+                                                    setTimelineIndex(index);
+                                                  } catch (e: any) {
+                                                    setStatus(e?.message || String(e));
+                                                  } finally {
+                                                    setTimelineBusy(false);
+                                                  }
+                                                }}
+                                              >
+                                                分解压缩
+                                              </button>
                                             </div>
-                                            <button
-                                              type="button"
-                                              className="btnSort"
-                                              disabled={busy || timelineBusy || !activeBook}
-                                              onClick={async () => {
-                                                if (!activeBook) return;
-                                                setTimelineBusy(true);
-                                                try {
-                                                  const { index } = await markTimelineEvent(activeBook, {
-                                                    id: e.id,
-                                                    status: done ? "open" : "done"
-                                                  });
-                                                  setTimelineIndex(index);
-                                                } catch (err: any) {
-                                                  setStatus(err?.message || String(err));
-                                                } finally {
-                                                  setTimelineBusy(false);
+                                            <div className={expanded ? "timelineRangeSummary" : "timelineRangeSummary memoryClamp2"}>
+                                              {txt}
+                                            </div>
+                                            {needToggle ? (
+                                              <button
+                                                type="button"
+                                                className="btnLinkMuted"
+                                                disabled={busy}
+                                                onClick={() =>
+                                                  setMemoryExpanded((prev) => ({
+                                                    ...prev,
+                                                    [key]: !Boolean(prev[key])
+                                                  }))
                                                 }
-                                              }}
-                                            >
-                                              {done ? "取消完成" : "标记完成"}
-                                            </button>
+                                              >
+                                                {expanded ? "收起" : "…展开"}
+                                              </button>
+                                            ) : null}
                                           </div>
-                                          <div className="timelineEventSummary muted">{e.summary}</div>
-                                        </div>
-                                      );
-                                    })}
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <div className="muted auditPanelEmpty">暂无压缩区间。</div>
+                                  )}
                                 </div>
-                              ) : (
-                                <div className="muted auditPanelEmpty">事件将在后续版本中逐步补全（目前以每章摘要为主）。</div>
-                              )}
-                            </div>
 
-                            <div className="timelineSection">
-                              <div className="auditPanelTitle">每章摘要</div>
-                              {timelineIndex?.chapters?.length ? (
-                                <div className="timelineChapterList">
-                                  {[...timelineIndex.chapters]
-                                    .slice()
-                                    .reverse()
-                                    .slice(0, 80)
-                                    .map((c) => (
-                                      <div key={c.filename} className="timelineChapterItem">
-                                        <div className="timelineChapterTop">
-                                          <div className="timelineChapterTitle">
-                                            第 {c.chapter} 章 · {c.title}
-                                          </div>
-                                          <div className="muted timelineChapterMeta">{c.filename}</div>
-                                        </div>
-                                        <div className="timelineChapterGist">{c.gistL1}</div>
-                                      </div>
-                                    ))}
+                                <div className="timelineSection">
+                                  <div className="auditPanelTitle">关键事件</div>
+                                  {timelineIndex?.events?.length ? (
+                                    <div className="timelineEventList">
+                                      {timelineIndex.events
+                                        .filter((e) => (timelineShowDoneEvents ? true : e.status !== "done"))
+                                        .filter((e) =>
+                                          timelineShowDoneEvents
+                                            ? true
+                                            : !(timelineIndex.manual?.doneEventIds ?? []).includes(e.id)
+                                        )
+                                        .slice(0, 200)
+                                        .map((e) => {
+                                          const done =
+                                            (timelineIndex.manual?.doneEventIds ?? []).includes(e.id) || e.status === "done";
+                                          return (
+                                            <div
+                                              key={e.id}
+                                              className={`timelineEventItem ${done ? "done" : ""}`}
+                                              data-event-id={e.id}
+                                            >
+                                              <div className="timelineEventTop">
+                                                <div className="timelineEventTitle">
+                                                  第 {e.startChapter}
+                                                  {e.endChapter !== e.startChapter ? `-${e.endChapter}` : ""} 章 · {e.title}
+                                                </div>
+                                                <button
+                                                  type="button"
+                                                  className="btnSort"
+                                                  disabled={busy || timelineBusy || !activeBook}
+                                                  onClick={async () => {
+                                                    if (!activeBook) return;
+                                                    setTimelineBusy(true);
+                                                    try {
+                                                      const { index } = await markTimelineEvent(activeBook, {
+                                                        id: e.id,
+                                                        status: done ? "open" : "done"
+                                                      });
+                                                      setTimelineIndex(index);
+                                                    } catch (err: any) {
+                                                      setStatus(err?.message || String(err));
+                                                    } finally {
+                                                      setTimelineBusy(false);
+                                                    }
+                                                  }}
+                                                >
+                                                  {done ? "取消完成" : "标记完成"}
+                                                </button>
+                                              </div>
+                                              <div className="timelineEventSummary muted">{e.summary}</div>
+                                            </div>
+                                          );
+                                        })}
+                                    </div>
+                                  ) : (
+                                    <div className="muted auditPanelEmpty">
+                                      事件将在后续版本中逐步补全（目前以每章摘要为主）。
+                                    </div>
+                                  )}
                                 </div>
-                              ) : (
-                                <div className="muted auditPanelEmpty">还没有章节摘要。对任意章节完成一次分析后，这里会出现。</div>
-                              )}
-                            </div>
+                              </>
+                            ) : (
+                              <div className="timelineSection">
+                                <div className="auditPanelTitle">章节概要</div>
+                                {timelineIndex?.chapters?.length ? (
+                                  <div className="timelineChapterList">
+                                    {[...timelineIndex.chapters]
+                                      .slice()
+                                      .sort((a, b) => {
+                                        const va = Number(a?.chapter);
+                                        const vb = Number(b?.chapter);
+                                        const d = (Number.isFinite(va) ? va : 0) - (Number.isFinite(vb) ? vb : 0);
+                                        return memoryChaptersSortDesc ? -d : d;
+                                      })
+                                      .slice(0, 120)
+                                      .map((c) => {
+                                        const key = `chapter:${c.filename}`;
+                                        const expanded = Boolean(memoryExpanded[key]);
+                                        const txt = String(c.gistL1 || "").trim();
+                                        const needToggle = txt.length >= 60;
+                                        return (
+                                          <div key={c.filename} className="timelineChapterItem">
+                                            <div className="timelineChapterTop">
+                                              <div className="timelineChapterTitle">
+                                                第 {c.chapter} 章 · {c.title}
+                                              </div>
+                                              <div className="muted timelineChapterMeta">{c.filename}</div>
+                                            </div>
+                                            <div
+                                              className={expanded ? "timelineChapterGist" : "timelineChapterGist memoryClamp2"}
+                                            >
+                                              {txt}
+                                            </div>
+                                            {needToggle ? (
+                                              <button
+                                                type="button"
+                                                className="btnLinkMuted"
+                                                disabled={busy}
+                                                onClick={() =>
+                                                  setMemoryExpanded((prev) => ({
+                                                    ...prev,
+                                                    [key]: !Boolean(prev[key])
+                                                  }))
+                                                }
+                                              >
+                                                {expanded ? "收起" : "…展开"}
+                                              </button>
+                                            ) : null}
+                                          </div>
+                                        );
+                                      })}
+                                  </div>
+                                ) : (
+                                  <div className="muted auditPanelEmpty">
+                                    还没有章节概要。对任意章节完成一次分析后，这里会出现。
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div className="foreshadowPanel">
@@ -4106,7 +4274,7 @@ export function App() {
                     setExpandDraft("");
                     setExpandModalOpen(true);
                   }}
-                  title="快速扩写：输入目标字数并结合时间线摘要扩写本章"
+                  title="快速扩写：输入目标字数并结合全书记忆摘要扩写本章"
                 >
                   {expandBusy ? "扩写中…" : "扩写"}
                 </button>
@@ -5770,7 +5938,7 @@ export function App() {
                 inputMode="numeric"
               />
               <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-                会自动把时间线“压缩摘要”投喂给模型作为已发生事件上下文。
+                会自动把全书记忆“压缩摘要”投喂给模型作为已发生事件上下文。
               </div>
             </div>
             <div className="modalField">

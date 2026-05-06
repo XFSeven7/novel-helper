@@ -2120,6 +2120,26 @@ app.post("/api/books/:slug/timeline/compress", async (req, reply) => {
   return { ok: true, index: idx };
 });
 
+app.post("/api/books/:slug/timeline/range/delete", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({ startChapter: z.number().int().min(1), endChapter: z.number().int().min(1) });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+
+  const a = Math.min(body.startChapter, body.endChapter);
+  const b = Math.max(body.startChapter, body.endChapter);
+  const idx = normalizeTimelineIndex(await readTimelineIndex(dataDir, params.slug));
+
+  const before = idx.compressedRanges.length;
+  idx.compressedRanges = idx.compressedRanges.filter((r) => !(r.startChapter === a && r.endChapter === b));
+  if (idx.compressedRanges.length === before) return reply.code(404).send({ message: "区间不存在" });
+
+  idx.updatedAt = new Date().toISOString();
+  await writeTimelineIndex(dataDir, params.slug, idx);
+  await writeStoryTimelineMarkdownFromIndex(dataDir, params.slug, idx);
+  return { ok: true, index: idx };
+});
+
 // 兼容旧路由：novels -> books
 app.get("/api/novels", async () => {
   const novels = await listNovels(dataDir);
