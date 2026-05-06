@@ -2,6 +2,23 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
+  CHARACTER_ROLE_OPTIONS,
+  type CharacterRole,
+  MOBILE_PRESETS,
+  type MobilePresetId,
+  MODEL_ACTIVE_ID_STORAGE_KEY,
+  MODEL_CONFIGS_STORAGE_KEY,
+  NAV_COLLAPSED_STORAGE_KEY,
+  THEME_OPTIONS,
+  THEME_STORAGE_KEY,
+  type ThemePreference
+} from "./constants";
+import { auditCharacterNewBadgeClass, auditCharacterRoleClass, formatAuditCharField } from "./utils/auditCharacters";
+import { clamp } from "./utils/math";
+import { MemoryPanel } from "./components/GlobalInfo/MemoryPanel";
+import { useLayout3Splitters } from "./hooks/useLayout3Splitters";
+import { useLocalStorageState } from "./hooks/useLocalStorageState";
+import {
   BookMeta,
   ChapterMeta,
   StoryFile,
@@ -46,86 +63,6 @@ import {
 
 type SelectedChapter = { bookSlug: string; filename: string } | null;
 type SelectedCard = { bookSlug: string; path: string } | null;
-
-type MobilePresetId =
-  | "iphone-se"
-  | "iphone-14"
-  | "iphone-14-pro-max"
-  | "pixel-7"
-  | "galaxy-s21"
-  | "ipad-mini";
-
-const MOBILE_PRESETS: Array<{ id: MobilePresetId; label: string; w: number; h: number }> = [
-  { id: "iphone-se", label: "iPhone SE (375×667)", w: 375, h: 667 },
-  { id: "iphone-14", label: "iPhone 14 (390×844)", w: 390, h: 844 },
-  { id: "iphone-14-pro-max", label: "iPhone 14 Pro Max (430×932)", w: 430, h: 932 },
-  { id: "pixel-7", label: "Pixel 7 (412×915)", w: 412, h: 915 },
-  { id: "galaxy-s21", label: "Galaxy S21 (360×800)", w: 360, h: 800 },
-  { id: "ipad-mini", label: "iPad mini (768×1024)", w: 768, h: 1024 }
-];
-
-type ThemePreference = "system" | "light" | "dark";
-
-const THEME_STORAGE_KEY = "novel-helper-theme";
-const NAV_COLLAPSED_STORAGE_KEY = "novel-helper-nav-collapsed";
-const LAYOUT3_SPLIT_STORAGE_KEY = "novel-helper-layout3-splits";
-const MODEL_CONFIGS_STORAGE_KEY = "novel-helper-model-configs";
-const MODEL_ACTIVE_ID_STORAGE_KEY = "novel-helper-model-active-id";
-
-const THEME_OPTIONS: Array<{ id: ThemePreference; label: string }> = [
-  { id: "system", label: "跟随系统" },
-  { id: "light", label: "白天" },
-  { id: "dark", label: "黑夜" }
-];
-
-const CHARACTER_ROLE_OPTIONS = ["主角", "配角", "反派", "盟友", "路人", "其他"] as const;
-type CharacterRole = (typeof CHARACTER_ROLE_OPTIONS)[number];
-
-function auditCharacterRoleClass(role: string): string {
-  switch (role) {
-    case "主角":
-      return "auditCharRole auditCharRoleProtagonist";
-    case "反派":
-      return "auditCharRole auditCharRoleVillain";
-    case "盟友":
-      return "auditCharRole auditCharRoleAlly";
-    case "配角":
-      return "auditCharRole auditCharRoleSupporting";
-    case "路人":
-      return "auditCharRole auditCharRoleExtra";
-    default:
-      return "auditCharRole auditCharRoleOther";
-  }
-}
-
-function clamp(n: number, lo: number, hi: number) {
-  return Math.max(lo, Math.min(hi, n));
-}
-
-function auditCharacterNewBadgeClass(v: string): string {
-  const t = (v || "").toLowerCase();
-  if (t === "new") return "auditCharMeta auditCharMetaNew";
-  if (t === "existing") return "auditCharMeta auditCharMetaExisting";
-  return "auditCharMeta auditCharMetaUnknown";
-}
-
-function formatAuditCharField(v: unknown): string {
-  if (v === null || v === undefined) return "";
-  if (typeof v === "string") return v.trim();
-  if (typeof v === "number" || typeof v === "boolean") return String(v);
-  if (Array.isArray(v)) {
-    const parts = v.map((x) => formatAuditCharField(x)).filter(Boolean);
-    return parts.join("；");
-  }
-  if (typeof v === "object") {
-    try {
-      return JSON.stringify(v);
-    } catch {
-      return String(v);
-    }
-  }
-  return String(v);
-}
 
 function friendlyAuditFieldKey(k: string): string {
   const map: Record<string, string> = {
@@ -765,31 +702,15 @@ export function App() {
   const [modelEditorDraft, setModelEditorDraft] = useState<ModelConfig | null>(null);
   const [modelTestStatus, setModelTestStatus] = useState<string>("");
   const [homeCenterTab, setHomeCenterTab] = useState<"welcome" | "model">("welcome");
-  const [navCollapsed, setNavCollapsed] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem(NAV_COLLAPSED_STORAGE_KEY) === "1";
-    } catch {
-      return false;
-    }
+  const [navCollapsed, setNavCollapsed] = useLocalStorageState<boolean>({
+    key: NAV_COLLAPSED_STORAGE_KEY,
+    defaultValue: false,
+    parse: (raw) => raw === "1",
+    serialize: (v) => (v ? "1" : "0")
   });
 
-  const [{ navW: layout3NavW, rightW: layout3RightW }, setLayout3Splits] = useState<{
-    navW: number;
-    rightW: number;
-  }>(() => {
-    try {
-      const raw = localStorage.getItem(LAYOUT3_SPLIT_STORAGE_KEY);
-      const parsed = raw ? JSON.parse(raw) : null;
-      const navW = typeof parsed?.navW === "number" ? parsed.navW : 320;
-      const rightW = typeof parsed?.rightW === "number" ? parsed.rightW : 420;
-      return { navW: clamp(navW, 240, 560), rightW: clamp(rightW, 320, 720) };
-    } catch {
-      return { navW: 320, rightW: 420 };
-    }
-  });
-
-  const [layout3Dragging, setLayout3Dragging] = useState<null | "nav" | "right">(null);
-  const layout3DragStartRef = useRef<{ kind: "nav" | "right"; x: number; navW: number; rightW: number } | null>(null);
+  const { navW: layout3NavW, rightW: layout3RightW, dragging: layout3Dragging, setDragging: setLayout3Dragging, dragStartRef: layout3DragStartRef } =
+    useLayout3Splitters();
 
   const [chapterAutosaveHint, setChapterAutosaveHint] = useState("");
   const [cardAutosaveHint, setCardAutosaveHint] = useState("");
@@ -1083,47 +1004,7 @@ export function App() {
     };
   }, []);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(NAV_COLLAPSED_STORAGE_KEY, navCollapsed ? "1" : "0");
-    } catch {
-      // ignore
-    }
-  }, [navCollapsed]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(LAYOUT3_SPLIT_STORAGE_KEY, JSON.stringify({ navW: layout3NavW, rightW: layout3RightW }));
-    } catch {
-      // ignore
-    }
-  }, [layout3NavW, layout3RightW]);
-
-  useEffect(() => {
-    if (!layout3Dragging) return;
-    const onMove = (ev: MouseEvent) => {
-      const st = layout3DragStartRef.current;
-      if (!st) return;
-      const dx = ev.clientX - st.x;
-      if (st.kind === "nav") {
-        const navW = clamp(st.navW + dx, 240, 560);
-        setLayout3Splits((v) => ({ ...v, navW }));
-      } else {
-        const rightW = clamp(st.rightW - dx, 320, 720);
-        setLayout3Splits((v) => ({ ...v, rightW }));
-      }
-    };
-    const onUp = () => {
-      setLayout3Dragging(null);
-      layout3DragStartRef.current = null;
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp, { once: true });
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-  }, [layout3Dragging]);
+  // 布局拖拽与持久化由 useLayout3Splitters 负责
 
   useEffect(() => {
     try {
@@ -4386,336 +4267,53 @@ export function App() {
                       ))}
                     </div>
                   ) : rightTab === "__removed__" ? (
-                    <div className="timelinePanel">
-                      <div className="timelineTopRow">
-                        <button
-                          type="button"
-                          className="btnSort"
-                          disabled={busy || timelineBusy || !activeBook}
-                          onClick={() => activeBook && void refreshTimelineIndex(activeBook)}
-                        >
-                          刷新
-                        </button>
-                        <div className="row">
-                          <button
-                            type="button"
-                            className={`btnSort ${memoryTab === "chapters" ? "active" : ""}`}
-                            disabled={busy}
-                            onClick={() => setMemoryTab("chapters")}
-                          >
-                            章节概要
-                          </button>
-                          <button
-                            type="button"
-                            className={`btnSort ${memoryTab === "ranges" ? "active" : ""}`}
-                            disabled={busy}
-                            onClick={() => setMemoryTab("ranges")}
-                          >
-                            多章概要
-                          </button>
-                          <button
-                            type="button"
-                            className="btnSort"
-                            disabled={busy}
-                            onClick={() => setMemoryChaptersSortDesc((v) => (memoryTab === "chapters" ? !v : v))}
-                            style={{ display: memoryTab === "chapters" ? undefined : "none" }}
-                            title="切换章节概要排序"
-                          >
-                            {memoryChaptersSortDesc ? "降序" : "升序"}
-                          </button>
-                          <button
-                            type="button"
-                            className="btnSort"
-                            disabled={busy}
-                            onClick={() => setMemoryRangesSortDesc((v) => (memoryTab === "ranges" ? !v : v))}
-                            style={{ display: memoryTab === "ranges" ? undefined : "none" }}
-                            title="切换多章概要排序"
-                          >
-                            {memoryRangesSortDesc ? "降序" : "升序"}
-                          </button>
-                        </div>
-                      </div>
-
-                      {memoryTab === "ranges" ? (
-                        <>
-                          <label className="toggle timelineToggle">
-                            <input
-                              type="checkbox"
-                              checked={timelineShowDoneEvents}
-                              onChange={(e) => setTimelineShowDoneEvents(e.target.checked)}
-                              disabled={busy}
-                            />
-                            显示已完成事件
-                          </label>
-
-                          <div className="timelineSection">
-                            <div className="auditPanelTitle">推荐压缩区间</div>
-                            {timelineIndex?.compressionSuggestions?.length ? (
-                              <div className="timelineSuggestionList">
-                                {timelineIndex.compressionSuggestions.map((s, i) => (
-                                  <button
-                                    key={`${s.startChapter}-${s.endChapter}-${i}`}
-                                    type="button"
-                                    className="timelineSuggestion"
-                                    disabled={busy || timelineBusy || !activeBook}
-                                    onClick={() => {
-                                      setTimelineCompressStart(String(s.startChapter));
-                                      setTimelineCompressEnd(String(s.endChapter));
-                                      void compressMemoryRangeWithMerge(s.startChapter, s.endChapter);
-                                    }}
-                                    title={s.why}
-                                  >
-                                    压缩 第 {s.startChapter}-{s.endChapter} 章
-                                    <span className="muted timelineSuggestionWhy">{s.why}</span>
-                                  </button>
-                                ))}
-                              </div>
-                            ) : (
-                              <div className="muted auditPanelEmpty">暂无推荐。完成一次分析后会自动生成。</div>
-                            )}
-                          </div>
-
-                          <div className="timelineSection">
-                            <div className="auditPanelTitle">压缩章节</div>
-                            <div className="timelineCompressRow">
-                              <input
-                                className="timelineInput"
-                                value={timelineCompressStart}
-                                onChange={(e) => setTimelineCompressStart(e.target.value)}
-                                placeholder="起始章号"
-                                inputMode="numeric"
-                                disabled={busy || timelineBusy || !activeBook}
-                              />
-                              <span className="muted">到</span>
-                              <input
-                                className="timelineInput"
-                                value={timelineCompressEnd}
-                                onChange={(e) => setTimelineCompressEnd(e.target.value)}
-                                placeholder="结束章号"
-                                inputMode="numeric"
-                                disabled={busy || timelineBusy || !activeBook}
-                              />
-                              <button
-                                type="button"
-                                className="btnSort"
-                                disabled={busy || timelineBusy || !activeBook}
-                                onClick={() => {
-                                  const a = parseInt(timelineCompressStart, 10);
-                                  const b = parseInt(timelineCompressEnd, 10);
-                                  if (!Number.isFinite(a) || !Number.isFinite(b) || a < 1 || b < 1) {
-                                    setStatus("请输入有效的起止章号。");
-                                    return;
-                                  }
-                                  void compressMemoryRangeWithMerge(a, b);
-                                }}
-                              >
-                                {timelineBusy ? "压缩中…" : "压缩"}
-                              </button>
-                            </div>
-                            <div className="muted timelineHint">已压缩的区间可再次压缩（会覆盖更新）。</div>
-                          </div>
-
-                          <div className="timelineSection">
-                            <div className="auditPanelTitle">区间压缩摘要</div>
-                            {timelineIndex?.compressedRanges?.length ? (
-                              <div className="timelineRangeList">
-                                {([...timelineIndex.compressedRanges] as any[])
-                                  .slice()
-                                  .sort((x: any, y: any) => {
-                                    const ax = Number(x?.startChapter);
-                                    const ay = Number(y?.startChapter);
-                                    const bx = Number(x?.endChapter);
-                                    const by = Number(y?.endChapter);
-                                    const dx = (Number.isFinite(ax) ? ax : 0) - (Number.isFinite(ay) ? ay : 0);
-                                    const dy = (Number.isFinite(bx) ? bx : 0) - (Number.isFinite(by) ? by : 0);
-                                    const v = dx || dy;
-                                    return memoryRangesSortDesc ? -v : v;
-                                  })
-                                  .map((r: any, i: number) => {
-                                  const key = `range:${r.startChapter}-${r.endChapter}`;
-                                  const expanded = Boolean(memoryExpanded[key]);
-                                  const txt = String(r.summary || "").trim();
-                                  const needToggle = txt.length >= 60;
-                                  return (
-                                    <div key={`${r.startChapter}-${r.endChapter}-${i}`} className="timelineRangeItem">
-                                      <div className="timelineRangeTop">
-                                        <div className="timelineRangeTitle">
-                                          第 {r.startChapter}-{r.endChapter} 章
-                                        </div>
-                                        <button
-                                          type="button"
-                                          className="btnSort"
-                                          disabled={busy || timelineBusy || !activeBook}
-                                          onClick={() => void compressMemoryRangeWithMerge(r.startChapter, r.endChapter)}
-                                        >
-                                          再次压缩
-                                        </button>
-                                        <button
-                                          type="button"
-                                          className="btnSort"
-                                          disabled={busy || timelineBusy || !activeBook}
-                                          onClick={async () => {
-                                            if (!activeBook) return;
-                                            const ok = window.confirm(
-                                              `确认删除第 ${r.startChapter}-${r.endChapter} 章的多章概要？\n（不会影响章节概要）`
-                                            );
-                                            if (!ok) return;
-                                            setTimelineBusy(true);
-                                            try {
-                                              const { index } = await deleteTimelineRange(activeBook, {
-                                                startChapter: r.startChapter,
-                                                endChapter: r.endChapter
-                                              });
-                                              setTimelineIndex(index);
-                                            } catch (e: any) {
-                                              setStatus(e?.message || String(e));
-                                            } finally {
-                                              setTimelineBusy(false);
-                                            }
-                                          }}
-                                        >
-                                          分解压缩
-                                        </button>
-                                      </div>
-                                      <div className={expanded ? "timelineRangeSummary" : "timelineRangeSummary memoryClamp2"}>
-                                        {txt}
-                                      </div>
-                                      {needToggle ? (
-                                        <button
-                                          type="button"
-                                          className="btnLinkMuted"
-                                          disabled={busy}
-                                          onClick={() =>
-                                            setMemoryExpanded((prev) => ({
-                                              ...prev,
-                                              [key]: !Boolean(prev[key])
-                                            }))
-                                          }
-                                        >
-                                          {expanded ? "收起" : "…展开"}
-                                        </button>
-                                      ) : null}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            ) : (
-                              <div className="muted auditPanelEmpty">暂无压缩区间。</div>
-                            )}
-                          </div>
-
-                          <div className="timelineSection">
-                            <div className="auditPanelTitle">关键事件</div>
-                            {timelineIndex?.events?.length ? (
-                              <div className="timelineEventList">
-                                {timelineIndex.events
-                                  .filter((e) => (timelineShowDoneEvents ? true : e.status !== "done"))
-                                  .filter((e) =>
-                                    timelineShowDoneEvents
-                                      ? true
-                                      : !(timelineIndex.manual?.doneEventIds ?? []).includes(e.id)
-                                  )
-                                  .slice(0, 200)
-                                  .map((e) => {
-                                    const done =
-                                      (timelineIndex.manual?.doneEventIds ?? []).includes(e.id) || e.status === "done";
-                                    return (
-                                      <div
-                                        key={e.id}
-                                        className={`timelineEventItem ${done ? "done" : ""}`}
-                                        data-event-id={e.id}
-                                      >
-                                        <div className="timelineEventTop">
-                                          <div className="timelineEventTitle">
-                                            第 {e.startChapter}
-                                            {e.endChapter !== e.startChapter ? `-${e.endChapter}` : ""} 章 · {e.title}
-                                          </div>
-                                          <button
-                                            type="button"
-                                            className="btnSort"
-                                            disabled={busy || timelineBusy || !activeBook}
-                                            onClick={async () => {
-                                              if (!activeBook) return;
-                                              setTimelineBusy(true);
-                                              try {
-                                                const { index } = await markTimelineEvent(activeBook, {
-                                                  id: e.id,
-                                                  status: done ? "open" : "done"
-                                                });
-                                                setTimelineIndex(index);
-                                              } catch (err: any) {
-                                                setStatus(err?.message || String(err));
-                                              } finally {
-                                                setTimelineBusy(false);
-                                              }
-                                            }}
-                                          >
-                                            {done ? "取消完成" : "标记完成"}
-                                          </button>
-                                        </div>
-                                        <div className="timelineEventSummary muted">{e.summary}</div>
-                                      </div>
-                                    );
-                                  })}
-                              </div>
-                            ) : (
-                              <div className="muted auditPanelEmpty">事件将在后续版本中逐步补全（目前以每章摘要为主）。</div>
-                            )}
-                          </div>
-                        </>
-                      ) : (
-                        <div className="timelineSection">
-                          <div className="auditPanelTitle">章节概要</div>
-                          {timelineIndex?.chapters?.length ? (
-                            <div className="timelineChapterList">
-                              {[...timelineIndex.chapters]
-                                .slice()
-                                .sort((a, b) => {
-                                  const va = Number(a?.chapter);
-                                  const vb = Number(b?.chapter);
-                                  const d = (Number.isFinite(va) ? va : 0) - (Number.isFinite(vb) ? vb : 0);
-                                  return memoryChaptersSortDesc ? -d : d;
-                                })
-                                .slice(0, 120)
-                                .map((c) => {
-                                  const key = `chapter:${c.filename}`;
-                                  const expanded = Boolean(memoryExpanded[key]);
-                                  const txt = String(c.gistL1 || "").trim();
-                                  const needToggle = txt.length >= 60;
-                                  return (
-                                    <div key={c.filename} className="timelineChapterItem">
-                                      <div className="timelineChapterTop">
-                                        <div className="timelineChapterTitle">
-                                          第 {c.chapter} 章 · {c.title}
-                                        </div>
-                                        <div className="muted timelineChapterMeta">{c.filename}</div>
-                                      </div>
-                                      <div className={expanded ? "timelineChapterGist" : "timelineChapterGist memoryClamp2"}>{txt}</div>
-                                      {needToggle ? (
-                                        <button
-                                          type="button"
-                                          className="btnLinkMuted"
-                                          disabled={busy}
-                                          onClick={() =>
-                                            setMemoryExpanded((prev) => ({
-                                              ...prev,
-                                              [key]: !Boolean(prev[key])
-                                            }))
-                                          }
-                                        >
-                                          {expanded ? "收起" : "…展开"}
-                                        </button>
-                                      ) : null}
-                                    </div>
-                                  );
-                                })}
-                            </div>
-                          ) : (
-                            <div className="muted auditPanelEmpty">还没有章节概要。对任意章节完成一次分析后，这里会出现。</div>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                    <MemoryPanel
+                      busy={busy}
+                      timelineBusy={timelineBusy}
+                      activeBook={activeBook}
+                      timelineIndex={timelineIndex}
+                      memoryTab={memoryTab}
+                      setMemoryTab={setMemoryTab}
+                      memoryExpanded={memoryExpanded}
+                      setMemoryExpanded={setMemoryExpanded}
+                      memoryChaptersSortDesc={memoryChaptersSortDesc}
+                      setMemoryChaptersSortDesc={setMemoryChaptersSortDesc}
+                      memoryRangesSortDesc={memoryRangesSortDesc}
+                      setMemoryRangesSortDesc={setMemoryRangesSortDesc}
+                      timelineShowDoneEvents={timelineShowDoneEvents}
+                      setTimelineShowDoneEvents={setTimelineShowDoneEvents}
+                      timelineCompressStart={timelineCompressStart}
+                      setTimelineCompressStart={setTimelineCompressStart}
+                      timelineCompressEnd={timelineCompressEnd}
+                      setTimelineCompressEnd={setTimelineCompressEnd}
+                      onRefresh={() => activeBook && void refreshTimelineIndex(activeBook)}
+                      onSetStatus={setStatus}
+                      onCompressRangeWithMerge={(a, b) => void compressMemoryRangeWithMerge(a, b)}
+                      onDeleteRange={async (a, b) => {
+                        if (!activeBook) return;
+                        setTimelineBusy(true);
+                        try {
+                          const { index } = await deleteTimelineRange(activeBook, { startChapter: a, endChapter: b });
+                          setTimelineIndex(index);
+                        } catch (e: any) {
+                          setStatus(e?.message || String(e));
+                        } finally {
+                          setTimelineBusy(false);
+                        }
+                      }}
+                      onMarkTimelineEventStatus={async (id, status) => {
+                        if (!activeBook) return;
+                        setTimelineBusy(true);
+                        try {
+                          const { index } = await markTimelineEvent(activeBook, { id, status });
+                          setTimelineIndex(index);
+                        } catch (err: any) {
+                          setStatus(err?.message || String(err));
+                        } finally {
+                          setTimelineBusy(false);
+                        }
+                      }}
+                    />
                   ) : rightTab === "__removed__" ? (
                     <div className="foreshadowPanel">
                       {(() => {

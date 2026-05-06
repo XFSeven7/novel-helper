@@ -2245,4 +2245,3 @@ app.delete("/api/novels/:slug/chapters/:filename", async (req, reply) => {
 });
 
 await app.listen({ port: PORT, host: "127.0.0.1" });
-
