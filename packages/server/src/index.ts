@@ -26,6 +26,7 @@ import {
   restoreNovel,
   writeAuditRun,
   readAuditRun,
+  readAuditAnalysisText,
   readAuditLedger,
   writeAuditLedger,
   readAuditCharactersIndex,
@@ -38,6 +39,7 @@ import {
   writeAuditForeshadowsIndex,
   readTimelineIndex,
   writeTimelineIndex,
+  writeAuditAnalysisText,
   writeStoryTimelineMarkdownFromIndex,
   TimelineIndex
 } from "./fsStore.js";
@@ -312,6 +314,7 @@ function normalizeBaseUrlForOpenAICompatible(raw: string): string {
 type ReasoningStreamEvent =
   | { type: "reasoning"; textDelta: string }
   | { type: "log"; text: string }
+  | { type: "phase"; step: number; total: number; label: string }
   | { type: "done"; run: any }
   | { type: "error"; message: string };
 
@@ -1036,6 +1039,15 @@ async function performAuditWithAiSdk(input: {
   onEvent?: (e: ReasoningStreamEvent) => void;
 }) {
   const { slug, filename, modelConfigId, onEvent } = input;
+  const emitPhase = (step: number, label: string) => {
+    try {
+      onEvent?.({ type: "phase", step, total: 5, label });
+    } catch {
+      // ignore
+    }
+  };
+
+  emitPhase(1, "准备输入（读取章节/角色/索引）");
   const settings = await readModelSettings();
   const activeId = modelConfigId || settings.activeId;
   const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
@@ -1059,17 +1071,21 @@ async function performAuditWithAiSdk(input: {
     knownCharacters
   });
 
+  emitPhase(2, "输出思考过程（流式）");
   await streamThinkingTraceWithAiSdk({
     cfg,
     prompt: thinkingPrompt,
     onEvent: onEvent ?? (() => {})
   });
 
+  emitPhase(3, "生成结构化审计结果（JSON）");
   const rawJson = await generateAuditJsonWithAiSdk({ cfg, prompt: auditPrompt });
   const jsonText = stripJsonFence(rawJson);
+  emitPhase(4, "解析并保存审计结果");
   const run = await finalizeAuditFromJsonText(slug, filename, jsonText);
   const ledger = await readAuditLedger(dataDir, slug);
   // 每次分析后自动更新时间线索引与推荐压缩区间
+  emitPhase(5, "更新全书记忆（时间线/推荐压缩）");
   await updateTimelineIndexAfterAudit({ cfg, slug, filename, run, ledger }).catch(() => {});
   return run;
 }
@@ -1465,6 +1481,7 @@ app.post("/api/books/:slug/chapters/:filename/audit/stream", async (req, reply) 
       onEvent: (e) => {
         if (e.type === "reasoning") sseWrite(reply.raw, e);
         if (e.type === "log") sseWrite(reply.raw, e);
+        if (e.type === "phase") sseWrite(reply.raw, e);
       }
     });
     sseWrite(reply.raw, { type: "done", run });
@@ -1570,6 +1587,32 @@ app.get("/api/books/:slug/audit/latest", async (req, reply) => {
     return { run };
   } catch {
     return reply.code(404).send({ message: "Not found" });
+  }
+});
+
+app.get("/api/books/:slug/audit/analysis", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const querySchema = z.object({ chapter: z.string().min(1) });
+  const params = paramsSchema.parse((req as any).params);
+  const query = querySchema.parse((req as any).query);
+  try {
+    const text = await readAuditAnalysisText(dataDir, params.slug, query.chapter);
+    return { text };
+  } catch (e: any) {
+    return reply.code(400).send({ message: e?.message || String(e) });
+  }
+});
+
+app.post("/api/books/:slug/audit/analysis/save", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({ chapter: z.string().min(1), text: z.string().default("") });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+  try {
+    await writeAuditAnalysisText(dataDir, params.slug, body.chapter, body.text || "");
+    return { ok: true };
+  } catch (e: any) {
+    return reply.code(400).send({ message: e?.message || String(e) });
   }
 });
 

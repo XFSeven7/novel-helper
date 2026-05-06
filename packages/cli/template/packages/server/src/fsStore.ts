@@ -413,6 +413,32 @@ export async function readAuditRun(dataDir: string, novelSlug: string, chapterFi
   return JSON.parse(raw) as AuditRun;
 }
 
+function auditAnalysisDir(dataDir: string, novelSlug: string) {
+  return path.join(auditDir(dataDir, novelSlug), "analysisTexts");
+}
+
+export async function writeAuditAnalysisText(
+  dataDir: string,
+  novelSlug: string,
+  chapterFilename: string,
+  text: string
+) {
+  const dir = auditAnalysisDir(dataDir, novelSlug);
+  await ensureDir(dir);
+  const p = path.join(dir, `${chapterFilename}.md`);
+  await fs.writeFile(p, String(text || ""), "utf8");
+}
+
+export async function readAuditAnalysisText(
+  dataDir: string,
+  novelSlug: string,
+  chapterFilename: string
+): Promise<string> {
+  const p = path.join(auditAnalysisDir(dataDir, novelSlug), `${chapterFilename}.md`);
+  if (!(await exists(p))) return "";
+  return await fs.readFile(p, "utf8");
+}
+
 export async function readAuditLedger(dataDir: string, novelSlug: string): Promise<any> {
   const p = path.join(auditDir(dataDir, novelSlug), "karmaLedger.json");
   if (!(await exists(p))) return { openLoops: [], closedLoops: [], updatedAt: "" };

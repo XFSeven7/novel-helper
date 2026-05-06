@@ -40,6 +40,8 @@ import {
   putModelConfigs,
   auditChapter,
   getAuditLatest,
+  getAuditAnalysis,
+  saveAuditAnalysis,
   getAuditLedger,
   getAuditCharacters,
   hideAuditCharacter,
@@ -696,9 +698,7 @@ export function App() {
   const [chapterContent, setChapterContent] = useState("");
   const [cardContent, setCardContent] = useState("");
   const [storyFiles, setStoryFiles] = useState<StoryFile[]>([]);
-  const [rightTab, setRightTab] = useState<
-    "chapterSummary" | "chapterEntities"
-  >("chapterSummary");
+  const [rightTab, setRightTab] = useState<"chapterAnalysis" | "chapterSummary" | "chapterEntities">("chapterAnalysis");
   const [expandedAuditCharIds, setExpandedAuditCharIds] = useState<Record<string, boolean>>({});
   const [status, setStatus] = useState<string>("");
   const [busy, setBusy] = useState(false);
@@ -1133,10 +1133,11 @@ export function App() {
   const okModelConfigs = useMemo(() => modelConfigs.filter((c) => c.lastTestOk), [modelConfigs]);
   const [auditModelPickerOpen, setAuditModelPickerOpen] = useState(false);
   const [auditModelSearch, setAuditModelSearch] = useState("");
-  const [auditStreamOpen, setAuditStreamOpen] = useState(false);
   type AuditStreamPhase = "idle" | "running" | "done" | "error";
   const [auditStreamPhase, setAuditStreamPhase] = useState<AuditStreamPhase>("idle");
   const [auditStreamText, setAuditStreamText] = useState("");
+  const [auditRunningChapter, setAuditRunningChapter] = useState<{ bookSlug: string; filename: string } | null>(null);
+  const [auditProgress, setAuditProgress] = useState<{ step: number; total: number; label: string } | null>(null);
   const auditStreamRef = useRef<HTMLDivElement | null>(null);
   const auditReaderRootRef = useRef<HTMLDivElement | null>(null);
   const [auditHover, setAuditHover] = useState<{
@@ -1159,6 +1160,21 @@ export function App() {
   const auditThinkingBufferRef = useRef("");
   const auditDisplayedLenRef = useRef(0);
   const auditRevealRafRef = useRef<number | null>(null);
+  const selectedChapterFilenameRef = useRef<string>("");
+  const auditRunningChapterRef = useRef<{ bookSlug: string; filename: string } | null>(null);
+  const auditStreamPhaseRef = useRef<AuditStreamPhase>("idle");
+
+  useEffect(() => {
+    selectedChapterFilenameRef.current = selectedChapter?.filename || "";
+  }, [selectedChapter?.filename]);
+
+  useEffect(() => {
+    auditRunningChapterRef.current = auditRunningChapter;
+  }, [auditRunningChapter]);
+
+  useEffect(() => {
+    auditStreamPhaseRef.current = auditStreamPhase;
+  }, [auditStreamPhase]);
 
   const flushAuditThinkingReveal = useCallback(() => {
     auditRevealRafRef.current = null;
@@ -1170,7 +1186,11 @@ export function App() {
       backlog > 2500 ? 20 : backlog > 1000 ? 10 : backlog > 400 ? 4 : backlog > 150 ? 2 : 1;
     len = Math.min(len + stride, full.length);
     auditDisplayedLenRef.current = len;
-    setAuditStreamText(full.slice(0, len));
+    const running = auditRunningChapterRef.current;
+    const viewing = selectedChapterFilenameRef.current;
+    if (running && viewing === running.filename) {
+      setAuditStreamText(full.slice(0, len));
+    }
     if (len < full.length) {
       auditRevealRafRef.current = requestAnimationFrame(flushAuditThinkingReveal);
     }
@@ -1205,11 +1225,23 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!auditStreamOpen) return;
+    if (rightTab !== "chapterAnalysis") return;
     const el = auditStreamRef.current;
     if (!el) return;
     el.scrollTop = el.scrollHeight;
-  }, [auditStreamText, auditStreamOpen]);
+  }, [auditStreamText, rightTab]);
+
+  useEffect(() => {
+    // 从“非运行章节”切回“运行章节”时：如果后台缓冲已经变长，立即继续追帧更新 UI
+    const running = auditRunningChapter;
+    if (!running) return;
+    if (!selectedChapter) return;
+    if (selectedChapter.filename !== running.filename) return;
+    if (auditStreamPhase !== "running") return;
+    if (auditDisplayedLenRef.current >= auditThinkingBufferRef.current.length) return;
+    if (auditRevealRafRef.current != null) return;
+    auditRevealRafRef.current = requestAnimationFrame(flushAuditThinkingReveal);
+  }, [auditRunningChapter, selectedChapter, auditStreamPhase, flushAuditThinkingReveal]);
 
   useEffect(() => {
     // 只允许选择“连接成功”的配置；如果当前 active 不在成功列表，自动回落
@@ -1500,8 +1532,7 @@ export function App() {
       chapterBaselineRef.current = content;
       setChapterTitleEditing(false);
 
-      // 新建章节后：收起分析面板，并刷新右侧内容整理数据源
-      setAuditStreamOpen(false);
+      // 新建章节后：刷新右侧内容整理数据源
       setAuditStreamPhase("idle");
       resetAuditThinkingReveal();
       setAuditRun(null);
@@ -1531,7 +1562,7 @@ export function App() {
     if (!chapterTitle.trim()) return;
 
     // 点击“新增章节”立刻重置右侧内容整理（避免残留上一章的摘要/角色展开/时间线等）
-    setRightTab("chapterSummary");
+    setRightTab("chapterAnalysis");
     setExpandedAuditCharIds({});
     setSelectedCard(null);
     setCardContent("");
@@ -1602,13 +1633,44 @@ export function App() {
       queueMicrotask(() => scrollChapterToTop());
       void loadAuditArtifacts(activeBook, c.filename);
       void loadGlobalArtifacts(activeBook);
-      resetAuditThinkingReveal();
-      setAuditStreamPhase("idle");
+      // 运行中：允许切章浏览，但不清空缓冲/不断流
+      const running = auditRunningChapterRef.current;
+      const phase = auditStreamPhaseRef.current;
+      const isAuditRunningInThisBook = running && phase === "running" && running.bookSlug === activeBook;
+      const isOpeningRunningChapter = isAuditRunningInThisBook && running.filename === c.filename;
+
+      if (isAuditRunningInThisBook && !isOpeningRunningChapter) {
+        // 正在分析别章：清空展示避免串章，但不重置缓冲/phase
+        setAuditStreamText("");
+      } else if (!isOpeningRunningChapter) {
+        // 非运行章（或没有在分析）：按原逻辑重置面板
+        resetAuditThinkingReveal();
+        setAuditStreamPhase("idle");
+      }
+
+      // 切回运行章：立即从缓冲回填，并继续追帧
+      if (isOpeningRunningChapter) {
+        setAuditStreamPhase("running");
+        setAuditStreamText(auditThinkingBufferRef.current.slice(0, auditDisplayedLenRef.current));
+        if (auditDisplayedLenRef.current < auditThinkingBufferRef.current.length && auditRevealRafRef.current == null) {
+          auditRevealRafRef.current = requestAnimationFrame(flushAuditThinkingReveal);
+        }
+      }
     } catch (e: any) {
       setStatus(e?.message || String(e));
     } finally {
       setBusy(false);
     }
+  }
+
+  async function jumpToRunningAuditChapter() {
+    if (!activeBook) return;
+    const running = auditRunningChapter;
+    if (!running || running.bookSlug !== activeBook) return;
+    const m = chapters.find((x) => x.filename === running.filename);
+    if (!m) return;
+    setRightTab("chapterAnalysis");
+    await onOpenChapter(m);
   }
 
   async function loadGlobalArtifacts(slug: string) {
@@ -1630,8 +1692,38 @@ export function App() {
 
   async function loadAuditArtifacts(slug: string, chapterFilename: string) {
     try {
-      const [{ run }] = await Promise.all([getAuditLatest(slug, chapterFilename).catch(() => ({ run: null }))]);
+      const [{ run }, { text }] = await Promise.all([
+        getAuditLatest(slug, chapterFilename).catch(() => ({ run: null })),
+        getAuditAnalysis(slug, chapterFilename).catch(() => ({ text: "" }))
+      ]);
+
       setAuditRun(run);
+
+      const persisted = String(text || "");
+      const running = auditRunningChapterRef.current;
+      const isRunningThis =
+        running &&
+        running.bookSlug === slug &&
+        running.filename === chapterFilename &&
+        auditStreamPhaseRef.current === "running";
+      const isViewingNonRunningWhileRunning =
+        running && running.bookSlug === slug && running.filename !== chapterFilename && auditStreamPhaseRef.current === "running";
+
+      if (!isRunningThis && persisted.trim()) {
+        // 持久化的“本章分析”文本：直接当成完整缓冲，避免 RAF 逐段追帧导致二次“打字机效果”
+        resetAuditThinkingReveal();
+        auditThinkingBufferRef.current = persisted;
+        auditDisplayedLenRef.current = persisted.length;
+        setAuditStreamText(persisted);
+        setAuditStreamPhase("done");
+      } else if (!isRunningThis && isViewingNonRunningWhileRunning) {
+        // 正在分析别章，但用户在查看本章：本章无持久化内容时，显示为空（不影响运行缓冲）
+        if (!persisted.trim()) {
+          setAuditStreamText("");
+        }
+      } else if (!isRunningThis && auditStreamPhaseRef.current !== "running") {
+        setAuditStreamPhase("idle");
+      }
     } catch {
       // ignore
     }
@@ -2117,9 +2209,20 @@ export function App() {
       setStatus("没有可用模型：请先在「模型配置」里测试连接，连接成功后再分析。");
       return;
     }
+    if (auditRunningChapter && auditRunningChapter.bookSlug === activeBook && auditRunningChapter.filename !== selectedChapter.filename) {
+      const runningMeta = chapters.find((x) => x.filename === auditRunningChapter.filename);
+      const noFromName = Number(String(auditRunningChapter.filename).match(/^(\d+)/)?.[1] || "");
+      const no = Number.isFinite(noFromName) && noFromName > 0 ? noFromName : runningMeta ? chapters.indexOf(runningMeta) + 1 : 0;
+      setStatus(`当前第 ${no || "?"} 章正在分析中，请先回到该章节查看进度。`);
+      return;
+    }
     setAuditBusy(true);
     setStatus("");
     setAuditStreamPhase("running");
+    setAuditProgress({ step: 1, total: 5, label: "准备输入（读取章节/角色/索引）" });
+    const runningBookSlug = activeBook;
+    const runningChapterFilename = selectedChapter.filename;
+    setAuditRunningChapter({ bookSlug: runningBookSlug, filename: runningChapterFilename });
     resetAuditThinkingReveal();
     try {
       // 先尽力同步一次（避免服务端没有最新配置）
@@ -2127,7 +2230,7 @@ export function App() {
 
       const res = await fetch(
         `${(import.meta as any).env?.VITE_API_BASE || "http://127.0.0.1:3177"}/api/books/${encodeURIComponent(
-          activeBook
+          runningBookSlug
         )}/chapters/${encodeURIComponent(selectedChapter.filename)}/audit/stream`,
         {
           method: "POST",
@@ -2163,12 +2266,25 @@ export function App() {
             if (payload.type === "reasoning") {
               appendAuditThinkingDelta(payload.textDelta ?? "");
             }
+            if (payload.type === "phase") {
+              const step = Math.max(1, Math.floor(Number(payload.step || 1)));
+              const total = Math.max(step, Math.floor(Number(payload.total || 5)));
+              const label = String(payload.label || "").trim() || "处理中…";
+              setAuditProgress({ step, total, label });
+            }
             // 兼容：服务端可能仍发送 log（不展示或可切换为展示）
             if (payload.type === "done") {
               if (payload.run) setAuditRun(payload.run);
-              await loadAuditArtifacts(activeBook, selectedChapter.filename);
-              await refreshTimelineIndex(activeBook);
+              await loadAuditArtifacts(runningBookSlug, runningChapterFilename);
+              await refreshTimelineIndex(runningBookSlug);
               setAuditStreamPhase("done");
+              // 把“本章分析”文本持久化到服务端（按章节保存）
+              await saveAuditAnalysis(runningBookSlug, {
+                chapterFilename: runningChapterFilename,
+                text: auditThinkingBufferRef.current || ""
+              }).catch(() => {});
+              setAuditRunningChapter(null);
+              setAuditProgress(null);
             }
             if (payload.type === "error") {
               throw new Error(payload.message || "分析失败");
@@ -2182,6 +2298,8 @@ export function App() {
     } catch (e: any) {
       setAuditStreamPhase("error");
       setStatus(e?.message || String(e));
+      setAuditRunningChapter(null);
+      setAuditProgress(null);
     } finally {
       setAuditBusy(false);
     }
@@ -3875,15 +3993,6 @@ export function App() {
                 >
                   {auditReadModeOn ? "退出审计" : "审计"}
                 </button>
-                <button
-                  type="button"
-                  className={`btnAuditRead ${auditStreamOpen ? "active" : ""}`}
-                  disabled={busy}
-                  onClick={() => setAuditStreamOpen((v) => !v)}
-                  title={auditStreamOpen ? "收起右侧分析面板" : "打开分析面板（可在面板内开始本章分析）"}
-                >
-                  {auditBusy ? "分析中…" : auditStreamOpen ? "收起面板" : "分析面板"}
-                </button>
                 <select
                   className="select"
                   value={mobilePreset}
@@ -4335,7 +4444,7 @@ export function App() {
               </div>
             </div>
           ) : (
-            <div className={`chapterSplit ${auditStreamOpen ? "open" : ""}`}>
+            <div className="chapterSplit">
               <div className="chapterSplitLeft">
                 {expandModeOn ? (
                   <div className="polishSplit">
@@ -4577,68 +4686,6 @@ export function App() {
                   />
                 )}
               </div>
-              {auditStreamOpen ? (
-                <div className="chapterSplitRight" aria-label="分析流式输出">
-                  <div className="chapterSplitRightHeader">
-                    <div className="chapterSplitRightTitle">
-                      {auditStreamPhase === "running"
-                        ? "分析中"
-                        : auditStreamPhase === "error"
-                          ? "分析失败"
-                          : auditStreamText.trim()
-                            ? "分析完成"
-                            : "分析面板"}
-                    </div>
-                    {auditStreamPhase !== "running" && auditStreamText.trim() ? (
-                      <div className="row">
-                        <button
-                          type="button"
-                          className="btnSort"
-                          onClick={() => void onAuditSelectedChapter()}
-                          disabled={busy || auditBusy || !selectedChapter || !okModelConfigs.length}
-                          title={!okModelConfigs.length ? "请先在「模型配置」里测试连接" : "重新调用模型分析本章"}
-                        >
-                          重新分析
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                  <div ref={auditStreamRef} className="auditStream">
-                    {auditStreamText.trim() ? (
-                      <div className="auditStreamInner auditStreamMd">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{auditStreamText}</ReactMarkdown>
-                      </div>
-                    ) : auditBusy ? (
-                      <div className="auditStreamInner muted">请稍候…</div>
-                    ) : (
-                      <div className="auditStreamEmpty">
-                        <button
-                          type="button"
-                          className="btnAuditStartChapter"
-                          disabled={busy || auditBusy || !okModelConfigs.length}
-                          onClick={() => void onAuditSelectedChapter()}
-                          title={
-                            !okModelConfigs.length
-                              ? "请先在「模型配置」里测试连接，连接成功后再分析"
-                              : "调用当前模型分析本章（摘要与右侧内容整理将一并更新）"
-                          }
-                        >
-                          开始分析
-                        </button>
-                        {!okModelConfigs.length ? (
-                          <div className="muted auditStreamEmptyHint">
-                            暂无连接成功的模型，请先到「模型配置」测试连接。
-                          </div>
-                        ) : (
-                          <div className="muted auditStreamEmptyHint">
-                            使用右侧所选模型梳理本章要点。
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : null}
             </div>
           )}
           {status ? <div className="status">{status}</div> : null}
@@ -4748,6 +4795,16 @@ export function App() {
                     <button
                       type="button"
                       role="tab"
+                      className={`browserTab ${rightTab === "chapterAnalysis" ? "active" : ""}`}
+                      aria-selected={rightTab === "chapterAnalysis"}
+                      onClick={() => setRightTab("chapterAnalysis")}
+                      disabled={busy}
+                    >
+                      本章分析
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
                       className={`browserTab ${rightTab === "chapterSummary" ? "active" : ""}`}
                       aria-selected={rightTab === "chapterSummary"}
                       onClick={() => setRightTab("chapterSummary")}
@@ -4769,7 +4826,142 @@ export function App() {
                 </div>
 
                 <div className="organizeTabScroll">
-                  {rightTab === "chapterSummary" ? (
+                  {rightTab === "chapterAnalysis" ? (
+                    <div className="auditPanel">
+                      <div className="auditPanelBody">
+                        <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                          <div className="auditPanelTitle">
+                            {auditRunningChapter &&
+                            activeBook &&
+                            selectedChapter &&
+                            auditRunningChapter.bookSlug === activeBook &&
+                            auditRunningChapter.filename !== selectedChapter.filename &&
+                            auditStreamPhase === "running"
+                              ? "本章分析"
+                              : auditStreamPhase === "running"
+                              ? "分析中"
+                              : auditStreamPhase === "error"
+                                ? "分析失败"
+                                : auditStreamText.trim()
+                                  ? "分析完成"
+                                  : "本章分析"}
+                            {auditStreamPhase === "running" && auditProgress ? (
+                              <span className="muted" style={{ marginLeft: 10, fontSize: 12 }}>
+                                {auditProgress.step}/{auditProgress.total} · {auditProgress.label}
+                              </span>
+                            ) : null}
+                          </div>
+                          {auditStreamPhase !== "running" && auditStreamText.trim() ? (
+                            <button
+                              type="button"
+                              className="btnSort"
+                              onClick={() => void onAuditSelectedChapter()}
+                              disabled={
+                                busy ||
+                                auditBusy ||
+                                !selectedChapter ||
+                                !okModelConfigs.length ||
+                                !!(auditRunningChapter &&
+                                  !!activeBook &&
+                                  !!selectedChapter &&
+                                  auditRunningChapter.bookSlug === activeBook &&
+                                  auditRunningChapter.filename !== selectedChapter.filename)
+                              }
+                              title={!okModelConfigs.length ? "请先在「模型配置」里测试连接" : "重新调用模型分析本章"}
+                            >
+                              重新分析
+                            </button>
+                          ) : null}
+                        </div>
+                        {auditRunningChapter &&
+                        activeBook &&
+                        selectedChapter &&
+                        auditRunningChapter.bookSlug === activeBook &&
+                        auditRunningChapter.filename !== selectedChapter.filename &&
+                        auditStreamPhase === "running" ? (
+                          <div className="muted" style={{ marginTop: 8, borderTop: "1px solid var(--line)", paddingTop: 8 }}>
+                            <button
+                              type="button"
+                              className="btnLink"
+                              onClick={() => void jumpToRunningAuditChapter()}
+                              disabled={busy}
+                            >
+                              当前正在分析「{auditRunningChapter.filename}」，点击跳转回该章节查看进度
+                            </button>
+                          </div>
+                        ) : null}
+                        <div ref={auditStreamRef} className="auditStream">
+                          {auditStreamText.trim() ? (
+                            <div className="auditStreamInner auditStreamMd">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{auditStreamText}</ReactMarkdown>
+                            </div>
+                          ) : auditBusy &&
+                            auditRunningChapter &&
+                            activeBook &&
+                            selectedChapter &&
+                            auditRunningChapter.bookSlug === activeBook &&
+                            auditRunningChapter.filename === selectedChapter.filename &&
+                            auditStreamPhase === "running" ? (
+                            <div className="auditStreamInner muted">
+                              {auditProgress ? (
+                                <>
+                                  正在执行 {auditProgress.step}/{auditProgress.total}：{auditProgress.label}
+                                </>
+                              ) : (
+                                "正在执行中…"
+                              )}
+                            </div>
+                          ) : auditRunningChapter &&
+                            activeBook &&
+                            selectedChapter &&
+                            auditRunningChapter.bookSlug === activeBook &&
+                            auditRunningChapter.filename !== selectedChapter.filename &&
+                            auditStreamPhase === "running" ? (
+                            <div className="auditStreamInner muted">
+                              当前正在分析「{auditRunningChapter.filename}」。本章暂无分析内容。
+                            </div>
+                          ) : (
+                            <div className="auditStreamEmpty">
+                              <button
+                                type="button"
+                                className="btnAuditStartChapter"
+                                disabled={
+                                  busy ||
+                                  auditBusy ||
+                                  !okModelConfigs.length ||
+                                  !!(auditRunningChapter &&
+                                    !!activeBook &&
+                                    !!selectedChapter &&
+                                    auditRunningChapter.bookSlug === activeBook &&
+                                    auditRunningChapter.filename !== selectedChapter.filename)
+                                }
+                                onClick={() => void onAuditSelectedChapter()}
+                                title={
+                                  !okModelConfigs.length
+                                    ? "请先在「模型配置」里测试连接，连接成功后再分析"
+                                    : auditRunningChapter &&
+                                        activeBook &&
+                                        selectedChapter &&
+                                        auditRunningChapter.bookSlug === activeBook &&
+                                        auditRunningChapter.filename !== selectedChapter.filename &&
+                                        auditStreamPhase === "running"
+                                      ? "当前有章节正在分析中，请先跳回查看进度"
+                                      : "调用当前模型分析本章（摘要与右侧内容整理将一并更新）"
+                                }
+                              >
+                                开始分析
+                              </button>
+                              {!okModelConfigs.length ? (
+                                <div className="muted auditStreamEmptyHint">暂无连接成功的模型，请先到「模型配置」测试连接。</div>
+                              ) : (
+                                <div className="muted auditStreamEmptyHint">使用右侧所选模型梳理本章要点。</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : rightTab === "chapterSummary" ? (
                     <div className="auditPanel">
                       {auditRun ? (
                         <div className="auditPanelBody">

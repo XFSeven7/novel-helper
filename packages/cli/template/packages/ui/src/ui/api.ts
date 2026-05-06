@@ -154,6 +154,19 @@ export async function getAuditLatest(slug: string, chapterFilename: string) {
   );
 }
 
+export async function getAuditAnalysis(slug: string, chapterFilename: string) {
+  return await http<{ text: string }>(
+    `/api/books/${encodeURIComponent(slug)}/audit/analysis?chapter=${encodeURIComponent(chapterFilename)}`
+  );
+}
+
+export async function saveAuditAnalysis(slug: string, input: { chapterFilename: string; text: string }) {
+  return await http<{ ok: true }>(`/api/books/${encodeURIComponent(slug)}/audit/analysis/save`, {
+    method: "POST",
+    body: JSON.stringify({ chapter: input.chapterFilename, text: input.text ?? "" })
+  });
+}
+
 export async function getAuditLedger(slug: string) {
   return await http<{ ledger: any }>(`/api/books/${encodeURIComponent(slug)}/audit/ledger`);
 }
