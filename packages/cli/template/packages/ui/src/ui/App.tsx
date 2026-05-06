@@ -1100,6 +1100,7 @@ export function App() {
   const [editCharLockRelationalHooks, setEditCharLockRelationalHooks] = useState(false);
   const [relationsSearch, setRelationsSearch] = useState("");
   const [relationsOnlyTyped, setRelationsOnlyTyped] = useState(false);
+  const [auditCharactersSearch, setAuditCharactersSearch] = useState("");
   const [auditBusy, setAuditBusy] = useState(false);
   const okModelConfigs = useMemo(() => modelConfigs.filter((c) => c.lastTestOk), [modelConfigs]);
   type AuditStreamPhase = "idle" | "running" | "done" | "error";
@@ -3981,6 +3982,24 @@ export function App() {
                     </div>
                   ) : rightTab === "chapterEntities" ? (
                     <>
+                      <div
+                        style={{
+                          position: "sticky",
+                          top: 0,
+                          zIndex: 5,
+                          background: "var(--bg)",
+                          padding: "2px 0 8px",
+                          borderBottom: "1px solid var(--border)"
+                        }}
+                      >
+                        <input
+                          className="auditRelationsSearch"
+                          value={auditCharactersSearch}
+                          onChange={(e) => setAuditCharactersSearch(e.target.value)}
+                          placeholder="搜索角色：名字 / 身份 / 标签…"
+                          disabled={busy}
+                        />
+                      </div>
                       <div className="auditCharList">
                         {Array.isArray(auditCharactersIndex?.characters) &&
                         (auditCharactersIndex.characters as any[]).length ? (
@@ -3994,10 +4013,22 @@ export function App() {
                                 : []
                             );
                             const visible = all.filter((c) => !hiddenSet.has(c.name));
+                            const q = auditCharactersSearch.trim().toLowerCase();
+                            const match = (c: any) => {
+                              if (!q) return true;
+                              const name = String(c?.name || "").trim();
+                              const role = String(c?.role || "").trim();
+                              const tags = Array.isArray(c?.tags)
+                                ? (c.tags as unknown[]).map((x) => String(x)).filter(Boolean).join(" ")
+                                : "";
+                              const hay = `${name} ${role} ${tags}`.toLowerCase();
+                              return hay.includes(q);
+                            };
+                            const filtered = visible.filter(match);
 
                             return (
                               <>
-                                {visible.map((c) => {
+                                {filtered.map((c) => {
                                   const name = String(c?.name || "").trim() || "未命名";
                                   const id = name;
                                   const open = !!expandedAuditCharIds[id];
