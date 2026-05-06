@@ -648,10 +648,32 @@ code {
   text-overflow: ellipsis;
 }
 
+.chapterNavRightMeta {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
 .chapterNavWordCount {
   flex-shrink: 0;
   font-size: 10px;
   font-weight: 450;
+  color: color-mix(in srgb, var(--muted) 92%, transparent);
+}
+
+.chapterNavAuditStatus {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 550;
+  color: color-mix(in srgb, var(--muted) 92%, transparent);
+}
+
+.chapterNavAuditStatus.ok {
+  color: color-mix(in srgb, #22c55e 86%, var(--text));
+}
+
+.chapterNavAuditStatus.miss {
   color: color-mix(in srgb, var(--muted) 92%, transparent);
 }
 

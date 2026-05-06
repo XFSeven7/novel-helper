@@ -1128,6 +1128,16 @@ export function App() {
   const [timelineCompressStart, setTimelineCompressStart] = useState("");
   const [timelineCompressEnd, setTimelineCompressEnd] = useState("");
   const [timelineShowDoneEvents, setTimelineShowDoneEvents] = useState(false);
+  const auditedChapterFilenameSet = useMemo(() => {
+    const arr = (timelineIndex as any)?.chapters;
+    if (!Array.isArray(arr)) return new Set<string>();
+    const s = new Set<string>();
+    for (const x of arr) {
+      const fn = String(x?.filename || "").trim();
+      if (fn) s.add(fn);
+    }
+    return s;
+  }, [timelineIndex]);
   const [auditCharactersIndex, setAuditCharactersIndex] = useState<any | null>(null);
   const [auditPlacesIndex, setAuditPlacesIndex] = useState<any | null>(null);
   const [auditOrgsIndex, setAuditOrgsIndex] = useState<any | null>(null);
@@ -2426,7 +2436,16 @@ export function App() {
                             disabled={busy}
                           >
                             <span className="chapterNavItemTitle">{c.id}</span>
-                            <span className="chapterNavWordCount">{c.wordCount ?? 0} 字</span>
+                            <span className="chapterNavRightMeta">
+                              <span
+                                className={`chapterNavAuditStatus ${
+                                  auditedChapterFilenameSet.has(c.filename) ? "ok" : "miss"
+                                }`}
+                              >
+                                {auditedChapterFilenameSet.has(c.filename) ? "已分析" : "未分析"}
+                              </span>
+                              <span className="chapterNavWordCount">{c.wordCount ?? 0} 字</span>
+                            </span>
                           </button>
                         ))
                       )}
