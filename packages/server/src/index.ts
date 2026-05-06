@@ -103,6 +103,18 @@ function buildAuditPrompt(input: {
   content: string;
   knownCharacters: string[];
 }) {
+  const RELATION_ENUMS = {
+    narrative: ["Ally", "Mentor", "Antagonist", "Rival", "Support", "Harbinger"],
+    tie: ["KindredSpirit", "LoveInterest", "Kinship", "ArchNemesis", "MutualDisdain", "Admiration", "Indebtedness"],
+    hidden: ["Judas", "Guardian", "Foil"],
+    karma: ["Contractual", "Symbiotic", "InformationGap"]
+  } as const;
+  const RELATION_ENUM_IDS = [
+    ...RELATION_ENUMS.narrative.map((x) => `narrative.${x}`),
+    ...RELATION_ENUMS.tie.map((x) => `tie.${x}`),
+    ...RELATION_ENUMS.hidden.map((x) => `hidden.${x}`),
+    ...RELATION_ENUMS.karma.map((x) => `karma.${x}`)
+  ];
   return [
     "你是小说写作助手，负责“章节审计(Chapter Auditing)”工作流。",
     "请严格输出 JSON（不要解释、不要 markdown、不要代码块），字段需符合下面 schema。",
@@ -113,6 +125,10 @@ function buildAuditPrompt(input: {
     "- 瞬时情绪（愤怒/尴尬/激动等）：不要写入角色画像（可忽略）。",
     "- 对话风格/口癖：采样保留，只提炼 3-7 条关键特征即可。",
     "- 关系钩子：优先结构化到 relations（按对方角色名）；无法结构化时再写到 freeText。",
+    "- 关系类型标签：你需要为 relations 选择受控枚举 types（多选，可空）。不确定就留空。",
+    "",
+    "关系类型受控枚举（relations[].types 只能从这里选，格式为 group.Item）：",
+    RELATION_ENUM_IDS.join("、"),
     "",
     "已知角色名单（仅供参考，可能不全）：",
     input.knownCharacters.length ? input.knownCharacters.join("、") : "（空）",
@@ -139,6 +155,7 @@ function buildAuditPrompt(input: {
             {
               name: "角色名",
               newOrExisting: "new/existing/unknown",
+              tags: ["可枚举标签（可空）"],
               state: { location: "", injuries: "", items: [], moneyChange: 0 },
               socialTags: { profession: "", class: "", titles: ["头衔"], other: ["其他社会标签"] },
               historicalDebts: ["重大决策/承诺/债（列表）"],
@@ -159,6 +176,7 @@ function buildAuditPrompt(input: {
                 relations: [
                   {
                     targetName: "对方角色名",
+                    types: RELATION_ENUM_IDS.slice(0, 2),
                     emotionalPolarity: "喜爱/厌恶/恐惧/亏欠/复杂等",
                     conflictIndex: "资源/信念/目标冲突点",
                     sharedSecrets: ["共享秘密（可空）"]
@@ -665,6 +683,7 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
       const merged = {
         ...prev,
         targetName,
+        types: mergeStrArr(prev.types, (r as any)?.types),
         emotionalPolarity: hasVal((r as any)?.emotionalPolarity) ? normStr((r as any)?.emotionalPolarity) : prev.emotionalPolarity,
         conflictIndex: hasVal((r as any)?.conflictIndex) ? normStr((r as any)?.conflictIndex) : prev.conflictIndex,
         sharedSecrets: mergeStrArr(prev.sharedSecrets, (r as any)?.sharedSecrets)
@@ -696,16 +715,18 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
     const next = raw && typeof raw === "object" ? raw : {};
 
     const merged: any = prev ? { ...prev } : { name, updatedAt: auditedAtIso };
+    const locks = prev?.locks && typeof prev.locks === "object" ? prev.locks : {};
 
     // 基础字段
     if (hasVal(next.role)) merged.role = normStr(next.role);
-    if (Array.isArray(next.tags)) merged.tags = mergeStrArr(prev?.tags, next.tags);
+    if (!locks.tags && Array.isArray(next.tags)) merged.tags = mergeStrArr(prev?.tags, next.tags);
 
     // 状态 / 业力账本
+    // state 不做锁定：始终以“最新状态”增量覆盖非空字段
     if (next.state && typeof next.state === "object") merged.state = mergeObjNonEmpty(prev?.state, next.state);
 
     // 社会身份标签
-    if (next.socialTags && typeof next.socialTags === "object") {
+    if (!locks.socialTags && next.socialTags && typeof next.socialTags === "object") {
       const stPrev = prev?.socialTags && typeof prev.socialTags === "object" ? prev.socialTags : {};
       const stNext = next.socialTags as any;
       merged.socialTags = {
@@ -718,10 +739,11 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
     }
 
     // 历史债（列表）
-    if (Array.isArray(next.historicalDebts)) merged.historicalDebts = mergeStrArr(prev?.historicalDebts, next.historicalDebts);
+    if (!locks.historicalDebts && Array.isArray(next.historicalDebts))
+      merged.historicalDebts = mergeStrArr(prev?.historicalDebts, next.historicalDebts);
 
     // 发生过的事情：从本章事件按 participants 命中自动抽取（增量 + 去重）
-    {
+    if (!locks.occurredNotes) {
       const extracted: string[] = [];
       for (const ev of run?.entities?.events || []) {
         if (!ev || typeof ev !== "object") continue;
@@ -737,7 +759,7 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
     }
 
     // 叙事驱动力
-    if (next.narrativeDrives && typeof next.narrativeDrives === "object") {
+    if (!locks.narrativeDrives && next.narrativeDrives && typeof next.narrativeDrives === "object") {
       const ndPrev = prev?.narrativeDrives && typeof prev.narrativeDrives === "object" ? prev.narrativeDrives : {};
       const ndNext = next.narrativeDrives as any;
       merged.narrativeDrives = {
@@ -751,7 +773,7 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
     }
 
     // 表现力指纹
-    if (next.fingerprints && typeof next.fingerprints === "object") {
+    if (!locks.fingerprints && next.fingerprints && typeof next.fingerprints === "object") {
       const fpPrev = prev?.fingerprints && typeof prev.fingerprints === "object" ? prev.fingerprints : {};
       const fpNext = next.fingerprints as any;
       merged.fingerprints = {
@@ -764,7 +786,7 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
     }
 
     // 关系钩子（结构化 + 兜底自由文本）
-    if (next.relationalHooks && typeof next.relationalHooks === "object") {
+    if (!locks.relationalHooks && next.relationalHooks && typeof next.relationalHooks === "object") {
       const rhPrev = prev?.relationalHooks && typeof prev.relationalHooks === "object" ? prev.relationalHooks : {};
       const rhNext = next.relationalHooks as any;
       merged.relationalHooks = {
@@ -1589,6 +1611,17 @@ app.post("/api/books/:slug/audit/characters/update", async (req, reply) => {
     role: z.string().optional(),
     tags: z.array(z.string()).optional(),
     state: z.any().optional(),
+    locks: z
+      .object({
+        tags: z.boolean().optional(),
+        socialTags: z.boolean().optional(),
+        historicalDebts: z.boolean().optional(),
+        occurredNotes: z.boolean().optional(),
+        narrativeDrives: z.boolean().optional(),
+        fingerprints: z.boolean().optional(),
+        relationalHooks: z.boolean().optional()
+      })
+      .optional(),
     socialTags: z
       .object({
         profession: z.string().optional(),
@@ -1621,6 +1654,7 @@ app.post("/api/books/:slug/audit/characters/update", async (req, reply) => {
           .array(
             z.object({
               targetName: z.string().min(1),
+              types: z.array(z.string()).optional(),
               emotionalPolarity: z.string().optional(),
               conflictIndex: z.string().optional(),
               sharedSecrets: z.array(z.string()).optional()
@@ -1691,6 +1725,7 @@ app.post("/api/books/:slug/audit/characters/update", async (req, reply) => {
       const mergedR = {
         ...prevR,
         targetName,
+        types: mergeStrArr(prevR.types, (r as any)?.types),
         emotionalPolarity: hasVal((r as any)?.emotionalPolarity) ? normStr((r as any)?.emotionalPolarity) : prevR.emotionalPolarity,
         conflictIndex: hasVal((r as any)?.conflictIndex) ? normStr((r as any)?.conflictIndex) : prevR.conflictIndex,
         sharedSecrets: mergeStrArr(prevR.sharedSecrets, (r as any)?.sharedSecrets)
@@ -1714,6 +1749,7 @@ app.post("/api/books/:slug/audit/characters/update", async (req, reply) => {
     role: body.role !== undefined ? body.role : prev.role,
     tags: body.tags !== undefined ? mergeStrArr(prev.tags, body.tags) : prev.tags,
     state: body.state !== undefined ? mergeObjNonEmpty(prev.state, body.state) : prev.state,
+    locks: body.locks !== undefined ? body.locks : prev.locks,
     socialTags:
       body.socialTags !== undefined
         ? {

@@ -184,9 +184,21 @@ export type CharacterFingerprints = {
   mask?: Array<{ context: string; persona: string }>;
 };
 
+export type CharacterProfileLocks = {
+  tags?: boolean;
+  socialTags?: boolean;
+  historicalDebts?: boolean;
+  occurredNotes?: boolean;
+  narrativeDrives?: boolean;
+  fingerprints?: boolean;
+  relationalHooks?: boolean;
+};
+
 export type CharacterRelationalHooks = {
   relations?: Array<{
     targetName: string;
+    /** 受控枚举的关系类型标签（多选） */
+    types?: string[];
     emotionalPolarity?: string;
     conflictIndex?: string;
     sharedSecrets?: string[];
@@ -212,6 +224,8 @@ export type CharacterProfile = {
   fingerprints?: CharacterFingerprints;
   /** 关系钩子：结构化 relations + 兜底自由文本 */
   relationalHooks?: CharacterRelationalHooks;
+  /** 手工锁定：锁定后审计不会自动覆盖对应区块 */
+  locks?: CharacterProfileLocks;
   /** 兼容旧字段：性格分析 */
   personalityAnalysis?: string;
   updatedAt: string;
@@ -245,7 +259,28 @@ function normalizeAuditCharactersIndexV2(parsed: any): AuditCharactersIndexV2 {
         : undefined,
       narrativeDrives: c?.narrativeDrives && typeof c.narrativeDrives === "object" ? c.narrativeDrives : undefined,
       fingerprints: c?.fingerprints && typeof c.fingerprints === "object" ? c.fingerprints : undefined,
-      relationalHooks: c?.relationalHooks && typeof c.relationalHooks === "object" ? c.relationalHooks : undefined,
+      relationalHooks:
+        c?.relationalHooks && typeof c.relationalHooks === "object"
+          ? {
+              relations: Array.isArray(c.relationalHooks?.relations)
+                ? c.relationalHooks.relations
+                    .map((r: any) => ({
+                      targetName: String(r?.targetName || "").trim(),
+                      types: Array.isArray(r?.types)
+                        ? r.types.map((x: any) => String(x)).map((s: string) => s.trim()).filter(Boolean)
+                        : undefined,
+                      emotionalPolarity: typeof r?.emotionalPolarity === "string" ? r.emotionalPolarity : r?.emotionalPolarity,
+                      conflictIndex: typeof r?.conflictIndex === "string" ? r.conflictIndex : r?.conflictIndex,
+                      sharedSecrets: Array.isArray(r?.sharedSecrets)
+                        ? r.sharedSecrets.map((x: any) => String(x)).map((s: string) => s.trim()).filter(Boolean)
+                        : undefined
+                    }))
+                    .filter((r: any) => r.targetName)
+                : undefined,
+              freeText: typeof c.relationalHooks?.freeText === "string" ? c.relationalHooks.freeText : c.relationalHooks?.freeText
+            }
+          : undefined,
+      locks: c?.locks && typeof c.locks === "object" ? c.locks : undefined,
       personalityAnalysis: typeof c?.personalityAnalysis === "string" ? c.personalityAnalysis : c?.personalityAnalysis,
       updatedAt: typeof c?.updatedAt === "string" ? c.updatedAt : updatedAt
     }))

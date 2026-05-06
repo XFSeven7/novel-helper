@@ -177,6 +177,15 @@ export async function updateAuditCharacter(
     role?: string;
     tags?: string[];
     state?: any;
+    locks?: {
+      tags?: boolean;
+      socialTags?: boolean;
+      historicalDebts?: boolean;
+      occurredNotes?: boolean;
+      narrativeDrives?: boolean;
+      fingerprints?: boolean;
+      relationalHooks?: boolean;
+    };
     socialTags?: {
       profession?: string;
       class?: string;
@@ -200,6 +209,7 @@ export async function updateAuditCharacter(
     relationalHooks?: {
       relations?: Array<{
         targetName: string;
+        types?: string[];
         emotionalPolarity?: string;
         conflictIndex?: string;
         sharedSecrets?: string[];

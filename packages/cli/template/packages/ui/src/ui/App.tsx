@@ -713,7 +713,7 @@ function formatMissingChapterList(gaps: number[]): string {
 
 export function App() {
   const [leftTab, setLeftTab] = useState<"chapters" | "global">("chapters");
-  const [globalTab, setGlobalTab] = useState<"auditCharacters" | "places" | "timeline" | "foreshadows">(
+  const [globalTab, setGlobalTab] = useState<"auditCharacters" | "relations" | "places" | "timeline" | "foreshadows">(
     "auditCharacters"
   );
   const [books, setBooks] = useState<BookMeta[]>([]);
@@ -1203,6 +1203,15 @@ export function App() {
   const [editCharMaskLines, setEditCharMaskLines] = useState("");
   const [editCharRelationsLines, setEditCharRelationsLines] = useState("");
   const [editCharRelationsFreeText, setEditCharRelationsFreeText] = useState("");
+  const [editCharLockTags, setEditCharLockTags] = useState(false);
+  const [editCharLockSocialTags, setEditCharLockSocialTags] = useState(false);
+  const [editCharLockHistoricalDebts, setEditCharLockHistoricalDebts] = useState(false);
+  const [editCharLockOccurredNotes, setEditCharLockOccurredNotes] = useState(false);
+  const [editCharLockNarrativeDrives, setEditCharLockNarrativeDrives] = useState(false);
+  const [editCharLockFingerprints, setEditCharLockFingerprints] = useState(false);
+  const [editCharLockRelationalHooks, setEditCharLockRelationalHooks] = useState(false);
+  const [relationsSearch, setRelationsSearch] = useState("");
+  const [relationsOnlyTyped, setRelationsOnlyTyped] = useState(false);
   const [auditBusy, setAuditBusy] = useState(false);
   const okModelConfigs = useMemo(() => modelConfigs.filter((c) => c.lastTestOk), [modelConfigs]);
   const [auditStreamOpen, setAuditStreamOpen] = useState(false);
@@ -1717,17 +1726,31 @@ export function App() {
     );
     const rh = c?.relationalHooks && typeof c.relationalHooks === "object" ? c.relationalHooks : {};
     setEditCharRelationsFreeText(String((rh as any)?.freeText || "").trim());
+    const locks = c?.locks && typeof c.locks === "object" ? c.locks : {};
+    setEditCharLockTags(Boolean((locks as any).tags));
+    setEditCharLockSocialTags(Boolean((locks as any).socialTags));
+    setEditCharLockHistoricalDebts(Boolean((locks as any).historicalDebts));
+    setEditCharLockOccurredNotes(Boolean((locks as any).occurredNotes));
+    setEditCharLockNarrativeDrives(Boolean((locks as any).narrativeDrives));
+    setEditCharLockFingerprints(Boolean((locks as any).fingerprints));
+    setEditCharLockRelationalHooks(Boolean((locks as any).relationalHooks));
     setEditCharRelationsLines(
       Array.isArray((rh as any)?.relations)
         ? (rh as any).relations
             .map((r: any) => ({
               targetName: String(r?.targetName || "").trim(),
+              types: Array.isArray(r?.types) ? r.types.map((x: any) => String(x).trim()).filter(Boolean) : [],
               emotionalPolarity: String(r?.emotionalPolarity || "").trim(),
               conflictIndex: String(r?.conflictIndex || "").trim(),
               sharedSecrets: Array.isArray(r?.sharedSecrets) ? r.sharedSecrets.map((x: any) => String(x).trim()).filter(Boolean) : []
             }))
             .filter((r: any) => r.targetName)
-            .map((r: any) => `${r.targetName}|${r.emotionalPolarity || ""}|${r.conflictIndex || ""}|${r.sharedSecrets.join(",")}`.trim())
+            .map(
+              (r: any) =>
+                `${r.targetName}|${r.types.length ? `types=${r.types.join(",")}` : ""}|${r.emotionalPolarity || ""}|${
+                  r.conflictIndex || ""
+                }|${r.sharedSecrets.join(",")}`.trim()
+            )
             .join("\n")
         : ""
     );
@@ -1790,19 +1813,35 @@ export function App() {
       mask: parseMask()
     };
     const parseRelations = () => {
-      const out: Array<{ targetName: string; emotionalPolarity?: string; conflictIndex?: string; sharedSecrets?: string[] }> = [];
+      const out: Array<{
+        targetName: string;
+        types?: string[];
+        emotionalPolarity?: string;
+        conflictIndex?: string;
+        sharedSecrets?: string[];
+      }> = [];
       for (const ln of lines(editCharRelationsLines)) {
         const parts = ln.split("|");
         const targetName = String(parts[0] || "").trim();
         if (!targetName) continue;
-        const emotionalPolarity = String(parts[1] || "").trim();
-        const conflictIndex = String(parts[2] || "").trim();
-        const secretsRaw = String(parts[3] || "").trim();
+        const maybeTypes = String(parts[1] || "").trim();
+        const types =
+          maybeTypes.startsWith("types=") || maybeTypes.startsWith("type=")
+            ? maybeTypes
+                .replace(/^types?=/, "")
+                .split(/[,，、]/)
+                .map((s) => s.trim())
+                .filter(Boolean)
+            : [];
+        const emotionalPolarity = String(parts[2] || "").trim();
+        const conflictIndex = String(parts[3] || "").trim();
+        const secretsRaw = String(parts[4] || "").trim();
         const sharedSecrets = secretsRaw
           ? secretsRaw.split(/[,，、]/).map((s) => s.trim()).filter(Boolean)
           : [];
         out.push({
           targetName,
+          types: types.length ? types : undefined,
           emotionalPolarity: emotionalPolarity || undefined,
           conflictIndex: conflictIndex || undefined,
           sharedSecrets: sharedSecrets.length ? sharedSecrets : undefined
@@ -1814,12 +1853,22 @@ export function App() {
       relations: parseRelations(),
       freeText: editCharRelationsFreeText.trim() || undefined
     };
+    const locks = {
+      tags: editCharLockTags || undefined,
+      socialTags: editCharLockSocialTags || undefined,
+      historicalDebts: editCharLockHistoricalDebts || undefined,
+      occurredNotes: editCharLockOccurredNotes || undefined,
+      narrativeDrives: editCharLockNarrativeDrives || undefined,
+      fingerprints: editCharLockFingerprints || undefined,
+      relationalHooks: editCharLockRelationalHooks || undefined
+    };
     try {
       const { index } = await updateAuditCharacter(activeBook, {
         name,
         role: editCharRole.trim(),
         tags,
         state,
+        locks,
         socialTags,
         historicalDebts,
         occurredNotes,
@@ -3986,6 +4035,119 @@ export function App() {
                           <div className="muted auditPanelEmpty">暂无角色库。完成一次分析后会自动沉淀到这里。</div>
                         )}
                       </div>
+                      <div className="auditPanel" style={{ marginTop: "10px" }}>
+                        <div className="auditPanelBody">
+                          <div className="auditPanelTitle">关系图（列表）</div>
+                          <div className="row">
+                            <input
+                              value={relationsSearch}
+                              onChange={(e) => setRelationsSearch(e.target.value)}
+                              placeholder="搜索关系：角色名 / types / 情感 / 冲突…"
+                              disabled={busy}
+                            />
+                            <label className="toggle">
+                              <input
+                                type="checkbox"
+                                checked={relationsOnlyTyped}
+                                onChange={(e) => setRelationsOnlyTyped(e.target.checked)}
+                                disabled={busy}
+                              />
+                              仅显示有 types
+                            </label>
+                          </div>
+                          <div className="tree" style={{ marginTop: "8px" }}>
+                            {(() => {
+                              const typeLabels: Record<string, string> = {
+                                "narrative.Ally": "盟友",
+                                "narrative.Mentor": "导师",
+                                "narrative.Antagonist": "反派",
+                                "narrative.Rival": "竞争对手",
+                                "narrative.Support": "后勤/NPC",
+                                "narrative.Harbinger": "先驱",
+                                "tie.KindredSpirit": "至交",
+                                "tie.LoveInterest": "恋人",
+                                "tie.Kinship": "血亲",
+                                "tie.ArchNemesis": "宿敌",
+                                "tie.MutualDisdain": "嫌恶",
+                                "tie.Admiration": "崇拜",
+                                "tie.Indebtedness": "亏欠",
+                                "hidden.Judas": "背叛者",
+                                "hidden.Guardian": "保护者",
+                                "hidden.Foil": "镜像/对照组",
+                                "karma.Contractual": "契约关系",
+                                "karma.Symbiotic": "共生关系",
+                                "karma.InformationGap": "信息差"
+                              };
+                              const chars: any[] = Array.isArray(auditCharactersIndex?.characters)
+                                ? (auditCharactersIndex.characters as any[])
+                                    .map((c) => ({ ...c, name: String(c?.name || "").trim() }))
+                                    .filter((c) => c.name)
+                                : [];
+                              const edges: any[] = [];
+                              for (const c of chars) {
+                                const src = String(c?.name || "").trim();
+                                const rels = Array.isArray(c?.relationalHooks?.relations) ? c.relationalHooks.relations : [];
+                                for (const r of rels) {
+                                  const targetName = String(r?.targetName || "").trim();
+                                  if (!targetName) continue;
+                                  const types = Array.isArray(r?.types) ? r.types.map((x: any) => String(x).trim()).filter(Boolean) : [];
+                                  edges.push({
+                                    source: src,
+                                    target: targetName,
+                                    types,
+                                    emotionalPolarity: String(r?.emotionalPolarity || "").trim(),
+                                    conflictIndex: String(r?.conflictIndex || "").trim(),
+                                    sharedSecrets: Array.isArray(r?.sharedSecrets)
+                                      ? r.sharedSecrets.map((x: any) => String(x).trim()).filter(Boolean)
+                                      : []
+                                  });
+                                }
+                              }
+                              const q = relationsSearch.trim().toLowerCase();
+                              const filtered = edges.filter((e) => {
+                                if (relationsOnlyTyped && !e.types.length) return false;
+                                if (!q) return true;
+                                const typesZh = e.types.map((t: string) => typeLabels[t] || t).join(",");
+                                const hay = `${e.source} ${e.target} ${typesZh} ${e.emotionalPolarity} ${e.conflictIndex} ${e.sharedSecrets.join(" ")}`
+                                  .toLowerCase()
+                                  .trim();
+                                return hay.includes(q);
+                              });
+                              if (!filtered.length) return <div className="muted auditPanelEmpty">暂无关系数据（或被筛选条件隐藏）。</div>;
+                              return filtered.map((e, idx) => {
+                                const typesZh = e.types.map((t: string) => typeLabels[t] || t).filter(Boolean);
+                                return (
+                                  <div key={`${e.source}__${e.target}__${idx}`} className="treeChild">
+                                    <div className="row">
+                                      <div className="muted">{e.source}</div>
+                                      <div className="muted">→</div>
+                                      <div>{e.target}</div>
+                                      <button
+                                        type="button"
+                                        className="btnMini"
+                                        disabled={busy}
+                                        onClick={() => {
+                                          const src = chars.find((c) => String(c?.name || "").trim() === e.source);
+                                          if (src) openEditCharacter(src);
+                                        }}
+                                        title="编辑源角色（关系从源角色上维护）"
+                                      >
+                                        编辑
+                                      </button>
+                                    </div>
+                                    {typesZh.length ? <div className="muted">types：{typesZh.join("、")}</div> : null}
+                                    {e.emotionalPolarity ? <div className="muted">情感：{e.emotionalPolarity}</div> : null}
+                                    {e.conflictIndex ? <div className="muted">冲突：{e.conflictIndex}</div> : null}
+                                    {Array.isArray(e.sharedSecrets) && e.sharedSecrets.length ? (
+                                      <div className="muted">秘密：{e.sharedSecrets.join("、")}</div>
+                                    ) : null}
+                                  </div>
+                                );
+                              });
+                            })()}
+                          </div>
+                        </div>
+                      </div>
                     </>
                   ) : rightTab === "__removed__" ? (
                     <div className="placePanel">
@@ -5196,6 +5358,15 @@ export function App() {
               <label className="modalLabel" htmlFor="modal-edit-char-tags">
                 标签<span className="modalOptional">（逗号分隔）</span>
               </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={editCharLockTags}
+                  onChange={(e) => setEditCharLockTags(e.target.checked)}
+                  disabled={busy}
+                />
+                锁定（后续审计不自动改）
+              </label>
               <input
                 id="modal-edit-char-tags"
                 className="modalInput"
@@ -5222,6 +5393,15 @@ export function App() {
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-social-prof">
                 社会身份：职业
+              </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={editCharLockSocialTags}
+                  onChange={(e) => setEditCharLockSocialTags(e.target.checked)}
+                  disabled={busy}
+                />
+                锁定（后续审计不自动改）
               </label>
               <input
                 id="modal-edit-char-social-prof"
@@ -5278,6 +5458,15 @@ export function App() {
               <label className="modalLabel" htmlFor="modal-edit-char-debts">
                 历史债<span className="modalOptional">（一行一个）</span>
               </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={editCharLockHistoricalDebts}
+                  onChange={(e) => setEditCharLockHistoricalDebts(e.target.checked)}
+                  disabled={busy}
+                />
+                锁定（后续审计不自动改）
+              </label>
               <textarea
                 id="modal-edit-char-debts"
                 className="modalTextarea"
@@ -5293,6 +5482,15 @@ export function App() {
               <label className="modalLabel" htmlFor="modal-edit-char-occurred">
                 发生过的事情<span className="modalOptional">（一行一个）</span>
               </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={editCharLockOccurredNotes}
+                  onChange={(e) => setEditCharLockOccurredNotes(e.target.checked)}
+                  disabled={busy}
+                />
+                锁定（后续审计不自动改）
+              </label>
               <textarea
                 id="modal-edit-char-occurred"
                 className="modalTextarea"
@@ -5307,6 +5505,15 @@ export function App() {
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-want">
                 Want<span className="modalOptional">（显性目标）</span>
+              </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={editCharLockNarrativeDrives}
+                  onChange={(e) => setEditCharLockNarrativeDrives(e.target.checked)}
+                  disabled={busy}
+                />
+                锁定（后续审计不自动改）
               </label>
               <input
                 id="modal-edit-char-want"
@@ -5376,6 +5583,15 @@ export function App() {
               <label className="modalLabel" htmlFor="modal-edit-char-ling">
                 语气/句式特征<span className="modalOptional">（一行一个，3-7条即可）</span>
               </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={editCharLockFingerprints}
+                  onChange={(e) => setEditCharLockFingerprints(e.target.checked)}
+                  disabled={busy}
+                />
+                锁定（后续审计不自动改）
+              </label>
               <textarea
                 id="modal-edit-char-ling"
                 className="modalTextarea"
@@ -5431,14 +5647,24 @@ export function App() {
 
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-relations">
-                关系钩子：结构化<span className="modalOptional">（一行一个：对方|情感|冲突|秘密1,秘密2）</span>
+                关系钩子：结构化
+                <span className="modalOptional">（一行一个：对方|types=a,b|情感|冲突|秘密1,秘密2）</span>
+              </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={editCharLockRelationalHooks}
+                  onChange={(e) => setEditCharLockRelationalHooks(e.target.checked)}
+                  disabled={busy}
+                />
+                锁定（后续审计不自动改）
               </label>
               <textarea
                 id="modal-edit-char-relations"
                 className="modalTextarea"
                 value={editCharRelationsLines}
                 onChange={(e) => setEditCharRelationsLines(e.target.value)}
-                placeholder="如：张三|亏欠|债务纠葛|暗号,家族秘闻"
+                placeholder="如：张三|types=narrative.Ally,karma.Contractual|亏欠|债务纠葛|暗号,家族秘闻"
                 disabled={busy}
                 rows={5}
               />
