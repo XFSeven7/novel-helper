@@ -357,8 +357,8 @@ code {
 
 .navGlobalScroll {
   min-height: 0;
-  overflow: auto;
-  padding-right: 4px;
+  overflow: visible;
+  padding-right: 0;
 }
 
 .chapterEntitiesPanel {
@@ -600,7 +600,11 @@ code {
 .chapterNavScroll {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
+  overflow-y: visible;
+}
+
+.relationsTree {
+  overflow: visible;
 }
 
 .chapterNavList {
@@ -3036,7 +3040,7 @@ input:focus {
 
 button {
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 0 !important;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.08);
   color: var(--text);

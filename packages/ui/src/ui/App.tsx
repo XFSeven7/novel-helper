@@ -2784,12 +2784,12 @@ export function App() {
                     ) : null}
                   </div>
 
-                  <div className="navLeftTabsBar" role="tablist" aria-label="左侧页签">
-                    <div className="navLeftTabsStrip">
+                  <div className="browserTabsBar" role="tablist" aria-label="左侧页签">
+                    <div className="browserTabsStrip">
                       <button
                         type="button"
                         role="tab"
-                        className={`navLeftTab ${leftTab === "chapters" ? "active" : ""}`}
+                        className={`browserTab ${leftTab === "chapters" ? "active" : ""}`}
                         aria-selected={leftTab === "chapters"}
                         onClick={() => setLeftTab("chapters")}
                         disabled={busy}
@@ -2799,7 +2799,7 @@ export function App() {
                       <button
                         type="button"
                         role="tab"
-                        className={`navLeftTab ${leftTab === "global" ? "active" : ""}`}
+                        className={`browserTab ${leftTab === "global" ? "active" : ""}`}
                         aria-selected={leftTab === "global"}
                         onClick={() => setLeftTab("global")}
                         disabled={busy}
@@ -2884,12 +2884,12 @@ export function App() {
                     </>
                   ) : (
                     <>
-                      <div className="navGlobalTabsBar" role="tablist" aria-label="全局信息分类">
-                        <div className="navGlobalTabsStrip">
+                      <div className="browserTabsBar" role="tablist" aria-label="全局信息分类">
+                        <div className="browserTabsStrip">
                           <button
                             type="button"
                             role="tab"
-                            className={`navGlobalTab ${globalTab === "auditCharacters" ? "active" : ""}`}
+                            className={`browserTab ${globalTab === "auditCharacters" ? "active" : ""}`}
                             aria-selected={globalTab === "auditCharacters"}
                             onClick={() => setGlobalTab("auditCharacters")}
                             disabled={busy}
@@ -2899,7 +2899,7 @@ export function App() {
                           <button
                             type="button"
                             role="tab"
-                            className={`navGlobalTab ${globalTab === "relations" ? "active" : ""}`}
+                            className={`browserTab ${globalTab === "relations" ? "active" : ""}`}
                             aria-selected={globalTab === "relations"}
                             onClick={() => setGlobalTab("relations")}
                             disabled={busy}
@@ -2909,7 +2909,7 @@ export function App() {
                           <button
                             type="button"
                             role="tab"
-                            className={`navGlobalTab ${globalTab === "places" ? "active" : ""}`}
+                            className={`browserTab ${globalTab === "places" ? "active" : ""}`}
                             aria-selected={globalTab === "places"}
                             onClick={() => setGlobalTab("places")}
                             disabled={busy}
@@ -2919,7 +2919,7 @@ export function App() {
                           <button
                             type="button"
                             role="tab"
-                            className={`navGlobalTab ${globalTab === "timeline" ? "active" : ""}`}
+                            className={`browserTab ${globalTab === "timeline" ? "active" : ""}`}
                             aria-selected={globalTab === "timeline"}
                             onClick={() => setGlobalTab("timeline")}
                             disabled={busy}
@@ -2929,7 +2929,7 @@ export function App() {
                           <button
                             type="button"
                             role="tab"
-                            className={`navGlobalTab ${globalTab === "foreshadows" ? "active" : ""}`}
+                            className={`browserTab ${globalTab === "foreshadows" ? "active" : ""}`}
                             aria-selected={globalTab === "foreshadows"}
                             onClick={() => setGlobalTab("foreshadows")}
                             disabled={busy}
@@ -3339,7 +3339,7 @@ export function App() {
                                 仅显示有 types
                               </label>
                             </div>
-                            <div className="tree">
+                            <div className="tree relationsTree">
                               {(() => {
                                 const typeLabels: Record<string, string> = {
                                   "narrative.Ally": "盟友",
