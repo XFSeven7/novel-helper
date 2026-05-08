@@ -366,6 +366,41 @@ export async function cleanupAuditProgressDone(slug: string) {
   });
 }
 
+export type WritingPack = {
+  version: 1;
+  updatedAt: string;
+  source: {
+    windowChapters: number;
+    windowCompressedRanges: number;
+    pickedProgress: number;
+    pickedForeshadows: number;
+  };
+  chapterTarget: { filename: string; title?: string; chapterNo?: number };
+  summary5: string[];
+  lists: {
+    progress: Array<{ id: string; title: string; basis?: string }>;
+    foreshadows: Array<{ id: string; title: string; basis?: string }>;
+    risks: Array<{ issue: string; severity?: string; basis?: string }>;
+  };
+  disclaimer: string;
+};
+
+export async function getWritingPack(slug: string, chapterFilename: string) {
+  return await http<{ pack: WritingPack | null }>(
+    `/api/books/${encodeURIComponent(slug)}/writing-pack?chapter=${encodeURIComponent(chapterFilename)}`
+  );
+}
+
+export async function generateWritingPack(
+  slug: string,
+  input: { chapterFilename: string; modelConfigId: string | null }
+) {
+  return await http<{ ok: true; pack: WritingPack }>(`/api/books/${encodeURIComponent(slug)}/writing-pack/generate`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
 export async function createAuditForeshadow(
   slug: string,
   input: { title: string; status?: ForeshadowStatus; lastProgress?: string; note?: string; chapters?: number[] }

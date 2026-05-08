@@ -173,7 +173,27 @@ export type ProgressIndex = {
   version: 1;
   updatedAt: string;
   lastSourceChapter?: { filename: string; chapterNo?: number; title?: string };
+  summary?: string;
   items: ProgressItem[];
+};
+
+export type WritingPack = {
+  version: 1;
+  updatedAt: string;
+  source: {
+    windowChapters: number;
+    windowCompressedRanges: number;
+    pickedProgress: number;
+    pickedForeshadows: number;
+  };
+  chapterTarget: { filename: string; title?: string; chapterNo?: number };
+  summary5: string[];
+  lists: {
+    progress: Array<{ id: string; title: string; basis?: string }>;
+    foreshadows: Array<{ id: string; title: string; basis?: string }>;
+    risks: Array<{ issue: string; severity?: string; basis?: string }>;
+  };
+  disclaimer: string;
 };
 
 export type CharacterSocialTags = {
@@ -309,6 +329,10 @@ async function exists(p: string) {
 
 function auditDir(dataDir: string, novelSlug: string) {
   return path.join(dataDir, novelSlug, "meta", "audit");
+}
+
+function writingPacksDir(dataDir: string, novelSlug: string) {
+  return path.join(auditDir(dataDir, novelSlug), "writingPacks");
 }
 
 function timelineIndexPath(dataDir: string, novelSlug: string) {
@@ -559,12 +583,13 @@ export async function writeAuditForeshadowsIndex(dataDir: string, novelSlug: str
 
 export async function readAuditProgressIndex(dataDir: string, novelSlug: string): Promise<ProgressIndex> {
   const p = path.join(auditDir(dataDir, novelSlug), "progressIndex.json");
-  if (!(await exists(p))) return { version: 1, updatedAt: "", lastSourceChapter: undefined, items: [] };
+  if (!(await exists(p))) return { version: 1, updatedAt: "", lastSourceChapter: undefined, summary: "", items: [] };
   const parsed = JSON.parse(await fs.readFile(p, "utf8"));
   const idx: ProgressIndex = {
     version: 1,
     updatedAt: typeof parsed?.updatedAt === "string" ? parsed.updatedAt : "",
     lastSourceChapter: parsed?.lastSourceChapter && typeof parsed.lastSourceChapter === "object" ? parsed.lastSourceChapter : undefined,
+    summary: typeof parsed?.summary === "string" ? parsed.summary : "",
     items: Array.isArray(parsed?.items) ? parsed.items : []
   };
   return idx;
@@ -575,6 +600,58 @@ export async function writeAuditProgressIndex(dataDir: string, novelSlug: string
   await ensureDir(dir);
   const p = path.join(dir, "progressIndex.json");
   await fs.writeFile(p, JSON.stringify(idx, null, 2), "utf8");
+}
+
+export async function readWritingPack(dataDir: string, novelSlug: string, chapterId: string): Promise<WritingPack | null> {
+  const safeId = String(chapterId || "").trim();
+  if (!safeId) return null;
+  const dir = writingPacksDir(dataDir, novelSlug);
+  const p = path.join(dir, `${safeId}.json`);
+  if (!(await exists(p))) return null;
+  const parsed = JSON.parse(await fs.readFile(p, "utf8"));
+  if (!parsed || typeof parsed !== "object") return null;
+  const v = Number((parsed as any).version);
+  const updatedAt = typeof (parsed as any).updatedAt === "string" ? (parsed as any).updatedAt : "";
+  const summary5 = Array.isArray((parsed as any).summary5) ? (parsed as any).summary5.map((x: any) => String(x)).filter(Boolean) : [];
+  const lists = (parsed as any).lists && typeof (parsed as any).lists === "object" ? (parsed as any).lists : {};
+  const pack: WritingPack = {
+    version: v === 1 ? 1 : 1,
+    updatedAt,
+    source: (parsed as any).source && typeof (parsed as any).source === "object"
+      ? {
+          windowChapters: Number((parsed as any).source?.windowChapters) || 0,
+          windowCompressedRanges: Number((parsed as any).source?.windowCompressedRanges) || 0,
+          pickedProgress: Number((parsed as any).source?.pickedProgress) || 0,
+          pickedForeshadows: Number((parsed as any).source?.pickedForeshadows) || 0
+        }
+      : { windowChapters: 0, windowCompressedRanges: 0, pickedProgress: 0, pickedForeshadows: 0 },
+    chapterTarget:
+      (parsed as any).chapterTarget && typeof (parsed as any).chapterTarget === "object"
+        ? {
+            filename: String((parsed as any).chapterTarget?.filename || "").trim(),
+            title: typeof (parsed as any).chapterTarget?.title === "string" ? (parsed as any).chapterTarget.title : undefined,
+            chapterNo: Number.isFinite((parsed as any).chapterTarget?.chapterNo) ? (parsed as any).chapterTarget.chapterNo : undefined
+          }
+        : { filename: "" },
+    summary5,
+    lists: {
+      progress: Array.isArray(lists?.progress) ? lists.progress : [],
+      foreshadows: Array.isArray(lists?.foreshadows) ? lists.foreshadows : [],
+      risks: Array.isArray(lists?.risks) ? lists.risks : []
+    },
+    disclaimer: typeof (parsed as any).disclaimer === "string" ? (parsed as any).disclaimer : ""
+  };
+  if (!pack.chapterTarget.filename) return null;
+  return pack;
+}
+
+export async function writeWritingPack(dataDir: string, novelSlug: string, chapterId: string, pack: WritingPack) {
+  const safeId = String(chapterId || "").trim();
+  if (!safeId) throw new Error("无效的 chapterId");
+  const dir = writingPacksDir(dataDir, novelSlug);
+  await ensureDir(dir);
+  const p = path.join(dir, `${safeId}.json`);
+  await fs.writeFile(p, JSON.stringify(pack, null, 2), "utf8");
 }
 
 export async function deleteBook(dataDir: string, slug: string): Promise<void> {

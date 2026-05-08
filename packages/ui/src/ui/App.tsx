@@ -63,11 +63,14 @@ import {
   updateAuditForeshadow,
   hideAuditForeshadow,
   getAuditProgress,
+  getWritingPack,
+  generateWritingPack,
   getTimelineIndex,
   compressTimelineRange,
   deleteTimelineRange,
   markTimelineEvent,
-  TimelineIndex
+  TimelineIndex,
+  WritingPack
 } from "./api";
 
 type SelectedChapter = { bookSlug: string; filename: string } | null;
@@ -708,7 +711,9 @@ export function App() {
   const [cardContent, setCardContent] = useState("");
   const [storyFiles, setStoryFiles] = useState<StoryFile[]>([]);
   const [charFiles, setCharFiles] = useState<StoryFile[]>([]);
-  const [rightTab, setRightTab] = useState<"chapterAnalysis" | "chapterSummary" | "chapterEntities">("chapterAnalysis");
+  const [rightTab, setRightTab] = useState<"chapterAnalysis" | "chapterSummary" | "chapterEntities" | "writingPack">(
+    "chapterAnalysis"
+  );
   const [expandedAuditCharIds, setExpandedAuditCharIds] = useState<Record<string, boolean>>({});
   const [status, setStatus] = useState<string>("");
   const [busy, setBusy] = useState(false);
@@ -1068,6 +1073,10 @@ export function App() {
   const [auditOrgsIndex, setAuditOrgsIndex] = useState<any | null>(null);
   const [auditForeshadowsIndex, setAuditForeshadowsIndex] = useState<any | null>(null);
   const [auditProgressIndex, setAuditProgressIndex] = useState<any | null>(null);
+  const [writingPack, setWritingPack] = useState<WritingPack | null>(null);
+  const [writingPackBusy, setWritingPackBusy] = useState(false);
+  const [writingPackErr, setWritingPackErr] = useState("");
+  const [writingPackListsOpen, setWritingPackListsOpen] = useState(false);
 
   const [foreshadowCreateOpen, setForeshadowCreateOpen] = useState(false);
   const [foreshadowCreateTitle, setForeshadowCreateTitle] = useState("");
@@ -1563,7 +1572,12 @@ export function App() {
       setAuditLedger(null);
       setAuditCharactersIndex(null);
       setTimelineIndex(null);
+      setWritingPack(null);
+      setWritingPackErr("");
+      setWritingPackListsOpen(false);
       void loadAuditArtifacts(bookSlug, chapter.filename);
+      setRightTab("writingPack");
+      void doGenerateWritingPack(bookSlug, chapter.filename);
       setStatus("已新建章节，并写入本地文件。");
     } catch (e: any) {
       setStatus(e?.message || String(e));
@@ -1719,12 +1733,15 @@ export function App() {
 
   async function loadAuditArtifacts(slug: string, chapterFilename: string) {
     try {
-      const [{ run }, { text }] = await Promise.all([
+      const [{ run }, { text }, { pack }] = await Promise.all([
         getAuditLatest(slug, chapterFilename).catch(() => ({ run: null })),
-        getAuditAnalysis(slug, chapterFilename).catch(() => ({ text: "" }))
+        getAuditAnalysis(slug, chapterFilename).catch(() => ({ text: "" })),
+        getWritingPack(slug, chapterFilename).catch(() => ({ pack: null }))
       ]);
 
       setAuditRun(run);
+      setWritingPack(pack);
+      setWritingPackErr("");
 
       const persisted = String(text || "");
       const running = auditRunningChapterRef.current;
@@ -1753,6 +1770,21 @@ export function App() {
       }
     } catch {
       // ignore
+    }
+  }
+
+  async function doGenerateWritingPack(slug: string, chapterFilename: string) {
+    if (!slug || !chapterFilename) return;
+    setWritingPackBusy(true);
+    setWritingPackErr("");
+    try {
+      const { pack } = await generateWritingPack(slug, { chapterFilename, modelConfigId: activeModelId ?? null });
+      setWritingPack(pack);
+      setWritingPackListsOpen(false);
+    } catch (e: any) {
+      setWritingPackErr(e?.message || String(e));
+    } finally {
+      setWritingPackBusy(false);
     }
   }
 
@@ -4966,6 +4998,16 @@ export function App() {
                     <button
                       type="button"
                       role="tab"
+                      className={`browserTab ${rightTab === "writingPack" ? "active" : ""}`}
+                      aria-selected={rightTab === "writingPack"}
+                      onClick={() => setRightTab("writingPack")}
+                      disabled={busy}
+                    >
+                      写作包
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
                       className={`browserTab ${rightTab === "chapterAnalysis" ? "active" : ""}`}
                       aria-selected={rightTab === "chapterAnalysis"}
                       onClick={() => setRightTab("chapterAnalysis")}
@@ -4997,7 +5039,137 @@ export function App() {
                 </div>
 
                 <div className="organizeTabScroll">
-                  {rightTab === "chapterAnalysis" ? (
+                  {rightTab === "writingPack" ? (
+                    <div className="auditPanel writingPackPanel">
+                      <div className="auditPanelBody">
+                        <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                          <div className="auditPanelTitle">短写作包（参考）</div>
+                          {activeBook && selectedChapter ? (
+                            <button
+                              type="button"
+                              className="btnSquare"
+                              disabled={busy || writingPackBusy}
+                              onClick={() => void doGenerateWritingPack(activeBook, selectedChapter.filename)}
+                              title="重新生成并覆盖保存的写作包"
+                            >
+                              {writingPackBusy ? "生成中…" : "重生成"}
+                            </button>
+                          ) : null}
+                        </div>
+
+                        {!selectedChapter ? (
+                          <div className="muted auditPanelEmpty">请选择章节。</div>
+                        ) : writingPackErr ? (
+                          <div className="auditErrorBox">
+                            <div className="auditErrorTitle">写作包生成失败</div>
+                            <div className="auditErrorMsg">{writingPackErr}</div>
+                          </div>
+                        ) : writingPack && Array.isArray(writingPack.summary5) ? (
+                          <>
+                            <div className="writingPackSummary">
+                              {writingPack.summary5.slice(0, 5).map((s, i) => (
+                                <div key={i} className="writingPackLine">
+                                  {String(s || "").trim()}
+                                </div>
+                              ))}
+                            </div>
+
+                            <div className="writingPackDisclaimer muted">
+                              {String(writingPack.disclaimer || "").trim() ||
+                                "写作包仅供参考：你完全可以不采纳，按自己的创作思路推进。"}
+                            </div>
+
+                            <div className="row" style={{ gap: 8, marginTop: 10, alignItems: "center" }}>
+                              <button
+                                type="button"
+                                className="btnSquare"
+                                disabled={busy}
+                                onClick={() => {
+                                  try {
+                                    const text = writingPack.summary5
+                                      .slice(0, 5)
+                                      .map((x) => String(x || "").trim())
+                                      .filter(Boolean)
+                                      .join("\n");
+                                    void navigator.clipboard.writeText(text);
+                                    setStatus("已复制写作包总述到剪贴板。");
+                                  } catch {
+                                    // ignore
+                                  }
+                                }}
+                              >
+                                复制总述
+                              </button>
+                              <button
+                                type="button"
+                                className="btnSquare"
+                                disabled={busy}
+                                onClick={() => setWritingPackListsOpen((v) => !v)}
+                              >
+                                {writingPackListsOpen ? "收起清单" : "展开清单"}
+                              </button>
+                            </div>
+
+                            {writingPackListsOpen ? (
+                              <div className="writingPackLists">
+                                <div className="writingPackListBlock">
+                                  <div className="writingPackListTitle">可能相关的进行中</div>
+                                  {(writingPack.lists?.progress || []).length ? (
+                                    <div className="writingPackList">
+                                      {(writingPack.lists.progress || []).slice(0, 4).map((it) => (
+                                        <div key={it.id} className="writingPackItem">
+                                          <div className="writingPackItemMain">{it.title}</div>
+                                          {it.basis ? <div className="muted writingPackItemBasis">{it.basis}</div> : null}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="muted">（暂无）</div>
+                                  )}
+                                </div>
+
+                                <div className="writingPackListBlock">
+                                  <div className="writingPackListTitle">可能触及的伏笔</div>
+                                  {(writingPack.lists?.foreshadows || []).length ? (
+                                    <div className="writingPackList">
+                                      {(writingPack.lists.foreshadows || []).slice(0, 2).map((it) => (
+                                        <div key={it.id} className="writingPackItem">
+                                          <div className="writingPackItemMain">{it.title}</div>
+                                          {it.basis ? <div className="muted writingPackItemBasis">{it.basis}</div> : null}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="muted">（暂无）</div>
+                                  )}
+                                </div>
+
+                                <div className="writingPackListBlock">
+                                  <div className="writingPackListTitle">风险预警</div>
+                                  {(writingPack.lists?.risks || []).length ? (
+                                    <div className="writingPackList">
+                                      {(writingPack.lists.risks || []).slice(0, 3).map((it, idx) => (
+                                        <div key={idx} className="writingPackItem">
+                                          <div className="writingPackItemMain">{it.issue}</div>
+                                          {it.basis ? <div className="muted writingPackItemBasis">{it.basis}</div> : null}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  ) : (
+                                    <div className="muted">（暂无）</div>
+                                  )}
+                                </div>
+                              </div>
+                            ) : null}
+                          </>
+                        ) : (
+                          <div className="muted auditPanelEmpty">
+                            暂无写作包。你可以点击右上角“重生成”来生成一份（会保存到本地）。{writingPackBusy ? "（生成中…）" : ""}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : rightTab === "chapterAnalysis" ? (
                     <div className="auditPanel">
                       <div className="auditPanelBody">
                         <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>

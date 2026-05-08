@@ -2817,6 +2817,75 @@ code {
   word-break: break-word;
 }
 
+.writingPackPanel .auditPanelBody {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.writingPackSummary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.writingPackLine {
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.writingPackDisclaimer {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.writingPackLists {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.writingPackListBlock {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.writingPackListTitle {
+  font-size: 12px;
+  font-weight: 650;
+  margin-bottom: 6px;
+}
+
+.writingPackList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.writingPackItem {
+  padding: 6px 0;
+  border-top: 1px dashed var(--border);
+}
+
+.writingPackItem:first-child {
+  border-top: none;
+}
+
+.writingPackItemMain {
+  line-height: 1.45;
+}
+
+.writingPackItemBasis {
+  font-size: 12px;
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
 .auditCharCard {
   min-width: 0;
   border-radius: 0;

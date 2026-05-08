@@ -40,11 +40,14 @@ import {
   writeAuditForeshadowsIndex,
   readAuditProgressIndex,
   writeAuditProgressIndex,
+  readWritingPack,
+  writeWritingPack,
   readTimelineIndex,
   writeTimelineIndex,
   writeAuditAnalysisText,
   writeStoryTimelineMarkdownFromIndex,
-  TimelineIndex
+  TimelineIndex,
+  WritingPack
 } from "./fsStore.js";
 import { resolveDataDir, safeSlug } from "./paths.js";
 
@@ -109,6 +112,104 @@ function stripMarkdownFence(s: string): string {
   const j = t.lastIndexOf("```");
   if (i >= 0 && j > i) return t.slice(i + 1, j).trim();
   return t;
+}
+
+function parseChapterNoFromFilename(filename: string): number | null {
+  const m = String(filename || "").match(/^(\d+)_/);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function toCleanLines5(raw: any): string[] {
+  const s = typeof raw === "string" ? raw : Array.isArray(raw) ? raw.join("\n") : "";
+  const lines = String(s || "")
+    .replace(/\r/g, "")
+    .split("\n")
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .slice(0, 20);
+  const out: string[] = [];
+  for (const ln of lines) {
+    const t = ln.replace(/^[-*]\s+/, "").trim();
+    if (!t) continue;
+    out.push(t);
+    if (out.length >= 5) break;
+  }
+  while (out.length < 5) out.push("");
+  return out.slice(0, 5);
+}
+
+function clampList<T>(arr: T[], max: number): T[] {
+  if (!Array.isArray(arr)) return [];
+  if (!Number.isFinite(max) || max <= 0) return [];
+  return arr.slice(0, max);
+}
+
+function buildWritingPackPrompt(input: {
+  chapterTarget: { filename: string; title?: string; chapterNo?: number | null };
+  evidence: {
+    recentChapters: any[];
+    compressedRanges: any[];
+    progressCandidates: any[];
+    foreshadowCandidates: any[];
+    risks: any[];
+  };
+}) {
+  const schema = {
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    source: {
+      windowChapters: 3,
+      windowCompressedRanges: 2,
+      pickedProgress: 12,
+      pickedForeshadows: 12
+    },
+    chapterTarget: {
+      filename: input.chapterTarget.filename,
+      title: input.chapterTarget.title,
+      chapterNo: input.chapterTarget.chapterNo ?? undefined
+    },
+    summary5: [
+      "现状态势（事实，1句）",
+      "现状态势（事实，1句）",
+      "读者期待（爽点，参考，1句）",
+      "读者期待（悬疑/推进，参考，1句）",
+      "下一章可能方向（推测，1句，含两个并列方向，用分号隔开，句式含“可能/可以考虑”，末尾加“（参考）”）"
+    ],
+    lists: {
+      progress: [{ id: "progressId", title: "进行中标题", basis: "依据：来自progress/近章/压缩块" }],
+      foreshadows: [{ id: "foreshadowId", title: "伏笔标题", basis: "依据：来自foreshadow/近章/压缩块" }],
+      risks: [{ issue: "一致性风险描述", severity: "low|medium|high", basis: "依据：来自近章一致性/设定" }]
+    },
+    disclaimer: "写作包仅供参考：用于帮助你快速进入状态与回忆当前悬念/欠账；你完全可以不采纳，按自己的创作思路推进。"
+  };
+
+  return [
+    "你是网文小说写作助手。现在要为“新建章节”生成一份【短写作包】（给作者参考，不要指挥作者）。",
+    "",
+    "硬性要求：",
+    "- 严格输出 JSON（不要解释、不要 markdown、不要代码块）。",
+    "- summary5 必须恰好 5 句，每句尽量短。",
+    "- 清单总计不超过 9 条：progress<=4、foreshadows<=2、risks<=3。",
+    "- 口吻必须是“参考/可能/可关注”，禁止使用“必须/应该”。",
+    "- 不要新增新角色/新设定/新关键道具；只能基于给定证据做概括与推测（推测必须标注为参考）。",
+    "",
+    "目标章节：",
+    JSON.stringify(
+      { filename: input.chapterTarget.filename, title: input.chapterTarget.title, chapterNo: input.chapterTarget.chapterNo ?? null },
+      null,
+      2
+    ),
+    "",
+    "可用证据（只基于这些内容）：",
+    JSON.stringify(input.evidence, null, 2),
+    "",
+    "输出 schema：",
+    JSON.stringify(schema, null, 2),
+    "",
+    "现在输出 JSON："
+  ].join("\n");
 }
 
 function buildAuditPrompt(input: {
@@ -2956,6 +3057,234 @@ app.post("/api/books/:slug/audit/progress/cleanupDone", async (req) => {
   idx.updatedAt = now;
   await writeAuditProgressIndex(dataDir, params.slug, idx as any);
   return { ok: true, index: idx };
+});
+
+app.get("/api/books/:slug/writing-pack", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const querySchema = z.object({ chapter: z.string().min(1) });
+  const params = paramsSchema.parse((req as any).params);
+  const query = querySchema.safeParse((req as any).query);
+  if (!query.success) return reply.code(400).send({ message: "缺少 chapter" });
+  const chapterFilename = query.data.chapter.trim();
+  const chapterId = chapterFilename.replace(/\.md$/, "");
+  const pack = await readWritingPack(dataDir, params.slug, chapterId);
+  return { pack };
+});
+
+app.post("/api/books/:slug/writing-pack/generate", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({
+    chapterFilename: z.string().min(1),
+    modelConfigId: z.string().nullable().optional()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+  const chapterFilename = body.chapterFilename.trim();
+  const chapterId = chapterFilename.replace(/\.md$/, "");
+
+  try {
+    const chapters = await listChapters(dataDir, params.slug);
+    const targetMeta = chapters.find((c: any) => String(c?.filename || "").trim() === chapterFilename);
+    const chapterNo = parseChapterNoFromFilename(chapterFilename);
+    const chapterTitle = String(targetMeta?.title || "").trim() || chapterFilename.replace(/\.md$/, "");
+
+    const settings = await readModelSettings();
+    const activeId = body.modelConfigId ?? settings.activeId;
+    const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+    if (!cfg) throw new Error("未配置模型");
+
+    const N = 3;
+    const M = 2;
+    const K = 12;
+
+    const targetIdx = chapters.findIndex((c: any) => String(c?.filename || "").trim() === chapterFilename);
+    const prevMetas = (targetIdx >= 0 ? chapters.slice(0, targetIdx) : chapters).slice(-Math.max(1, N * 2));
+
+    const recentChapters: any[] = [];
+    const anchorNames = {
+      characters: new Set<string>(),
+      places: new Set<string>(),
+      orgs: new Set<string>()
+    };
+    const recentRisks: any[] = [];
+
+    for (const m of prevMetas.slice(-N)) {
+      const fn = String(m?.filename || "").trim();
+      if (!fn) continue;
+      const run = await readAuditRun(dataDir, params.slug, fn).catch(() => null);
+      const gist = String((run as any)?.gistL1 || "").trim();
+      const chars = Array.isArray((run as any)?.entities?.characters) ? (run as any).entities.characters : [];
+      const events = Array.isArray((run as any)?.entities?.events) ? (run as any).entities.events : [];
+      const charNames = chars
+        .map((c: any) => String(c?.name || "").trim())
+        .filter(Boolean)
+        .slice(0, 50);
+      for (const n of charNames) anchorNames.characters.add(n);
+
+      const pickPlace = (ev: any) =>
+        String(ev?.place ?? ev?.location ?? ev?.where ?? ev?.["地点"] ?? ev?.["发生地点"] ?? "").trim();
+      const pickOrg = (ev: any) =>
+        String(ev?.org ?? ev?.organization ?? ev?.faction ?? ev?.["组织"] ?? ev?.["势力"] ?? "").trim();
+      const places = new Set<string>();
+      const orgs = new Set<string>();
+      for (const ev of events) {
+        const pn = pickPlace(ev);
+        const on = pickOrg(ev);
+        if (pn) places.add(pn);
+        if (on) orgs.add(on);
+      }
+      for (const n of places) anchorNames.places.add(n);
+      for (const n of orgs) anchorNames.orgs.add(n);
+
+      const checks = Array.isArray((run as any)?.consistencyChecks) ? (run as any).consistencyChecks : [];
+      for (const c of checks.slice(0, 8)) {
+        recentRisks.push({
+          issue: String(c?.issue || "").trim(),
+          severity: String(c?.severity || "").trim(),
+          suggestion: String(c?.suggestion || "").trim(),
+          basis: `依据：${fn}`
+        });
+      }
+
+      recentChapters.push({
+        filename: fn,
+        chapterNo: parseChapterNoFromFilename(fn),
+        title: String((run as any)?.chapter?.title || m?.title || "").trim(),
+        gistL1: gist,
+        entities: {
+          characters: charNames,
+          places: [...places].slice(0, 40),
+          orgs: [...orgs].slice(0, 40)
+        }
+      });
+    }
+
+    const timelineIndex = await readTimelineIndex(dataDir, params.slug).catch(() => null as any);
+    const compressedRanges = Array.isArray(timelineIndex?.compressedRanges)
+      ? timelineIndex.compressedRanges.slice(-M)
+      : [];
+
+    const progressIndex = await readAuditProgressIndex(dataDir, params.slug).catch(() => ({ items: [] } as any));
+    const progressAll = Array.isArray((progressIndex as any)?.items) ? (progressIndex as any).items : [];
+    const progressOpen = progressAll.filter((x: any) => String(x?.status || "") !== "done");
+    const relScore = (it: any) => {
+      const rel = it?.related && typeof it.related === "object" ? it.related : {};
+      const s = new Set<string>();
+      for (const k of ["characters", "places", "orgs"] as const) {
+        const arr = Array.isArray((rel as any)[k]) ? (rel as any)[k] : [];
+        for (const v of arr) s.add(String(v || "").trim());
+      }
+      let hit = 0;
+      for (const n of s) {
+        if (anchorNames.characters.has(n) || anchorNames.places.has(n) || anchorNames.orgs.has(n)) hit++;
+      }
+      const pr = Number(it?.priority) || 0;
+      return hit * 10 + (pr ? 4 - pr : 0);
+    };
+    const progressCandidates = progressOpen
+      .slice()
+      .sort((a: any, b: any) => relScore(b) - relScore(a))
+      .slice(0, K)
+      .map((x: any) => ({
+        id: String(x?.id || "").trim(),
+        title: String(x?.title || "").trim(),
+        detail: String(x?.detail || "").trim(),
+        priority: x?.priority,
+        related: x?.related ?? undefined,
+        status: String(x?.status || "").trim()
+      }))
+      .filter((x: any) => x.id && x.title);
+
+    const foreshadowsIndex = await readAuditForeshadowsIndex(dataDir, params.slug).catch(() => null as any);
+    const hidden = new Set((foreshadowsIndex?.hiddenIds || []).map((x: any) => String(x)));
+    const foreshadowsAll = Array.isArray(foreshadowsIndex?.foreshadows) ? foreshadowsIndex.foreshadows : [];
+    const foreshadowsOpen = foreshadowsAll.filter(
+      (f: any) => !hidden.has(String(f?.id || "")) && String(f?.status || "") !== "closed"
+    );
+    const foreshadowCandidates = foreshadowsOpen
+      .slice()
+      .sort((a: any, b: any) => {
+        // 相关性（先粗糙：标题命中锚点名）
+        const aTitle = String(a?.title || "");
+        const bTitle = String(b?.title || "");
+        const hit = (t: string) => {
+          let n = 0;
+          for (const x of anchorNames.characters) if (x && t.includes(x)) n++;
+          for (const x of anchorNames.places) if (x && t.includes(x)) n++;
+          for (const x of anchorNames.orgs) if (x && t.includes(x)) n++;
+          return n;
+        };
+        const ha = hit(aTitle);
+        const hb = hit(bTitle);
+        if (hb !== ha) return hb - ha;
+        const la = Number(a?.lastChapter) || 0;
+        const lb = Number(b?.lastChapter) || 0;
+        return la - lb;
+      })
+      .slice(0, K)
+      .map((f: any) => ({
+        id: String(f?.id || "").trim(),
+        title: String(f?.title || "").trim(),
+        status: String(f?.status || "").trim(),
+        firstChapter: Number(f?.firstChapter) || undefined,
+        lastChapter: Number(f?.lastChapter) || undefined,
+        chapters: Array.isArray(f?.chapters) ? f.chapters : undefined,
+        lastProgress: String(f?.lastProgress || "").trim(),
+        note: String(f?.note || "").trim()
+      }))
+      .filter((x: any) => x.id && x.title);
+
+    const risks = recentRisks
+      .filter((r) => r.issue)
+      .slice(0, 20);
+
+    const prompt = buildWritingPackPrompt({
+      chapterTarget: { filename: chapterFilename, title: chapterTitle, chapterNo },
+      evidence: { recentChapters, compressedRanges, progressCandidates, foreshadowCandidates, risks }
+    });
+
+    const { model, providerOptions } = createAiSdkModel(cfg);
+    const { text } = await generateText({
+      model,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+      ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
+      providerOptions
+    } as any);
+
+    const parsed = JSON.parse(stripJsonFence(String(text || "")));
+    const now = new Date().toISOString();
+    const pack: WritingPack = {
+      version: 1,
+      updatedAt: now,
+      source: { windowChapters: N, windowCompressedRanges: M, pickedProgress: K, pickedForeshadows: K },
+      chapterTarget: { filename: chapterFilename, title: chapterTitle, chapterNo: chapterNo ?? undefined },
+      summary5: toCleanLines5((parsed as any)?.summary5),
+      lists: {
+        progress: clampList(Array.isArray((parsed as any)?.lists?.progress) ? (parsed as any).lists.progress : [], 4)
+          .map((x: any) => ({ id: String(x?.id || "").trim(), title: String(x?.title || "").trim(), basis: typeof x?.basis === "string" ? x.basis : undefined }))
+          .filter((x: any) => x.id && x.title),
+        foreshadows: clampList(Array.isArray((parsed as any)?.lists?.foreshadows) ? (parsed as any).lists.foreshadows : [], 2)
+          .map((x: any) => ({ id: String(x?.id || "").trim(), title: String(x?.title || "").trim(), basis: typeof x?.basis === "string" ? x.basis : undefined }))
+          .filter((x: any) => x.id && x.title),
+        risks: clampList(Array.isArray((parsed as any)?.lists?.risks) ? (parsed as any).lists.risks : [], 3)
+          .map((x: any) => ({
+            issue: String(x?.issue || "").trim(),
+            severity: typeof x?.severity === "string" ? x.severity : undefined,
+            basis: typeof x?.basis === "string" ? x.basis : undefined
+          }))
+          .filter((x: any) => x.issue)
+      },
+      disclaimer:
+        "写作包仅供参考：用于帮助你快速进入状态与回忆当前悬念/欠账；你完全可以不采纳，按自己的创作思路推进。"
+    };
+
+    // 最终条数保护（progress<=4, foreshadows<=2, risks<=3 已限制）
+    await writeWritingPack(dataDir, params.slug, chapterId, pack);
+    return { ok: true, pack };
+  } catch (e: any) {
+    return reply.code(400).send({ message: e?.message || String(e) });
+  }
 });
 
 app.post("/api/books/:slug/audit/foreshadows/create", async (req, reply) => {
