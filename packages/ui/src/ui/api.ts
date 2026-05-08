@@ -431,6 +431,33 @@ export async function generateWritingPack(
   });
 }
 
+export type BookSearchHit = {
+  kind: "chapters";
+  path: string;
+  title: string;
+  lineNo: number;
+  excerpt: string;
+  matchRanges: Array<[number, number]>;
+};
+export type BookSearchGroup = { kind: BookSearchHit["kind"]; count: number; hits: BookSearchHit[] };
+
+export async function searchBook(
+  slug: string,
+  input: {
+    q: string;
+    sort?: "asc" | "desc";
+    caseSensitive?: boolean;
+    wholeWord?: boolean;
+    limit?: number;
+    offset?: number;
+  }
+) {
+  return await http<{ total: number; groups: BookSearchGroup[] }>(`/api/books/${encodeURIComponent(slug)}/search`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
 export async function createAuditForeshadow(
   slug: string,
   input: { title: string; status?: ForeshadowStatus; lastProgress?: string; note?: string; chapters?: number[] }

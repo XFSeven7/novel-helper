@@ -64,6 +64,7 @@ import {
   suggestChapterTitlesBatch,
   getWritingPack,
   generateWritingPack,
+  searchBook,
   getTimelineIndex,
   compressTimelineRange,
   deleteTimelineRange,
@@ -71,6 +72,7 @@ import {
   TimelineIndex,
   WritingPack
 } from "./api";
+import type { BookSearchGroup, BookSearchHit } from "./api";
 
 type SelectedChapter = { bookSlug: string; filename: string } | null;
 type SelectedCard = { bookSlug: string; path: string } | null;
@@ -717,6 +719,18 @@ export function App() {
   const [status, setStatus] = useState<string>("");
   const [busy, setBusy] = useState(false);
 
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQ, setSearchQ] = useState("");
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [searchErr, setSearchErr] = useState("");
+  const [searchGroups, setSearchGroups] = useState<BookSearchGroup[]>([]);
+  const [searchSort, setSearchSort] = useState<"asc" | "desc">("asc");
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const searchDebounceRef = useRef<number | null>(null);
+  const searchPickBookFirstBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  // 仅搜索章节正文：不再需要 story/audit 的命中预览
+
   const [mergeFromEditOpen, setMergeFromEditOpen] = useState(false);
   const [mergeFromEditSelected, setMergeFromEditSelected] = useState<Record<string, boolean>>({});
   const [mergeFromEditDraft, setMergeFromEditDraft] = useState<any | null>(null);
@@ -794,6 +808,73 @@ export function App() {
     if (!el) return;
     el.scrollTop = 0;
   }
+
+  function scrollChapterToLine(lineNo: number) {
+    const el = chapterTextareaRef.current;
+    if (!el) return;
+    const n = Math.max(1, Math.floor(Number(lineNo) || 1));
+    const text = String(el.value || "").replace(/\r/g, "");
+    let idx = 0;
+    let line = 1;
+    while (line < n) {
+      const next = text.indexOf("\n", idx);
+      if (next < 0) break;
+      idx = next + 1;
+      line++;
+    }
+    try {
+      el.focus();
+      el.setSelectionRange(idx, idx);
+      // 尽量把目标行滚到可视区域中间
+      const lines = text.slice(0, idx).split("\n").length;
+      const approxLineHeight = 20;
+      el.scrollTop = Math.max(0, (lines - 3) * approxLineHeight);
+    } catch {
+      // ignore
+    }
+  }
+
+  function highlightChapterHit(lineNo: number, q: string) {
+    const el = chapterTextareaRef.current;
+    if (!el) return;
+    const needleRaw = String(q || "").trim();
+    if (!needleRaw) {
+      scrollChapterToLine(lineNo);
+      return;
+    }
+    const n = Math.max(1, Math.floor(Number(lineNo) || 1));
+    const text = String(el.value || "").replace(/\r/g, "");
+
+    // 找到目标行起始索引
+    let idx = 0;
+    let line = 1;
+    while (line < n) {
+      const next = text.indexOf("\n", idx);
+      if (next < 0) break;
+      idx = next + 1;
+      line++;
+    }
+    const lineEnd = text.indexOf("\n", idx);
+    const lineText = lineEnd >= 0 ? text.slice(idx, lineEnd) : text.slice(idx);
+
+    const hay = lineText.toLowerCase();
+    const needle = needleRaw.toLowerCase();
+    const localPos = hay.indexOf(needle);
+    const start = idx + (localPos >= 0 ? localPos : 0);
+    const end = idx + (localPos >= 0 ? localPos + needleRaw.length : 0);
+
+    try {
+      el.focus();
+      if (localPos >= 0) el.setSelectionRange(start, end);
+      else el.setSelectionRange(idx, idx);
+      const approxLineHeight = 20;
+      el.scrollTop = Math.max(0, (n - 3) * approxLineHeight);
+    } catch {
+      // ignore
+    }
+  }
+
+  // highlightTextareaHit 已不再需要（只搜索章节正文）
 
   chapterContentRef.current = chapterContent;
   selectedCardRef.current = selectedCard;
@@ -1027,6 +1108,46 @@ export function App() {
     if (!chapterGapModalOpen) return;
     queueMicrotask(() => chapterGapTitleInputRef.current?.focus());
   }, [chapterGapModalOpen]);
+
+  useEffect(() => {
+    if (!searchOpen) return;
+    queueMicrotask(() => {
+      if (activeBookRef.current) searchInputRef.current?.focus();
+      else searchPickBookFirstBtnRef.current?.focus();
+    });
+  }, [searchOpen, activeBook]);
+
+  useEffect(() => {
+    const isMac = () => /Mac|iPhone|iPad|iPod/i.test(navigator.platform || "");
+    const shouldIgnoreTarget = (t: any) => {
+      const el = t as HTMLElement | null;
+      if (!el) return false;
+      const tag = String((el as any).tagName || "").toLowerCase();
+      if (tag === "input" || tag === "textarea" || tag === "select") return true;
+      if ((el as any).isContentEditable) return true;
+      return false;
+    };
+
+    const onKey = (e: KeyboardEvent) => {
+      if (busy) return;
+      const key = String(e.key || "").toLowerCase();
+      const mac = isMac();
+      const openKey = key === "i" && !e.shiftKey && !e.altKey && (mac ? e.metaKey : e.ctrlKey);
+      if (openKey) {
+        e.preventDefault();
+        setSearchOpen(true);
+        return;
+      }
+      // 不抢输入框快捷键：除非已经打开搜索浮层；但全局搜索快捷键始终生效
+      if (!searchOpen && shouldIgnoreTarget(e.target)) return;
+      if (searchOpen && e.key === "Escape") {
+        e.preventDefault();
+        setSearchOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [busy, searchOpen]);
 
   useEffect(() => {
     if (!createBookModalOpen) return;
@@ -1798,6 +1919,37 @@ export function App() {
     } finally {
       setWritingPackBusy(false);
     }
+  }
+
+  async function runSearchNow(query: string) {
+    const slug = activeBookRef.current;
+    const q = String(query || "").trim();
+    if (!slug || !q) {
+      setSearchGroups([]);
+      return;
+    }
+    setSearchBusy(true);
+    setSearchErr("");
+    try {
+      const { groups } = await searchBook(slug, {
+        q,
+        sort: searchSort,
+        caseSensitive: false,
+        wholeWord: false,
+        limit: 200,
+        offset: 0
+      });
+      setSearchGroups(groups || []);
+    } catch (e: any) {
+      setSearchErr(e?.message || String(e));
+    } finally {
+      setSearchBusy(false);
+    }
+  }
+
+  function scheduleSearch(q: string) {
+    if (searchDebounceRef.current !== null) window.clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = window.setTimeout(() => void runSearchNow(q), 250);
   }
 
   function openEditPlace(p: any) {
@@ -2671,6 +2823,32 @@ export function App() {
       setStatus(e?.message || String(e));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function openSearchHit(hit: BookSearchHit) {
+    if (!activeBook) return;
+    try {
+      if (hit.kind === "chapters") {
+        const filename = String(hit.path || "").replace(/^chapters\//, "");
+        const meta = chapters.find((c) => c.filename === filename);
+        if (meta) {
+          await onOpenChapter(meta);
+          const q = String(searchQ || "").trim();
+          // 等待 React 把章节内容渲染进 textarea 后再设置选区高亮
+          window.setTimeout(() => highlightChapterHit(hit.lineNo, q), 0);
+        } else {
+          setStatus("未找到对应章节。");
+        }
+        setSearchOpen(false);
+        return;
+      }
+      // 仅搜索章节正文：不会再出现 story 命中
+      // audit：V1 先不做精确跳转，至少提示路径
+      setStatus(`审计产物命中：${hit.path}`);
+      setSearchOpen(false);
+    } catch (e: any) {
+      setStatus(e?.message || String(e));
     }
   }
 
@@ -5127,7 +5305,7 @@ export function App() {
                               onClick={() => void doGenerateWritingPack(activeBook, selectedChapter.filename)}
                               title="重新生成并覆盖保存的写作包"
                             >
-                              {writingPackBusy ? "生成中…" : "重生成"}
+                              {writingPackBusy ? "生成中…" : "重新生成"}
                             </button>
                           ) : null}
                         </div>
@@ -5239,7 +5417,7 @@ export function App() {
                           </>
                         ) : (
                           <div className="muted auditPanelEmpty">
-                            暂无写作包。你可以点击右上角“重生成”来生成一份（会保存到本地）。{writingPackBusy ? "（生成中…）" : ""}
+                            暂无写作包。你可以点击右上角“重新生成”来生成一份（会保存到本地）。{writingPackBusy ? "（生成中…）" : ""}
                           </div>
                         )}
                       </div>
@@ -7245,6 +7423,155 @@ export function App() {
                 onClick={() => void applySuggestedChapterTitle()}
               >
                 使用该标题
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {searchOpen ? (
+        <div
+          className="modalBackdrop"
+          role="presentation"
+          onClick={() => {
+            if (!searchBusy) setSearchOpen(false);
+          }}
+        >
+          <div
+            className="modalPanel modalPanelOpaque modalPanelLarge searchModal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-search-heading"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="modal-search-heading" className="modalHeading">
+              全书搜索
+            </h2>
+            <div className="muted" style={{ marginBottom: 10 }}>
+              {(() => {
+                const isMac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || "");
+                return isMac ? "快捷键：⌘I" : "快捷键：Ctrl+I";
+              })()}
+            </div>
+
+            {!activeBook ? (
+              <div style={{ marginBottom: 12 }}>
+                <div className="auditErrorBox" style={{ margin: 0 }}>
+                  <div className="auditErrorTitle">未选择书籍</div>
+                  <div className="auditErrorMsg">请选择要搜索的书籍（点击后会自动跳转到该书并在此弹窗内继续搜索）。</div>
+                </div>
+                <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                  {(books || []).map((b, idx) => (
+                      <button
+                        key={b.slug}
+                        type="button"
+                        ref={idx === 0 ? searchPickBookFirstBtnRef : undefined}
+                        className="chapterEntityItem"
+                        disabled={busy}
+                        onClick={async () => {
+                          await openBookFromShelf(b);
+                          window.setTimeout(() => {
+                            searchInputRef.current?.focus();
+                            if (searchQ.trim()) void runSearchNow(searchQ);
+                          }, 0);
+                        }}
+                        title={`跳转到《${b.title}》`}
+                      >
+                        <span className="chapterEntityName">{b.title}</span>
+                        <span className="muted chapterEntityMeta">{b.slug}</span>
+                      </button>
+                    ))}
+                </div>
+              </div>
+            ) : null}
+
+            <div className="row" style={{ gap: 8, alignItems: "center" }}>
+              <input
+                ref={searchInputRef}
+                className="modalInput"
+                value={searchQ}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setSearchQ(v);
+                  setSearchErr("");
+                  scheduleSearch(v);
+                }}
+                placeholder={activeBook ? "输入关键词（仅搜索章节正文）" : "先选择一本书，然后输入关键词"}
+                disabled={busy || !activeBook}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void runSearchNow(searchQ);
+                  }
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    if (!searchBusy) setSearchOpen(false);
+                  }
+                }}
+              />
+              {activeBook ? (
+                <button
+                  type="button"
+                  className="btnSquare"
+                  style={{ padding: "6px 10px", height: 34, lineHeight: "20px", fontSize: 12, whiteSpace: "nowrap" }}
+                  disabled={busy || searchBusy}
+                  onClick={() => {
+                    const next = searchSort === "asc" ? "desc" : "asc";
+                    setSearchSort(next);
+                    if (searchQ.trim()) scheduleSearch(searchQ);
+                  }}
+                  title="切换排序"
+                >
+                  {searchSort === "asc" ? "正序" : "倒序"}
+                </button>
+              ) : null}
+            </div>
+
+            {searchErr ? (
+              <div className="auditErrorBox" style={{ marginTop: 10 }}>
+                <div className="auditErrorTitle">搜索失败</div>
+                <div className="auditErrorMsg">{searchErr}</div>
+              </div>
+            ) : null}
+
+            <div style={{ marginTop: 12, maxHeight: "54vh", overflow: "auto" }}>
+              {searchGroups.length === 0 ? (
+                <div className="muted">输入关键词后会显示结果。</div>
+              ) : (
+                searchGroups.map((g) => (
+                  <div key={g.kind} style={{ marginBottom: 12 }}>
+                    <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>
+                      章节 · 命中 {g.count}
+                    </div>
+                    {(g.hits || []).length ? (
+                      <div className="writingPackList">
+                        {g.hits.map((h, idx) => (
+                          <button
+                            key={`${h.kind}-${h.path}-${h.lineNo}-${idx}`}
+                            type="button"
+                            className="chapterEntityItem"
+                            disabled={busy}
+                            onClick={() => void openSearchHit(h)}
+                            title={`${h.path}:${h.lineNo}`}
+                          >
+                            <span className="chapterEntityName">
+                              {h.title} <span className="muted">L{h.lineNo}</span>
+                            </span>
+                            <span className="muted chapterEntityMeta">{h.excerpt}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="muted">（本组无结果）</div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="modalActions">
+              <button type="button" className="btnModalSecondary" disabled={busy || searchBusy} onClick={() => setSearchOpen(false)}>
+                关闭
               </button>
             </div>
           </div>

@@ -75,6 +75,31 @@ type ModelConfig = {
   extraHeadersJson?: string;
 };
 
+type SearchHit = {
+  kind: "chapters";
+  path: string;
+  title: string;
+  lineNo: number;
+  excerpt: string;
+  matchRanges: Array<[number, number]>;
+};
+type SearchGroup = { kind: SearchHit["kind"]; count: number; hits: SearchHit[] };
+type SearchResponse = { total: number; groups: SearchGroup[] };
+
+type CachedDoc = {
+  kind: SearchHit["kind"];
+  absPath: string;
+  relPath: string;
+  title: string;
+  mtimeMs: number;
+  lines: string[];
+};
+type BookSearchCache = {
+  updatedAtMs: number;
+  docsByPath: Map<string, CachedDoc>;
+};
+const searchCacheByBook = new Map<string, BookSearchCache>();
+
 function settingsDir() {
   return path.join(dataDir, "_settings");
 }
@@ -144,6 +169,160 @@ function clampList<T>(arr: T[], max: number): T[] {
   if (!Array.isArray(arr)) return [];
   if (!Number.isFinite(max) || max <= 0) return [];
   return arr.slice(0, max);
+}
+
+function isTextFile(p: string): boolean {
+  const lower = p.toLowerCase();
+  return lower.endsWith(".md") || lower.endsWith(".txt") || lower.endsWith(".json");
+}
+
+async function listFilesRecursive(dir: string, relBase = ""): Promise<Array<{ abs: string; rel: string }>> {
+  const out: Array<{ abs: string; rel: string }> = [];
+  let entries: any[] = [];
+  try {
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const e of entries) {
+    const abs = path.join(dir, e.name);
+    const rel = relBase ? `${relBase}/${e.name}` : e.name;
+    if (e.isDirectory()) {
+      out.push(...(await listFilesRecursive(abs, rel)));
+      continue;
+    }
+    if (e.isFile() && isTextFile(e.name)) out.push({ abs, rel });
+  }
+  return out;
+}
+
+function extractTextFromAuditJson(parsed: any): string[] {
+  const lines: string[] = [];
+  const push = (k: string, v: string) => {
+    const t = String(v || "").replace(/\r/g, "").trim();
+    if (!t) return;
+    lines.push(`${k}: ${t}`);
+  };
+
+  const allowKey = (k: string) =>
+    [
+      "title",
+      "name",
+      "summary",
+      "detail",
+      "issue",
+      "suggestion",
+      "gistL1",
+      "lastProgress",
+      "note",
+      "description",
+      "lastNote"
+    ].includes(k);
+
+  const walk = (node: any, keyHint = "") => {
+    if (node === null || node === undefined) return;
+    if (typeof node === "string") {
+      if (keyHint) push(keyHint, node);
+      else {
+        const t = node.trim();
+        if (t) lines.push(t);
+      }
+      return;
+    }
+    if (typeof node === "number" || typeof node === "boolean") return;
+    if (Array.isArray(node)) {
+      for (const it of node) walk(it, keyHint);
+      return;
+    }
+    if (typeof node === "object") {
+      for (const [k, v] of Object.entries(node)) {
+        const kk = String(k);
+        if (allowKey(kk) && typeof v === "string") push(kk, v);
+        else walk(v, allowKey(kk) ? kk : keyHint || kk);
+      }
+    }
+  };
+
+  walk(parsed, "");
+  // 去重 + 截断（避免 audit 噪音过多）
+  const uniq = [...new Set(lines.map((x) => x.trim()).filter(Boolean))].slice(0, 4000);
+  return uniq.length ? uniq : [];
+}
+
+function findAllMatchesInLine(line: string, q: string, caseSensitive: boolean): Array<[number, number]> {
+  if (!q) return [];
+  const src = caseSensitive ? line : line.toLowerCase();
+  const needle = caseSensitive ? q : q.toLowerCase();
+  const out: Array<[number, number]> = [];
+  let i = 0;
+  while (true) {
+    const idx = src.indexOf(needle, i);
+    if (idx < 0) break;
+    out.push([idx, idx + needle.length]);
+    i = idx + Math.max(1, needle.length);
+    if (out.length > 50) break;
+  }
+  return out;
+}
+
+function isWholeWordOk(line: string, start: number, end: number): boolean {
+  const isWord = (c: string) => /[A-Za-z0-9_]/.test(c);
+  const left = start - 1 >= 0 ? line[start - 1] : "";
+  const right = end < line.length ? line[end] : "";
+  if (left && isWord(left)) return false;
+  if (right && isWord(right)) return false;
+  return true;
+}
+
+async function buildOrRefreshBookSearchCache(slug: string): Promise<BookSearchCache> {
+  const key = safeSlug(slug);
+  const cached = searchCacheByBook.get(key) || { updatedAtMs: 0, docsByPath: new Map<string, CachedDoc>() };
+  const bookDir = path.join(dataDir, key);
+
+  const candidates: Array<{ kind: CachedDoc["kind"]; abs: string; rel: string }> = [];
+  // 仅搜索章节正文（不包含 story / meta/audit）
+  const chaptersDir = path.join(bookDir, "chapters");
+  const files = await listFilesRecursive(chaptersDir, "chapters");
+  for (const f of files) candidates.push({ kind: "chapters", abs: f.abs, rel: f.rel });
+
+  const seen = new Set<string>();
+  for (const c of candidates) {
+    seen.add(c.rel);
+    let stat: any;
+    try {
+      stat = await fs.stat(c.abs);
+    } catch {
+      continue;
+    }
+    const prev = cached.docsByPath.get(c.rel);
+    if (prev && prev.mtimeMs === stat.mtimeMs && prev.kind === c.kind) continue;
+
+    let raw = "";
+    try {
+      raw = await fs.readFile(c.abs, "utf8");
+    } catch {
+      raw = "";
+    }
+    const lines: string[] = raw.replace(/\r/g, "").split("\n");
+    const title = path.basename(c.abs, ".md");
+
+    cached.docsByPath.set(c.rel, {
+      kind: c.kind,
+      absPath: c.abs,
+      relPath: c.rel,
+      title,
+      mtimeMs: stat.mtimeMs,
+      lines
+    });
+  }
+
+  // 清理已删除文件
+  for (const rel of [...cached.docsByPath.keys()]) {
+    if (!seen.has(rel)) cached.docsByPath.delete(rel);
+  }
+  cached.updatedAtMs = Date.now();
+  searchCacheByBook.set(key, cached);
+  return cached;
 }
 
 function buildWritingPackPrompt(input: {
@@ -3457,6 +3636,99 @@ app.post("/api/books/:slug/chapters/:filename/title/suggest/batch", async (req, 
     }
 
     return { ok: true, results };
+  } catch (e: any) {
+    return reply.code(400).send({ message: e?.message || String(e) });
+  }
+});
+
+app.post("/api/books/:slug/search", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({
+    q: z.string().min(1),
+    // 兼容旧前端：scope 参数已忽略（现在只搜索章节正文）
+    scope: z
+      .object({ chapters: z.boolean().optional(), story: z.boolean().optional(), audit: z.boolean().optional() })
+      .optional(),
+    sort: z.enum(["asc", "desc"]).optional(),
+    caseSensitive: z.boolean().optional(),
+    wholeWord: z.boolean().optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+    offset: z.number().int().min(0).optional()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+
+  const q = body.q.trim();
+  if (!q) return reply.code(400).send({ message: "q 不能为空" });
+  const sort = body.sort === "desc" ? "desc" : "asc";
+  const caseSensitive = Boolean(body.caseSensitive);
+  const wholeWord = Boolean(body.wholeWord);
+  const limit = body.limit ?? 200;
+  const offset = body.offset ?? 0;
+
+  try {
+    const cache = await buildOrRefreshBookSearchCache(params.slug);
+    const hits: SearchHit[] = [];
+
+    const docs = [...cache.docsByPath.values()];
+    for (const doc of docs) {
+      const lines = doc.lines || [];
+      for (let li = 0; li < lines.length; li++) {
+        const line = String(lines[li] ?? "");
+        if (!line) continue;
+        const matches = findAllMatchesInLine(line, q, caseSensitive);
+        if (!matches.length) continue;
+        const filtered = wholeWord ? matches.filter(([s, e]) => isWholeWordOk(line, s, e)) : matches;
+        if (!filtered.length) continue;
+
+        // excerpt：尽量用整行；过长截断并调整 matchRanges
+        const maxLen = 200;
+        let excerpt = line;
+        let ranges = filtered;
+        if (excerpt.length > maxLen) {
+          const first = filtered[0];
+          const center = Math.floor((first[0] + first[1]) / 2);
+          const start = Math.max(0, center - Math.floor(maxLen / 2));
+          const end = Math.min(line.length, start + maxLen);
+          excerpt = line.slice(start, end);
+          ranges = filtered
+            .map(([s, e]) => [s - start, e - start] as [number, number])
+            .filter(([s, e]) => e > 0 && s < excerpt.length)
+            .map(([s, e]) => [Math.max(0, s), Math.min(excerpt.length, e)] as [number, number]);
+        }
+
+        hits.push({
+          kind: "chapters",
+          path: doc.relPath,
+          title: doc.title,
+          lineNo: li + 1,
+          excerpt,
+          matchRanges: ranges.slice(0, 20)
+        });
+      }
+    }
+
+    const chapterNoOf = (relPath: string): number => {
+      // chapters/0008_xxx.md -> 8
+      const m = String(relPath || "").match(/^chapters\/(\d+)_/);
+      if (m && m[1]) return Number(m[1]) || 0;
+      return 0;
+    };
+    hits.sort((a, b) => {
+      const na = chapterNoOf(a.path);
+      const nb = chapterNoOf(b.path);
+      if (na !== nb) return na - nb;
+      const pa = String(a.path || "");
+      const pb = String(b.path || "");
+      const pcmp = pa.localeCompare(pb, "zh-Hans-CN");
+      if (pcmp !== 0) return pcmp;
+      return (a.lineNo || 0) - (b.lineNo || 0);
+    });
+    if (sort === "desc") hits.reverse();
+
+    const total = hits.length;
+    const sliced = hits.slice(offset, offset + limit);
+    return { total, groups: [{ kind: "chapters", count: total, hits: sliced }] } satisfies SearchResponse;
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || String(e) });
   }

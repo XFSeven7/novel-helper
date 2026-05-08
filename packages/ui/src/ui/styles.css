@@ -3533,3 +3533,15 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis) {
   word-break: break-word;
 }
 
+/* 全书搜索浮层：固定高度，结果区内部滚动 */
+.searchModal {
+  height: 70vh;
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.searchModal > .modalActions {
+  margin-top: auto;
+}
+
