@@ -5341,7 +5341,7 @@ export function App() {
                     <div className="auditPanel writingPackPanel">
                       <div className="auditPanelBody">
                         <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
-                          <div className="auditPanelTitle">短写作包（参考）</div>
+                          <div className="auditPanelTitle">写作参考</div>
                           {activeBook && selectedChapter ? (
                             <button
                               type="button"

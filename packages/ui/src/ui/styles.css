@@ -1404,6 +1404,11 @@ code {
   margin-bottom: 6px;
 }
 
+/* 写作包希望更“直角/紧凑”，不要圆角卡片感 */
+.writingPackPanel.auditPanel {
+  border-radius: 0;
+}
+
 .auditPanelRow {
   display: flex;
   align-items: center;
@@ -2864,16 +2869,23 @@ code {
 .writingPackPanel .auditPanelBody {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
 }
 
 .writingPackSummary {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding: 10px 0;
+  gap: 4px;
+  padding: 6px 0;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
+}
+
+.writingPackPanel .btnSquare {
+  padding: 4px 10px;
+  height: 28px;
+  font-size: 12px;
+  line-height: 18px;
 }
 
 .writingPackLine {
@@ -2889,30 +2901,30 @@ code {
 .writingPackLists {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding-top: 6px;
+  gap: 6px;
+  padding-top: 4px;
   border-top: 1px solid var(--border);
 }
 
 .writingPackListBlock {
-  padding: 8px 0;
+  padding: 6px 0;
   border-bottom: 1px solid var(--border);
 }
 
 .writingPackListTitle {
   font-size: 12px;
   font-weight: 650;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
 }
 
 .writingPackList {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .writingPackItem {
-  padding: 6px 0;
+  padding: 4px 0;
   border-top: 1px dashed var(--border);
 }
 
