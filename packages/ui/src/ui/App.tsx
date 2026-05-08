@@ -2919,7 +2919,15 @@ export function App() {
               ) : (
                 <>
                   <div className="navChapterHeader">
-                    <div className="navTitle">{activeBookMeta?.title ?? activeBook}</div>
+                    <button
+                      type="button"
+                      className="navTitle navTitleButton"
+                      disabled={busy}
+                      onClick={() => void goBookOverview()}
+                      title="查看书籍概览"
+                    >
+                      {activeBookMeta?.title ?? activeBook}
+                    </button>
                     {sortedActiveMissingChapterIndexes.length > 0 && activeBookMeta ? (
                       <button
                         type="button"
@@ -2970,17 +2978,6 @@ export function App() {
 
                   {leftTab === "chapters" ? (
                     <>
-                      <div className="navOverviewBar">
-                        <button
-                          type="button"
-                          className="btnSort btnOverview"
-                          disabled={busy || !selectedChapter}
-                          title={selectedChapter ? "在中间查看本书信息与简介" : "当前已在书籍概览"}
-                          onClick={() => void goBookOverview()}
-                        >
-                          书籍概览
-                        </button>
-                      </div>
                       <div className="navSortBar">
                         <button
                           type="button"
@@ -5060,6 +5057,8 @@ export function App() {
 
             {!activeBook ? (
               <div className="rightNeedBook muted">请选择一本书</div>
+            ) : showBookOverview ? (
+              <div className="rightNeedBook muted">当前未选择章节。请在左侧章节目录选择一章查看内容整理。</div>
             ) : (
               <>
                 <div className="browserTabsBar" role="tablist" aria-label="内容整理页签">

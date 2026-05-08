@@ -478,6 +478,19 @@ code {
   margin-bottom: 6px;
 }
 
+.navTitleButton {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.navTitleButton:hover { opacity: 0.92; }
+
 .modelProviderGrid {
   display: grid;
   grid-template-columns: 1fr 1fr;
