@@ -2285,6 +2285,12 @@ export function App() {
     setAuditRunningChapter({ bookSlug: runningBookSlug, filename: runningChapterFilename });
     resetAuditThinkingReveal();
     try {
+      const debugKey = `${runningBookSlug}/${runningChapterFilename}/${Date.now()}`;
+      const clog = (...args: any[]) => console.log("[audit]", debugKey, ...args);
+      const cwarn = (...args: any[]) => console.warn("[audit]", debugKey, ...args);
+      const cerr = (...args: any[]) => console.error("[audit]", debugKey, ...args);
+
+      clog("start", { modelId: activeModelId ?? null });
       // 先尽力同步一次（避免服务端没有最新配置）
       await putModelConfigs({ configs: modelConfigs as any, activeId: activeModelId ?? null }).catch(() => {});
 
@@ -2300,8 +2306,10 @@ export function App() {
       );
       if (!res.ok || !res.body) {
         const t = await res.text().catch(() => "");
+        cerr("http_error", res.status, t);
         throw new Error(t || `HTTP ${res.status}`);
       }
+      clog("connected", { status: res.status, contentType: res.headers.get("content-type") });
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder("utf-8");
@@ -2309,50 +2317,57 @@ export function App() {
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-        buf += decoder.decode(value, { stream: true });
+        const chunkText = decoder.decode(value, { stream: true });
+        buf += chunkText;
+        clog("recv_chunk", { len: chunkText.length });
         let idx;
         while ((idx = buf.indexOf("\n\n")) >= 0) {
           const chunk = buf.slice(0, idx);
           buf = buf.slice(idx + 2);
-          const line = chunk
+          clog("sse_event_raw", chunk.slice(0, 400));
+          const dataLines = chunk
             .split("\n")
             .map((l) => l.trimEnd())
-            .find((l) => l.startsWith("data:"));
-          if (!line) continue;
-          const payloadText = line.replace(/^data:\s?/, "");
-          try {
-            const payload = JSON.parse(payloadText) as any;
-            // 只展示“思考过程”：优先消费 reasoning
-            if (payload.type === "reasoning") {
-              appendAuditThinkingDelta(payload.textDelta ?? "");
+            .filter((l) => l.startsWith("data:"));
+          for (const line of dataLines) {
+            const payloadText = line.replace(/^data:\s?/, "");
+            try {
+              const payload = JSON.parse(payloadText) as any;
+              if (payload?.type === "log") {
+                clog("log", String(payload.text || "").trim());
+              }
+              if (payload?.type === "reasoning") {
+                clog("reasoning_delta", String(payload.textDelta || "").slice(0, 120));
+                appendAuditThinkingDelta(payload.textDelta ?? "");
+              }
+              if (payload?.type === "phase") {
+                clog("phase", payload.step, payload.total, payload.label);
+                const step = Math.max(1, Math.floor(Number(payload.step || 1)));
+                const total = Math.max(step, Math.floor(Number(payload.total || 5)));
+                const label = String(payload.label || "").trim() || "处理中…";
+                setAuditProgress({ step, total, label });
+              }
+              if (payload?.type === "done") {
+                clog("done");
+                if (payload.run) setAuditRun(payload.run);
+                await loadAuditArtifacts(runningBookSlug, runningChapterFilename);
+                await refreshTimelineIndex(runningBookSlug);
+                await loadGlobalArtifacts(runningBookSlug);
+                setAuditStreamPhase("done");
+                await saveAuditAnalysis(runningBookSlug, {
+                  chapterFilename: runningChapterFilename,
+                  text: auditThinkingBufferRef.current || ""
+                }).catch(() => {});
+                setAuditRunningChapter(null);
+                setAuditProgress(null);
+              }
+              if (payload?.type === "error") {
+                cerr("sse_error", payload?.message);
+                throw new Error(payload.message || "分析失败");
+              }
+            } catch (e: any) {
+              cwarn("bad_payload", payloadText.slice(0, 200), e?.message || String(e));
             }
-            if (payload.type === "phase") {
-              const step = Math.max(1, Math.floor(Number(payload.step || 1)));
-              const total = Math.max(step, Math.floor(Number(payload.total || 5)));
-              const label = String(payload.label || "").trim() || "处理中…";
-              setAuditProgress({ step, total, label });
-            }
-            // 兼容：服务端可能仍发送 log（不展示或可切换为展示）
-            if (payload.type === "done") {
-              if (payload.run) setAuditRun(payload.run);
-              await loadAuditArtifacts(runningBookSlug, runningChapterFilename);
-              await refreshTimelineIndex(runningBookSlug);
-              await loadGlobalArtifacts(runningBookSlug);
-              setAuditStreamPhase("done");
-              // 把“本章分析”文本持久化到服务端（按章节保存）
-              await saveAuditAnalysis(runningBookSlug, {
-                chapterFilename: runningChapterFilename,
-                text: auditThinkingBufferRef.current || ""
-              }).catch(() => {});
-              setAuditRunningChapter(null);
-              setAuditProgress(null);
-            }
-            if (payload.type === "error") {
-              throw new Error(payload.message || "分析失败");
-            }
-          } catch (e: any) {
-            // 如果不是 JSON，就直接当日志
-            // 不再展示（避免把最终 JSON 混进“思考过程”）
           }
         }
       }

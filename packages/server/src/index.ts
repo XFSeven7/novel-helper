@@ -526,28 +526,56 @@ async function streamThinkingTraceWithAiSdk(input: {
   const { model, providerOptions } = createAiSdkModel(cfg);
   let warnedAuditJsonAsThinking = false;
 
-  emitLog("AI SDK：开始流式输出思考过程…");
-  const result = await streamText({
-    model,
-    // 用 messages 走 chat/completions 流式；Ollama 的流式输出更稳定
-    messages: [{ role: "user", content: prompt }],
-    ...(cfg.provider === "ollama" ? {} : { reasoning: "high" as const }),
-    providerOptions
-  } as any);
+  emitLog(
+    `AI SDK：思考阶段开始 provider=${cfg.provider} label=${cfg.label} model=${String(cfg.model || "").trim() || "(default)"} baseUrl=${cfg.baseUrl}`
+  );
+  // 某些 provider（尤其是 openai-compatible 的实现）可能不稳定：不返回增量、或长时间卡住不结束。
+  // 这里做超时降级：避免 UI 永远停在第 2/5 阶段。
+  const controller = new AbortController();
+  const timeoutMs = 25_000;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let result: any;
+  try {
+    const t0 = Date.now();
+    result = await streamText({
+      model,
+      // 用 messages 走 chat/completions 流式；Ollama 的流式输出更稳定
+      messages: [{ role: "user", content: prompt }],
+      ...(cfg.provider === "ollama" ? {} : { reasoning: "high" as const }),
+      providerOptions,
+      abortSignal: controller.signal
+    } as any);
+    emitLog(`AI SDK：思考阶段 streamText 建连成功（${Date.now() - t0}ms），开始接收增量…`);
+  } catch (e: any) {
+    clearTimeout(timer);
+    const msg = String(e?.name || "") === "AbortError" ? `思考过程流式超时（>${Math.floor(timeoutMs / 1000)}s），已跳过展示。` : "";
+    if (msg) emitLog(`AI SDK：${msg}`);
+    else emitLog(`AI SDK：思考阶段 streamText 失败：${e?.message || String(e)}`);
+    return;
+  }
 
   let sawReasoningDelta = false;
+  let reasoningChars = 0;
+  let textDeltaChars = 0;
 
   // 同步消费 fullStream：reasoning（若有）与正文增量并行到达，避免“先读完流再等 textStream”导致一次性输出
-  for await (const part of result.fullStream as any) {
+  try {
+    const t0 = Date.now();
+    for await (const part of result.fullStream as any) {
+      if (controller.signal.aborted) {
+        emitLog(`AI SDK：思考过程流式超时（>${Math.floor(timeoutMs / 1000)}s），已跳过展示。`);
+        break;
+      }
     if (part.type === "reasoning" && typeof part.textDelta === "string" && part.textDelta) {
       if (looksLikeAuditJsonFragment(part.textDelta)) {
         if (!warnedAuditJsonAsThinking) {
           warnedAuditJsonAsThinking = true;
-          emitLog("提示：模型在「思考」通道输出了疑似审计 JSON，已忽略该片段（JSON 将在第二阶段静默生成）。");
+            emitLog("AI SDK：提示：模型在「思考」通道输出了疑似审计 JSON，已忽略该片段（JSON 将在第二阶段静默生成）。");
         }
         continue;
       }
       sawReasoningDelta = true;
+        reasoningChars += part.textDelta.length;
       onEvent({ type: "reasoning", textDelta: part.textDelta });
       continue;
     }
@@ -557,9 +585,10 @@ async function streamThinkingTraceWithAiSdk(input: {
         if (looksLikeAuditJsonFragment(part.textDelta)) {
           if (!warnedAuditJsonAsThinking) {
             warnedAuditJsonAsThinking = true;
-            emitLog("提示：模型在「思考」通道输出了疑似审计 JSON，已忽略该片段（JSON 将在第二阶段静默生成）。");
+              emitLog("AI SDK：提示：模型在「思考」通道输出了疑似审计 JSON，已忽略该片段（JSON 将在第二阶段静默生成）。");
           }
         } else {
+            textDeltaChars += part.textDelta.length;
           onEvent({ type: "reasoning", textDelta: part.textDelta });
         }
       }
@@ -568,18 +597,36 @@ async function streamThinkingTraceWithAiSdk(input: {
     if (part.type === "error") {
       throw new Error(part.error?.message || "模型调用失败");
     }
+    }
+    emitLog(
+      `AI SDK：思考阶段 fullStream 结束（${Date.now() - t0}ms），reasoningChars=${reasoningChars} textDeltaChars=${textDeltaChars}`
+    );
+  } catch (e: any) {
+    const msg =
+      String(e?.name || "") === "AbortError"
+        ? `思考过程流式超时（>${Math.floor(timeoutMs / 1000)}s），已跳过展示。`
+        : "";
+    if (msg) emitLog(`AI SDK：${msg}`);
+    else emitLog(`AI SDK：思考阶段 fullStream 失败：${e?.message || String(e)}`);
+    return;
+  } finally {
+    clearTimeout(timer);
   }
 
   // 兜底：极少数 provider 可能只在结束时聚合出 text（但仍应尽量走上面的增量）
   if (!sawReasoningDelta) {
     try {
+      const t0 = Date.now();
       const t = await (result as any).text;
       if (typeof t === "string" && t.trim()) {
         if (looksLikeAuditJsonFragment(t)) {
-          emitLog("提示：思考阶段聚合文本疑似审计 JSON，已跳过展示。");
+          emitLog("AI SDK：提示：思考阶段聚合文本疑似审计 JSON，已跳过展示。");
         } else {
+          emitLog(`AI SDK：思考阶段无增量，fallback 聚合文本成功（${Date.now() - t0}ms，len=${t.length}）`);
           onEvent({ type: "reasoning", textDelta: t });
         }
+      } else {
+        emitLog(`AI SDK：思考阶段无增量，fallback 聚合文本为空（${Date.now() - t0}ms）`);
       }
     } catch {
       // ignore
@@ -588,19 +635,53 @@ async function streamThinkingTraceWithAiSdk(input: {
 }
 
 /** 第二步：静默生成审计 JSON（不透传到 UI）。 */
-async function generateAuditJsonWithAiSdk(input: { cfg: ModelConfig; prompt: string }): Promise<string> {
-  const { cfg, prompt } = input;
+async function generateAuditJsonWithAiSdk(input: {
+  cfg: ModelConfig;
+  prompt: string;
+  onEvent?: (e: ReasoningStreamEvent) => void;
+}): Promise<string> {
+  const { cfg, prompt, onEvent } = input;
+  const emitLog = (t: string) => {
+    try {
+      onEvent?.({ type: "log", text: t.endsWith("\n") ? t : `${t}\n` });
+    } catch {
+      // ignore
+    }
+  };
   const { model, providerOptions } = createAiSdkModel(cfg);
 
-  const { text } = await generateText({
-    model,
-    messages: [{ role: "user", content: prompt }],
-    temperature: 0.2,
-    ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
-    providerOptions
-  } as any);
+  const t0 = Date.now();
+  emitLog(
+    `AI SDK：JSON阶段开始 provider=${cfg.provider} label=${cfg.label} model=${String(cfg.model || "").trim() || "(default)"}`
+  );
+
+  const controller = new AbortController();
+  const timeoutMs = 90_000;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let text: string | undefined = "";
+  try {
+    const r = await generateText({
+      model,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+      ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
+      providerOptions,
+      abortSignal: controller.signal
+    } as any);
+    text = (r as any)?.text;
+  } catch (e: any) {
+    const isAbort = String(e?.name || "") === "AbortError";
+    const msg = isAbort
+      ? `AI SDK：JSON阶段超时（>${Math.floor(timeoutMs / 1000)}s），已中断。请检查模型服务/网络/限流。`
+      : `AI SDK：JSON阶段失败：${e?.message || String(e)}`;
+    emitLog(msg);
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!text?.trim()) throw new Error("模型未返回审计 JSON");
+  emitLog(`AI SDK：JSON阶段完成（${Date.now() - t0}ms，chars=${String(text || "").length}）`);
   return text;
 }
 
@@ -1220,7 +1301,7 @@ async function performAuditWithAiSdk(input: {
   });
 
   emitPhase(3, "生成结构化审计结果（JSON）");
-  const rawJson = await generateAuditJsonWithAiSdk({ cfg, prompt: auditPrompt });
+  const rawJson = await generateAuditJsonWithAiSdk({ cfg, prompt: auditPrompt, onEvent: onEvent ?? (() => {}) });
   const jsonText = stripJsonFence(rawJson);
   emitPhase(4, "解析并保存审计结果");
   const run = await finalizeAuditFromJsonText(slug, filename, jsonText);
@@ -1573,6 +1654,15 @@ app.post("/api/books", async (req, reply) => {
   } catch (e: any) {
     return reply.code(409).send({ message: e?.message || "Conflict" });
   }
+});
+
+app.get("/api/books/:slug", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const params = paramsSchema.parse((req as any).params);
+  const books = await listNovels(dataDir);
+  const book = books.find((b: any) => String(b?.slug || "").trim() === params.slug);
+  if (!book) return reply.code(404).send({ message: "Not found" });
+  return { book };
 });
 
 app.patch("/api/books/:slug", async (req, reply) => {
