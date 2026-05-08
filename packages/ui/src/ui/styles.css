@@ -357,8 +357,17 @@ code {
 
 .navGlobalScroll {
   min-height: 0;
-  overflow: visible;
+  overflow: hidden;
   padding-right: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.auditCharScroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
 }
 
 .chapterEntitiesPanel {
@@ -2724,6 +2733,88 @@ code {
   flex-direction: column;
   gap: 0;
   margin-bottom: 14px;
+}
+
+.progressTab {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.progressWrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.progressSummary {
+  flex: none;
+  padding: 10px 0 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+.progressSummaryTitle {
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.progressSummaryMeta {
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.progressSummaryText {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.progressItemsScroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-top: 6px;
+}
+
+.progressList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.progressItem {
+  padding: 8px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+.progressItem:last-child {
+  border-bottom: none;
+}
+
+.progressItemTitle {
+  font-weight: 650;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.progressItemDetail {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.progressItemTags {
+  margin-top: 4px;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .auditCharCard {

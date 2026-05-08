@@ -348,6 +348,24 @@ export async function getAuditForeshadows(slug: string) {
   return await http<{ index: ForeshadowsIndex }>(`/api/books/${encodeURIComponent(slug)}/audit/foreshadows`);
 }
 
+export async function getAuditProgress(slug: string) {
+  return await http<{ index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/progress`);
+}
+
+export async function markAuditProgressItem(slug: string, input: { id: string; status: "open" | "progress" | "done" }) {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/progress/mark`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function cleanupAuditProgressDone(slug: string) {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/progress/cleanupDone`, {
+    method: "POST",
+    body: JSON.stringify({})
+  });
+}
+
 export async function createAuditForeshadow(
   slug: string,
   input: { title: string; status?: ForeshadowStatus; lastProgress?: string; note?: string; chapters?: number[] }

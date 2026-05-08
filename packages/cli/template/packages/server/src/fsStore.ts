@@ -151,6 +151,31 @@ export type ForeshadowsIndex = {
   hiddenIds: string[];
 };
 
+export type ProgressItemStatus = "open" | "progress" | "done";
+
+export type ProgressItem = {
+  id: string;
+  title: string;
+  detail?: string;
+  related?: {
+    characters?: string[];
+    places?: string[];
+    orgs?: string[];
+    chapters?: number[];
+  };
+  priority?: 1 | 2 | 3;
+  status: ProgressItemStatus;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+export type ProgressIndex = {
+  version: 1;
+  updatedAt: string;
+  lastSourceChapter?: { filename: string; chapterNo?: number; title?: string };
+  items: ProgressItem[];
+};
+
 export type CharacterSocialTags = {
   profession?: string;
   class?: string;
@@ -529,6 +554,26 @@ export async function writeAuditForeshadowsIndex(dataDir: string, novelSlug: str
   const dir = auditDir(dataDir, novelSlug);
   await ensureDir(dir);
   const p = path.join(dir, "foreshadowsIndex.json");
+  await fs.writeFile(p, JSON.stringify(idx, null, 2), "utf8");
+}
+
+export async function readAuditProgressIndex(dataDir: string, novelSlug: string): Promise<ProgressIndex> {
+  const p = path.join(auditDir(dataDir, novelSlug), "progressIndex.json");
+  if (!(await exists(p))) return { version: 1, updatedAt: "", lastSourceChapter: undefined, items: [] };
+  const parsed = JSON.parse(await fs.readFile(p, "utf8"));
+  const idx: ProgressIndex = {
+    version: 1,
+    updatedAt: typeof parsed?.updatedAt === "string" ? parsed.updatedAt : "",
+    lastSourceChapter: parsed?.lastSourceChapter && typeof parsed.lastSourceChapter === "object" ? parsed.lastSourceChapter : undefined,
+    items: Array.isArray(parsed?.items) ? parsed.items : []
+  };
+  return idx;
+}
+
+export async function writeAuditProgressIndex(dataDir: string, novelSlug: string, idx: ProgressIndex) {
+  const dir = auditDir(dataDir, novelSlug);
+  await ensureDir(dir);
+  const p = path.join(dir, "progressIndex.json");
   await fs.writeFile(p, JSON.stringify(idx, null, 2), "utf8");
 }
 

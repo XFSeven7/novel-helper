@@ -3,6 +3,7 @@ import cors from "@fastify/cors";
 import { z } from "zod";
 import fs from "node:fs/promises";
 import path from "node:path";
+import crypto from "node:crypto";
 import { generateText, streamText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
@@ -37,6 +38,8 @@ import {
   writeAuditOrgsIndex,
   readAuditForeshadowsIndex,
   writeAuditForeshadowsIndex,
+  readAuditProgressIndex,
+  writeAuditProgressIndex,
   readTimelineIndex,
   writeTimelineIndex,
   writeAuditAnalysisText,
@@ -1225,6 +1228,7 @@ async function performAuditWithAiSdk(input: {
   // 每次分析后自动更新时间线索引与推荐压缩区间
   emitPhase(5, "更新全书记忆（时间线/推荐压缩）");
   await updateTimelineIndexAfterAudit({ cfg, slug, filename, run, ledger }).catch(() => {});
+  await updateProgressIndexAfterAudit({ cfg, slug, filename, run }).catch(() => {});
   return run;
 }
 
@@ -1266,6 +1270,175 @@ async function performPolishWithAiSdk(input: {
 
   const full = await r.text;
   return { text: full };
+}
+
+function buildProgressIndexPrompt(input: {
+  chapter: { filename: string; title: string; chapterNo: number | null; auditedAt: string };
+  auditRun: any;
+  prevIndex: any;
+}) {
+  return [
+    "你是小说写作助手。现在要维护一份“进行中事项清单”，只记录还在推进中的线索/冲突/待办，不要记录已完成的事。",
+    "同时，请先给出一段“当前正在进行的事情（总述）”，用 3~8 句概括全书目前最主要的推进与悬念（不要写已完结事项）。",
+    "",
+    "请严格输出 JSON（不要解释、不要 markdown、不要代码块）。",
+    "输出 schema：",
+    JSON.stringify(
+      {
+        summary: "当前正在进行的事情（总述，3~8句）",
+        lastSourceChapter: { filename: input.chapter.filename, chapterNo: input.chapter.chapterNo ?? undefined, title: input.chapter.title },
+        items: [
+          {
+            id: "稳定 id（尽量沿用旧的；新建时可留空，服务端会生成）",
+            title: "一句话描述正在进行的事项（必填）",
+            detail: "可选：更具体的推进/当前状态/下一步",
+            status: "open|progress|done（done 表示已完成，将不会展示）",
+            priority: "1|2|3（1最高，可选）",
+            related: {
+              characters: ["相关角色名（可选）"],
+              places: ["相关地点名（可选）"],
+              orgs: ["相关组织名（可选）"],
+              chapters: ["相关章节号（可选）"]
+            }
+          }
+        ]
+      },
+      null,
+      2
+    ),
+    "",
+    "规则：",
+    "- 只维护与“当前仍在进行中”的事项；已完成的标记 done 或从 items 移除。",
+    "- 与旧 items 表达同一件事的，必须复用/更新旧条目（避免重复）。",
+    "- summary 必须只包含“仍在进行中”的主线推进与悬念，不要写已经解决的结果。",
+    "- title 要简短清晰，detail 可写推进与下一步（避免冗长）。",
+    "- items 数量控制在 5~20 条，优先保留最重要的。",
+    "",
+    "当前章节信息：",
+    JSON.stringify(input.chapter, null, 2),
+    "",
+    "本次审计结果（摘要/实体/影响/一致性/伏笔更新等）：",
+    JSON.stringify(input.auditRun || {}, null, 2),
+    "",
+    "旧的 progressIndex（用于续写/去重/更新状态）：",
+    JSON.stringify(input.prevIndex || {}, null, 2),
+    "",
+    "现在输出 JSON："
+  ].join("\n");
+}
+
+async function updateProgressIndexAfterAudit(input: { cfg: ModelConfig; slug: string; filename: string; run: any }) {
+  const { cfg, slug, filename, run } = input;
+  const prev = await readAuditProgressIndex(dataDir, slug);
+  const chapNo = parseChapterNumberFromFilename(filename);
+  const prompt = buildProgressIndexPrompt({
+    chapter: {
+      filename,
+      title: String(run?.chapter?.title || filename.replace(/\\.md$/, "")),
+      chapterNo: Number.isFinite(chapNo) ? chapNo : null,
+      auditedAt: String(run?.chapter?.auditedAt || new Date().toISOString())
+    },
+    auditRun: run,
+    prevIndex: prev
+  });
+
+  const { model, providerOptions } = createAiSdkModel(cfg);
+  const { text } = await generateText({
+    model,
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.2,
+    ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
+    providerOptions
+  } as any);
+
+  const parsed = JSON.parse(stripJsonFence(String(text || "")));
+  const nextSummaryRaw = typeof parsed?.summary === "string" ? String(parsed.summary) : "";
+  const nextItemsRaw = Array.isArray(parsed?.items) ? parsed.items : [];
+  const now = String(run?.chapter?.auditedAt || new Date().toISOString());
+
+  const normStr = (v: any) => String(v ?? "").trim();
+  const uniqStrs = (arr: any) =>
+    [...new Set((Array.isArray(arr) ? arr : []).map((x) => normStr(x)).filter(Boolean))].slice(0, 50);
+  const normStatus = (s: any) => {
+    const t = normStr(s).toLowerCase();
+    if (t === "done" || t === "closed") return "done";
+    if (t === "progress" || t === "doing") return "progress";
+    return "open";
+  };
+  const clampPriority = (p: any): 1 | 2 | 3 | undefined => {
+    const n = Math.floor(Number(p));
+    if (n === 1 || n === 2 || n === 3) return n;
+    return undefined;
+  };
+  const makeStableId = (title: string, related: any) => {
+    const key = JSON.stringify({ t: title, r: related || {} });
+    return crypto.createHash("sha1").update(key).digest("hex").slice(0, 16);
+  };
+  const normRelated = (r: any) => ({
+    characters: uniqStrs(r?.characters),
+    places: uniqStrs(r?.places),
+    orgs: uniqStrs(r?.orgs),
+    chapters: [...new Set((Array.isArray(r?.chapters) ? r.chapters : []).map((x: any) => Math.floor(Number(x))).filter((n: any) => Number.isFinite(n)))].slice(0, 50)
+  });
+  const keyOf = (title: string, related: any) =>
+    JSON.stringify({ title: normStr(title).toLowerCase(), related: normRelated(related) });
+
+  const prevByKey = new Map<string, any>();
+  for (const it of Array.isArray(prev?.items) ? prev.items : []) {
+    const k = keyOf(it?.title, it?.related);
+    if (!k || k === "{}") continue;
+    prevByKey.set(k, it);
+  }
+
+  const merged: any[] = [];
+  const seen = new Set<string>();
+  for (const raw of nextItemsRaw) {
+    const title = normStr(raw?.title);
+    if (!title || title === "[object Object]") continue;
+    const related = normRelated(raw?.related);
+    const k = keyOf(title, related);
+    if (seen.has(k)) continue;
+    seen.add(k);
+
+    const prevIt = prevByKey.get(k);
+    const status = normStatus(raw?.status ?? prevIt?.status);
+    const id = normStr(raw?.id) || normStr(prevIt?.id) || makeStableId(title, related);
+
+    merged.push({
+      id,
+      title,
+      detail: normStr(raw?.detail) || normStr(prevIt?.detail) || undefined,
+      status,
+      priority: clampPriority(raw?.priority ?? prevIt?.priority),
+      related,
+      createdAt: normStr(prevIt?.createdAt) || now,
+      updatedAt: now
+    });
+  }
+
+  const keep = merged
+    .filter((x) => x && typeof x === "object")
+    .sort((a, b) => {
+      const pa = a.priority ?? 9;
+      const pb = b.priority ?? 9;
+      if (pa !== pb) return pa - pb;
+      return String(a.title || "").localeCompare(String(b.title || ""), "zh-Hans-CN");
+    })
+    .slice(0, 30);
+
+  const summary = String(nextSummaryRaw || "").trim() || String(prev?.summary || "").trim() || "";
+  const next = {
+    version: 1,
+    updatedAt: now,
+    lastSourceChapter:
+      parsed?.lastSourceChapter && typeof parsed.lastSourceChapter === "object"
+        ? parsed.lastSourceChapter
+        : { filename, chapterNo: Number.isFinite(chapNo) ? chapNo : undefined, title: String(run?.chapter?.title || "") },
+    summary,
+    items: keep
+  };
+
+  await writeAuditProgressIndex(dataDir, slug, next as any);
 }
 
 async function performExpandWithAiSdk(input: {
@@ -2658,6 +2831,41 @@ app.get("/api/books/:slug/audit/foreshadows", async (req) => {
   const params = paramsSchema.parse((req as any).params);
   const idx = await readAuditForeshadowsIndex(dataDir, params.slug);
   return { index: idx };
+});
+
+app.get("/api/books/:slug/audit/progress", async (req) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const params = paramsSchema.parse((req as any).params);
+  const idx = await readAuditProgressIndex(dataDir, params.slug);
+  return { index: idx };
+});
+
+app.post("/api/books/:slug/audit/progress/mark", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({ id: z.string().min(1), status: z.enum(["open", "progress", "done"]) });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+  const idx = await readAuditProgressIndex(dataDir, params.slug);
+  const id = body.id.trim();
+  const i = (idx.items || []).findIndex((x: any) => String(x?.id || "").trim() === id);
+  if (i < 0) return reply.code(404).send({ message: "事项不存在" });
+  const now = new Date().toISOString();
+  const prev = idx.items[i] || {};
+  idx.items[i] = { ...prev, id, status: body.status, updatedAt: now };
+  idx.updatedAt = now;
+  await writeAuditProgressIndex(dataDir, params.slug, idx as any);
+  return { ok: true, index: idx };
+});
+
+app.post("/api/books/:slug/audit/progress/cleanupDone", async (req) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const params = paramsSchema.parse((req as any).params);
+  const idx = await readAuditProgressIndex(dataDir, params.slug);
+  const now = new Date().toISOString();
+  idx.items = (idx.items || []).filter((x: any) => String(x?.status || "") !== "done");
+  idx.updatedAt = now;
+  await writeAuditProgressIndex(dataDir, params.slug, idx as any);
+  return { ok: true, index: idx };
 });
 
 app.post("/api/books/:slug/audit/foreshadows/create", async (req, reply) => {

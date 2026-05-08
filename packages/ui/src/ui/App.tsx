@@ -62,6 +62,7 @@ import {
   createAuditForeshadow,
   updateAuditForeshadow,
   hideAuditForeshadow,
+  getAuditProgress,
   getTimelineIndex,
   compressTimelineRange,
   deleteTimelineRange,
@@ -668,7 +669,7 @@ function IconFullscreenExit(props: React.SVGProps<SVGSVGElement>) {
 }
 
 export function App() {
-  const [leftTab, setLeftTab] = useState<"chapters" | "global">("chapters");
+  const [leftTab, setLeftTab] = useState<"chapters" | "global" | "progress">("chapters");
   const [globalTab, setGlobalTab] = useState<
     "auditCharacters" | "relations" | "places" | "timeline" | "foreshadows"
   >(
@@ -1066,6 +1067,7 @@ export function App() {
   const [auditPlacesIndex, setAuditPlacesIndex] = useState<any | null>(null);
   const [auditOrgsIndex, setAuditOrgsIndex] = useState<any | null>(null);
   const [auditForeshadowsIndex, setAuditForeshadowsIndex] = useState<any | null>(null);
+  const [auditProgressIndex, setAuditProgressIndex] = useState<any | null>(null);
 
   const [foreshadowCreateOpen, setForeshadowCreateOpen] = useState(false);
   const [foreshadowCreateTitle, setForeshadowCreateTitle] = useState("");
@@ -1697,16 +1699,19 @@ export function App() {
 
   async function loadGlobalArtifacts(slug: string) {
     try {
-      const [{ index }, { index: timelineIdx }, { index: placesIdx }, { index: foreshadowsIdx }] = await Promise.all([
+      const [{ index }, { index: timelineIdx }, { index: placesIdx }, { index: foreshadowsIdx }, { index: progressIdx }] =
+        await Promise.all([
         getAuditCharacters(slug).catch(() => ({ index: null })),
         getTimelineIndex(slug).catch(() => ({ index: null as any })),
         getAuditPlaces(slug).catch(() => ({ index: null as any })),
-        getAuditForeshadows(slug).catch(() => ({ index: null as any }))
+        getAuditForeshadows(slug).catch(() => ({ index: null as any })),
+        getAuditProgress(slug).catch(() => ({ index: null as any }))
       ]);
       setAuditCharactersIndex(index);
       setTimelineIndex(timelineIdx);
       setAuditPlacesIndex(placesIdx);
       setAuditForeshadowsIndex(foreshadowsIdx);
+      setAuditProgressIndex(progressIdx);
     } catch {
       // ignore
     }
@@ -2305,6 +2310,7 @@ export function App() {
               if (payload.run) setAuditRun(payload.run);
               await loadAuditArtifacts(runningBookSlug, runningChapterFilename);
               await refreshTimelineIndex(runningBookSlug);
+              await loadGlobalArtifacts(runningBookSlug);
               setAuditStreamPhase("done");
               // 把“本章分析”文本持久化到服务端（按章节保存）
               await saveAuditAnalysis(runningBookSlug, {
@@ -2806,6 +2812,16 @@ export function App() {
                       >
                         全局信息
                       </button>
+                      <button
+                        type="button"
+                        role="tab"
+                        className={`browserTab ${leftTab === "progress" ? "active" : ""}`}
+                        aria-selected={leftTab === "progress"}
+                        onClick={() => setLeftTab("progress")}
+                        disabled={busy}
+                      >
+                        进行中
+                      </button>
                     </div>
                   </div>
 
@@ -2884,63 +2900,117 @@ export function App() {
                     </>
                   ) : (
                     <>
-                      <div className="browserTabsBar" role="tablist" aria-label="全局信息分类">
-                        <div className="browserTabsStrip">
-                          <button
-                            type="button"
-                            role="tab"
-                            className={`browserTab ${globalTab === "auditCharacters" ? "active" : ""}`}
-                            aria-selected={globalTab === "auditCharacters"}
-                            onClick={() => setGlobalTab("auditCharacters")}
-                            disabled={busy}
-                          >
-                            角色
-                          </button>
-                          <button
-                            type="button"
-                            role="tab"
-                            className={`browserTab ${globalTab === "relations" ? "active" : ""}`}
-                            aria-selected={globalTab === "relations"}
-                            onClick={() => setGlobalTab("relations")}
-                            disabled={busy}
-                          >
-                            关系图
-                          </button>
-                          <button
-                            type="button"
-                            role="tab"
-                            className={`browserTab ${globalTab === "places" ? "active" : ""}`}
-                            aria-selected={globalTab === "places"}
-                            onClick={() => setGlobalTab("places")}
-                            disabled={busy}
-                          >
-                            地点
-                          </button>
-                          <button
-                            type="button"
-                            role="tab"
-                            className={`browserTab ${globalTab === "timeline" ? "active" : ""}`}
-                            aria-selected={globalTab === "timeline"}
-                            onClick={() => setGlobalTab("timeline")}
-                            disabled={busy}
-                          >
-                            全书记忆
-                          </button>
-                          <button
-                            type="button"
-                            role="tab"
-                            className={`browserTab ${globalTab === "foreshadows" ? "active" : ""}`}
-                            aria-selected={globalTab === "foreshadows"}
-                            onClick={() => setGlobalTab("foreshadows")}
-                            disabled={busy}
-                          >
-                            伏笔
-                          </button>
-                          {/* 资料卡页签入口已移除：合并功能改在“编辑角色”弹窗内 */}
+                      {leftTab === "progress" ? (
+                        <div className="navGlobalScroll progressTab">
+                          {(() => {
+                            const idx = auditProgressIndex;
+                            const items = Array.isArray(idx?.items) ? (idx.items as any[]) : [];
+                            const activeItems = items.filter((it) => String(it?.status || "") !== "done");
+                            const updatedAt = String(idx?.updatedAt || "").trim();
+                            const src = idx?.lastSourceChapter;
+                            const summary = String(idx?.summary || "").trim();
+                            return (
+                              <div className="progressWrap">
+                                <div className="progressSummary">
+                                  <div className="progressSummaryTitle">当前进度</div>
+                                  <div className="muted progressSummaryMeta">
+                                    {updatedAt ? `上次更新：${updatedAt}` : "尚无进度（请先完成一次章节分析）"}
+                                    {src?.filename ? ` · 来源：${String(src.filename)}` : ""}
+                                  </div>
+                                  {summary ? <div className="progressSummaryText">{summary}</div> : null}
+                                </div>
+
+                                <div className="progressItemsScroll">
+                                  {activeItems.length ? (
+                                    <div className="progressList">
+                                      {activeItems.slice(0, 60).map((it) => {
+                                        const id = String(it?.id || "").trim();
+                                        const title = String(it?.title || "").trim() || "未命名事项";
+                                        const detail = String(it?.detail || "").trim();
+                                        const rel = it?.related || {};
+                                        const tags = [
+                                          ...(Array.isArray(rel.characters) ? rel.characters.map((x: any) => `角色:${String(x)}`) : []),
+                                          ...(Array.isArray(rel.places) ? rel.places.map((x: any) => `地点:${String(x)}`) : []),
+                                          ...(Array.isArray(rel.orgs) ? rel.orgs.map((x: any) => `组织:${String(x)}`) : [])
+                                        ].filter(Boolean);
+                                        return (
+                                          <div key={id || title} className="progressItem">
+                                            <div className="progressItemTitle">{title}</div>
+                                            {detail ? <div className="muted progressItemDetail">{detail}</div> : null}
+                                            {tags.length ? <div className="muted progressItemTags">{tags.join(" · ")}</div> : null}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <div className="muted auditPanelEmpty" style={{ padding: "10px 0" }}>
+                                      暂无进行中事项。
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </div>
-                      </div>
-                      <div className="navGlobalScroll">
-                        {globalTab === "auditCharacters" ? (
+                      ) : (
+                        <>
+                          <div className="browserTabsBar" role="tablist" aria-label="全局信息分类">
+                            <div className="browserTabsStrip">
+                              <button
+                                type="button"
+                                role="tab"
+                                className={`browserTab ${globalTab === "auditCharacters" ? "active" : ""}`}
+                                aria-selected={globalTab === "auditCharacters"}
+                                onClick={() => setGlobalTab("auditCharacters")}
+                                disabled={busy}
+                              >
+                                角色
+                              </button>
+                              <button
+                                type="button"
+                                role="tab"
+                                className={`browserTab ${globalTab === "relations" ? "active" : ""}`}
+                                aria-selected={globalTab === "relations"}
+                                onClick={() => setGlobalTab("relations")}
+                                disabled={busy}
+                              >
+                                关系图
+                              </button>
+                              <button
+                                type="button"
+                                role="tab"
+                                className={`browserTab ${globalTab === "places" ? "active" : ""}`}
+                                aria-selected={globalTab === "places"}
+                                onClick={() => setGlobalTab("places")}
+                                disabled={busy}
+                              >
+                                地点
+                              </button>
+                              <button
+                                type="button"
+                                role="tab"
+                                className={`browserTab ${globalTab === "timeline" ? "active" : ""}`}
+                                aria-selected={globalTab === "timeline"}
+                                onClick={() => setGlobalTab("timeline")}
+                                disabled={busy}
+                              >
+                                全书记忆
+                              </button>
+                              <button
+                                type="button"
+                                role="tab"
+                                className={`browserTab ${globalTab === "foreshadows" ? "active" : ""}`}
+                                aria-selected={globalTab === "foreshadows"}
+                                onClick={() => setGlobalTab("foreshadows")}
+                                disabled={busy}
+                              >
+                                伏笔
+                              </button>
+                              {/* 资料卡页签入口已移除：合并功能改在“编辑角色”弹窗内 */}
+                            </div>
+                          </div>
+                          <div className="navGlobalScroll">
+                            {globalTab === "auditCharacters" ? (
                           <>
                             <div
                               style={{
@@ -2960,7 +3030,8 @@ export function App() {
                                 disabled={busy}
                               />
                             </div>
-                            <div className="auditCharList">
+                            <div className="auditCharScroll">
+                              <div className="auditCharList">
                               {Array.isArray(auditCharactersIndex?.characters) &&
                               (auditCharactersIndex.characters as any[]).length ? (
                                 (() => {
@@ -3318,6 +3389,7 @@ export function App() {
                               ) : (
                                 <div className="muted auditPanelEmpty">暂无角色库。完成一次分析后会自动沉淀到这里。</div>
                               )}
+                              </div>
                             </div>
                           </>
                         ) : globalTab === "relations" ? (
@@ -3806,8 +3878,10 @@ export function App() {
                               );
                             })()}
                           </div>
-                        )}
-                      </div>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </>
                   )}
                 </>
