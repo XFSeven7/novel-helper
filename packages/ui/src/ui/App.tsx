@@ -25,6 +25,7 @@ import {
   createChapter,
   createBook,
   createCharacter,
+  mergeCharacterCards,
   listChapters,
   listBooks,
   listStory,
@@ -45,6 +46,9 @@ import {
   getAuditLedger,
   getAuditCharacters,
   hideAuditCharacter,
+  mergeAuditCharacters,
+  previewMergeAuditCharacters,
+  applyMergeAuditCharacters,
   updateAuditCharacter,
   getAuditPlaces,
   hideAuditPlace,
@@ -663,7 +667,9 @@ function IconFullscreenExit(props: React.SVGProps<SVGSVGElement>) {
 
 export function App() {
   const [leftTab, setLeftTab] = useState<"chapters" | "global">("chapters");
-  const [globalTab, setGlobalTab] = useState<"auditCharacters" | "relations" | "places" | "timeline" | "foreshadows">(
+  const [globalTab, setGlobalTab] = useState<
+    "auditCharacters" | "relations" | "places" | "timeline" | "foreshadows"
+  >(
     "auditCharacters"
   );
   const [books, setBooks] = useState<BookMeta[]>([]);
@@ -698,10 +704,17 @@ export function App() {
   const [chapterContent, setChapterContent] = useState("");
   const [cardContent, setCardContent] = useState("");
   const [storyFiles, setStoryFiles] = useState<StoryFile[]>([]);
+  const [charFiles, setCharFiles] = useState<StoryFile[]>([]);
   const [rightTab, setRightTab] = useState<"chapterAnalysis" | "chapterSummary" | "chapterEntities">("chapterAnalysis");
   const [expandedAuditCharIds, setExpandedAuditCharIds] = useState<Record<string, boolean>>({});
   const [status, setStatus] = useState<string>("");
   const [busy, setBusy] = useState(false);
+
+  const [mergeFromEditOpen, setMergeFromEditOpen] = useState(false);
+  const [mergeFromEditSelected, setMergeFromEditSelected] = useState<Record<string, boolean>>({});
+  const [mergeFromEditDraft, setMergeFromEditDraft] = useState<any | null>(null);
+  const [mergeFromEditDraftText, setMergeFromEditDraftText] = useState<string>("");
+  const [mergeFromEditDraftBusy, setMergeFromEditDraftBusy] = useState(false);
 
   const [mobileReading, setMobileReading] = useState(false);
   const [auditReadModeOn, setAuditReadModeOn] = useState(false);
@@ -938,8 +951,9 @@ export function App() {
   }
 
   async function refreshStory(bookSlug: string) {
-    const { storyFiles } = await listStory(bookSlug);
+    const { storyFiles, charFiles } = await listStory(bookSlug);
     setStoryFiles(storyFiles);
+    setCharFiles(charFiles);
   }
 
   useEffect(() => {
@@ -1965,6 +1979,8 @@ export function App() {
     [auditPlacesIndex]
   );
 
+  // 角色卡合并入口改到“编辑角色”弹窗内（更符合用户直觉）
+
   function openEditCharacter(c: any) {
     const name = String(c?.name || "").trim();
     if (!name) return;
@@ -2909,6 +2925,7 @@ export function App() {
                           >
                             伏笔
                           </button>
+                          {/* 资料卡页签入口已移除：合并功能改在“编辑角色”弹窗内 */}
                         </div>
                       </div>
                       <div className="navGlobalScroll">
@@ -5897,6 +5914,238 @@ export function App() {
             <h2 id="modal-edit-char-heading" className="modalHeading">
               编辑角色：{editCharName}
             </h2>
+            <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+              <div className="muted" style={{ fontSize: 12 }}>
+                角色合并：用于解决“同一角色被拆成多个角色条目”的情况（合并角色库信息）。
+              </div>
+              <button
+                type="button"
+                className="btnSort"
+                disabled={busy || !activeBook}
+                onClick={() => {
+                  setMergeFromEditOpen((v) => !v);
+                  if (!Object.keys(mergeFromEditSelected).some((k) => mergeFromEditSelected[k])) {
+                    // 初次打开时不默认选择，避免误合并
+                    setMergeFromEditSelected({});
+                  }
+                }}
+                title="合并另一张角色卡到当前角色卡"
+              >
+                {mergeFromEditOpen ? "收起合并" : "合并角色"}
+              </button>
+            </div>
+
+            {mergeFromEditOpen ? (
+              <div className="modalField" style={{ marginTop: 10, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                {(() => {
+                  const primaryName = editCharName.trim();
+                  const all = Array.isArray(auditCharactersIndex?.characters)
+                    ? (auditCharactersIndex.characters as any[])
+                        .map((c) => ({ ...c, name: String(c?.name || "").trim() }))
+                        .filter((c) => c.name)
+                    : [];
+                  const similarityScore = (a: string, b: string) => {
+                    const A = String(a || "").trim();
+                    const B = String(b || "").trim();
+                    if (!A || !B) return -1;
+                    if (A === B) return 1e9;
+                    // 强相关：包含关系
+                    if (A.includes(B) || B.includes(A)) return 5e6 + Math.min(A.length, B.length) * 1000;
+                    // 共同前缀长度
+                    let p = 0;
+                    for (let i = 0; i < Math.min(A.length, B.length); i++) {
+                      if (A[i] !== B[i]) break;
+                      p += 1;
+                    }
+                    // 轻量编辑距离（截断到 12 字以内，避免 O(n*m) 放大）
+                    const s1 = A.slice(0, 12);
+                    const s2 = B.slice(0, 12);
+                    const n = s1.length;
+                    const m = s2.length;
+                    const dp: number[] = new Array(m + 1);
+                    for (let j = 0; j <= m; j++) dp[j] = j;
+                    for (let i = 1; i <= n; i++) {
+                      let prev = dp[0];
+                      dp[0] = i;
+                      for (let j = 1; j <= m; j++) {
+                        const tmp = dp[j];
+                        const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+                        dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + cost);
+                        prev = tmp;
+                      }
+                    }
+                    const dist = dp[m];
+                    // 分数越大越相似：前缀优先，其次编辑距离越小越优
+                    return p * 100000 - dist * 1000 - Math.abs(A.length - B.length);
+                  };
+
+                  const options = all
+                    .filter((c) => c.name !== primaryName)
+                    .map((c) => c.name)
+                    .sort((a, b) => {
+                      const sa = similarityScore(primaryName, a);
+                      const sb = similarityScore(primaryName, b);
+                      if (sa !== sb) return sb - sa;
+                      return a.localeCompare(b, "zh-Hans-CN");
+                    });
+                  const pickedList = options.filter((n) => mergeFromEditSelected[n]);
+
+                  const doMerge = async () => {
+                    if (!activeBook) return;
+                    const secondaryNames = pickedList;
+                    if (!primaryName || secondaryNames.length < 1) return;
+                    if (!mergeFromEditDraft) {
+                      setStatus("请先生成合并预览。");
+                      return;
+                    }
+                    const ok = window.confirm(
+                      `确认应用合并？\n\n保留：${primaryName}\n合并并移除：${secondaryNames.join("、")}\n\n提示：将按预览草稿写入角色库，并修正关系引用。`
+                    );
+                    if (!ok) return;
+                    setBusy(true);
+                    setStatus("");
+                    try {
+                      let draftObj: any = mergeFromEditDraft;
+                      const text = mergeFromEditDraftText.trim();
+                      if (text) {
+                        try {
+                          draftObj = JSON.parse(text);
+                        } catch (err: any) {
+                          throw new Error(`预览 JSON 不是合法 JSON：${err?.message || String(err)}`);
+                        }
+                      }
+                      const { index } = await applyMergeAuditCharacters(activeBook, {
+                        primaryName,
+                        secondaryNames,
+                        draft: draftObj
+                      });
+                      setAuditCharactersIndex(index);
+                      setMergeFromEditOpen(false);
+                      setMergeFromEditSelected({});
+                      setMergeFromEditDraft(null);
+                      setMergeFromEditDraftText("");
+                      setStatus("已合并角色（已按预览草稿写入）。");
+                    } catch (e: any) {
+                      setStatus(e?.message || String(e));
+                    } finally {
+                      setBusy(false);
+                    }
+                  };
+
+                  return (
+                    <>
+                      <div className="muted" style={{ marginBottom: 8 }}>
+                        当前角色：{primaryName || "（未命名）"}
+                      </div>
+                      {options.length === 0 ? (
+                        <div className="muted">当前没有其他角色可合并。</div>
+                      ) : (
+                        <>
+                          <label className="modalLabel">选择要合并进来的角色（可多选）</label>
+                          <div style={{ maxHeight: 220, overflow: "auto", border: "1px solid var(--border)", borderRadius: 8 }}>
+                            {options.map((name) => (
+                              <label
+                                key={name}
+                                className="row"
+                                style={{
+                                  justifyContent: "space-between",
+                                  alignItems: "center",
+                                  padding: "8px 10px",
+                                  borderBottom: "1px solid var(--border)"
+                                }}
+                              >
+                                <span>{name}</span>
+                                <input
+                                  type="checkbox"
+                                  checked={!!mergeFromEditSelected[name]}
+                                  disabled={busy}
+                                  onChange={(e) =>
+                                    setMergeFromEditSelected((prev) => ({ ...prev, [name]: e.target.checked }))
+                                  }
+                                />
+                              </label>
+                            ))}
+                          </div>
+                          <div className="muted" style={{ marginTop: 6 }}>
+                            先用 AI 生成“合并后草稿”并预览，确认后才会真正写入并移除被合并角色。
+                          </div>
+                          <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
+                            <button
+                              type="button"
+                              className="btnSort"
+                              disabled={busy || mergeFromEditDraftBusy || pickedList.length < 1 || !activeBook}
+                              onClick={async () => {
+                                if (!activeBook) return;
+                                setMergeFromEditDraftBusy(true);
+                                setStatus("");
+                                try {
+                                  const { draft } = await previewMergeAuditCharacters(activeBook, {
+                                    primaryName,
+                                    secondaryNames: pickedList,
+                                    modelConfigId: activeModelId ?? null
+                                  });
+                                  setMergeFromEditDraft(draft);
+                                  try {
+                                    setMergeFromEditDraftText(JSON.stringify(draft, null, 2));
+                                  } catch {
+                                    setMergeFromEditDraftText(String(draft || ""));
+                                  }
+                                } catch (e: any) {
+                                  setMergeFromEditDraft(null);
+                                  setMergeFromEditDraftText("");
+                                  setStatus(e?.message || String(e));
+                                } finally {
+                                  setMergeFromEditDraftBusy(false);
+                                }
+                              }}
+                              title="调用当前活动模型生成合并草稿"
+                            >
+                              {mergeFromEditDraftBusy ? "生成中…" : "生成合并预览（AI）"}
+                            </button>
+                            <button
+                              type="button"
+                              className="btnSort"
+                              disabled={busy || mergeFromEditDraftBusy || !mergeFromEditDraft}
+                              onClick={() => {
+                                setMergeFromEditDraft(null);
+                                setMergeFromEditDraftText("");
+                              }}
+                            >
+                              清空预览
+                            </button>
+                          </div>
+                          {mergeFromEditDraftText.trim() ? (
+                            <div className="modalField" style={{ marginTop: 10 }}>
+                              <label className="modalLabel">合并后草稿预览（JSON）</label>
+                              <textarea
+                                className="modalTextarea"
+                                value={mergeFromEditDraftText}
+                                onChange={(e) => setMergeFromEditDraftText(e.target.value)}
+                                disabled={busy || mergeFromEditDraftBusy}
+                                rows={10}
+                              />
+                              <div className="muted" style={{ marginTop: 6 }}>
+                                你可以在这里手工微调 JSON（会按此内容应用）。不想手改就直接点击“开始合并”。
+                              </div>
+                            </div>
+                          ) : null}
+                          <div className="modalActions" style={{ padding: 0, marginTop: 10 }}>
+                            <button
+                              type="button"
+                              className="btnModalPrimary"
+                              disabled={busy || pickedList.length < 1 || !mergeFromEditDraft}
+                              onClick={() => void doMerge()}
+                            >
+                              开始合并
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
+            ) : null}
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-role">
                 身份
@@ -6506,6 +6755,8 @@ export function App() {
           </div>
         </div>
       ) : null}
+
+      {/* 合并入口已迁移到“编辑角色”弹窗中 */}
     </div>
   );
 }

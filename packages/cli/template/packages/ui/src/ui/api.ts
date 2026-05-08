@@ -419,3 +419,13 @@ export async function createCharacter(
   );
 }
 
+export async function mergeCharacterCards(
+  slug: string,
+  input: { primaryPath: string; secondaryPaths: string[]; modelConfigId: string | null }
+) {
+  return await http<{ ok: true; charFiles: StoryFile[] }>(`/api/books/${encodeURIComponent(slug)}/story/characters/merge`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+

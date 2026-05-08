@@ -100,6 +100,48 @@ function stripJsonFence(s: string): string {
   return t;
 }
 
+function stripMarkdownFence(s: string): string {
+  const t = String(s || "").trim();
+  if (!t.startsWith("```")) return t;
+  const i = t.indexOf("\n");
+  const j = t.lastIndexOf("```");
+  if (i >= 0 && j > i) return t.slice(i + 1, j).trim();
+  return t;
+}
+
+function buildCharacterCardMergePrompt(input: {
+  primaryTitle: string;
+  primaryContent: string;
+  secondary: Array<{ title: string; content: string }>;
+}) {
+  const secondaryBlock = input.secondary
+    .map((x, i) => [`【次卡 ${i + 1}】标题：${x.title}`, "内容：", x.content].join("\n"))
+    .join("\n\n");
+  return [
+    "你是小说写作助手。现在要把“同一个角色”的多张角色卡，合并成一张最终角色卡（Markdown）。",
+    "",
+    "输出要求（必须严格遵守）：",
+    "- 只输出 Markdown 纯文本：不要代码块，不要 ``` fence，不要多余解释。",
+    "- 必须包含极简 YAML frontmatter，且只允许两个字段：role、tags。例如：",
+    "---",
+    "role: 配角",
+    "tags: [盟友, 反派]",
+    "---",
+    "- frontmatter 之后必须有一个 H1：# 角色名（用主卡标题作为角色名）。",
+    "- tags：从所有卡中合并去重，最多 30 个。",
+    "- role：优先沿用主卡的 role；如果主卡没有 role，再从次卡选择最合适的一个。",
+    "- 正文请融合去重，尽量保持结构清晰，建议包含：目标/动机/弱点/外貌/关系（可为空但保留条目）。",
+    "",
+    `主卡标题：${input.primaryTitle}`,
+    "【主卡内容】",
+    input.primaryContent,
+    "",
+    secondaryBlock ? "【次卡列表】\n" + secondaryBlock : "【次卡列表】（空）",
+    "",
+    "现在开始输出最终合并后的角色卡 Markdown："
+  ].join("\n");
+}
+
 function buildAuditPrompt(input: {
   chapterTitle: string;
   chapterFilename: string;
@@ -453,6 +495,19 @@ async function generateAuditJsonWithAiSdk(input: { cfg: ModelConfig; prompt: str
 
   if (!text?.trim()) throw new Error("模型未返回审计 JSON");
   return text;
+}
+
+async function generateCharacterCardMarkdownWithAiSdk(input: { cfg: ModelConfig; prompt: string }): Promise<string> {
+  const { cfg, prompt } = input;
+  const { model, providerOptions } = createAiSdkModel(cfg);
+  const { text } = await generateText({
+    model,
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.2,
+    ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
+    providerOptions
+  } as any);
+  return String(text || "");
 }
 
 type TimelineModelOutput = {
@@ -1390,6 +1445,94 @@ app.put("/api/books/:slug/story/file", async (req) => {
   const body = bodySchema.parse((req as any).body);
   await updateStoryFile(dataDir, params.slug, body.path, body.content);
   return { ok: true };
+});
+
+app.post("/api/books/:slug/story/characters/merge", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({
+    primaryPath: z.string().min(1),
+    secondaryPaths: z.array(z.string().min(1)).min(1),
+    modelConfigId: z.string().nullable().optional()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+
+  const isSafeCharacterPath = (p: string) =>
+    p.startsWith("story/characters/") && p.endsWith(".md") && !p.includes("..") && !p.includes("\\");
+  if (!isSafeCharacterPath(body.primaryPath)) {
+    return reply.code(400).send({ message: "primaryPath 非法" });
+  }
+  const secondary = [...new Set(body.secondaryPaths)];
+  if (secondary.includes(body.primaryPath)) {
+    return reply.code(400).send({ message: "secondaryPaths 不能包含 primaryPath" });
+  }
+  for (const p of secondary) {
+    if (!isSafeCharacterPath(p)) return reply.code(400).send({ message: `secondaryPath 非法：${p}` });
+  }
+
+  try {
+    const settings = await readModelSettings();
+    const activeId = body.modelConfigId ?? settings.activeId;
+    const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+    if (!cfg) throw new Error("未配置模型");
+
+    const primaryContent = await readStoryFile(dataDir, params.slug, body.primaryPath);
+    const primaryTitle = path.basename(body.primaryPath).replace(/\.md$/, "");
+    const secondaryCards: Array<{ path: string; title: string; content: string }> = [];
+    for (const p of secondary) {
+      const c = await readStoryFile(dataDir, params.slug, p);
+      secondaryCards.push({ path: p, title: path.basename(p).replace(/\.md$/, ""), content: c });
+    }
+
+    const prompt = buildCharacterCardMergePrompt({
+      primaryTitle,
+      primaryContent,
+      secondary: secondaryCards.map((x) => ({ title: x.title, content: x.content }))
+    });
+    const raw = await generateCharacterCardMarkdownWithAiSdk({ cfg, prompt });
+    const merged = stripMarkdownFence(raw);
+    const mergedTrim = merged.trim();
+    if (mergedTrim.length < 60 || (!mergedTrim.includes("\n# ") && !mergedTrim.startsWith("# "))) {
+      throw new Error("AI 合并失败：返回内容不符合预期（过短或缺少标题）");
+    }
+
+    await updateStoryFile(dataDir, params.slug, body.primaryPath, mergedTrim.endsWith("\n") ? mergedTrim : `${mergedTrim}\n`);
+
+    const now = new Date();
+    const stamp = now.toISOString().replace(/[:.]/g, "-");
+    const mergedDirRel = "story/characters/_merged";
+    const mergedDirAbs = path.join(dataDir, params.slug, mergedDirRel);
+    await fs.mkdir(mergedDirAbs, { recursive: true });
+
+    const exists = async (p: string) => {
+      try {
+        await fs.access(p);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const allocDest = async (baseName: string) => {
+      const safeBase = baseName.replace(/[\/\\]/g, "_");
+      for (let i = 0; i < 50; i++) {
+        const name = i === 0 ? `${stamp}_${safeBase}` : `${stamp}_${i}_${safeBase}`;
+        const abs = path.join(mergedDirAbs, name);
+        if (!(await exists(abs))) return abs;
+      }
+      throw new Error("备份文件名分配失败（冲突过多）");
+    };
+
+    for (const card of secondaryCards) {
+      const srcAbs = path.join(dataDir, params.slug, card.path);
+      const destAbs = await allocDest(path.basename(card.path));
+      await fs.rename(srcAbs, destAbs);
+    }
+
+    const { charFiles } = await listStoryFiles(dataDir, params.slug);
+    return { ok: true, charFiles };
+  } catch (e: any) {
+    return reply.code(400).send({ message: e?.message || String(e) });
+  }
 });
 
 app.post("/api/books/:slug/chapters/:filename/audit", async (req, reply) => {

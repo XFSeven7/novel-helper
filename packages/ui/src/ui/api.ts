@@ -239,6 +239,33 @@ export async function updateAuditCharacter(
   });
 }
 
+export async function mergeAuditCharacters(slug: string, input: { primaryName: string; secondaryNames: string[] }) {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/characters/merge`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function previewMergeAuditCharacters(
+  slug: string,
+  input: { primaryName: string; secondaryNames: string[]; modelConfigId: string | null }
+) {
+  return await http<{ ok: true; draft: any }>(`/api/books/${encodeURIComponent(slug)}/audit/characters/merge/preview`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function applyMergeAuditCharacters(
+  slug: string,
+  input: { primaryName: string; secondaryNames: string[]; draft: any }
+) {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/characters/merge/apply`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
 export async function getAuditPlaces(slug: string) {
   return await http<{ index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/places`);
 }
@@ -418,5 +445,15 @@ export async function createCharacter(
     `/api/books/${encodeURIComponent(slug)}/story/characters`,
     { method: "POST", body: JSON.stringify(input) }
   );
+}
+
+export async function mergeCharacterCards(
+  slug: string,
+  input: { primaryPath: string; secondaryPaths: string[]; modelConfigId: string | null }
+) {
+  return await http<{ ok: true; charFiles: StoryFile[] }>(`/api/books/${encodeURIComponent(slug)}/story/characters/merge`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
 }
 

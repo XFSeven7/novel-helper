@@ -99,6 +99,15 @@ function stripJsonFence(s: string): string {
   return t;
 }
 
+function stripMarkdownFence(s: string): string {
+  const t = String(s || "").trim();
+  if (!t.startsWith("```")) return t;
+  const i = t.indexOf("\n");
+  const j = t.lastIndexOf("```");
+  if (i >= 0 && j > i) return t.slice(i + 1, j).trim();
+  return t;
+}
+
 function buildAuditPrompt(input: {
   chapterTitle: string;
   chapterFilename: string;
@@ -372,6 +381,135 @@ function createAiSdkModel(cfg: ModelConfig): { model: any; providerOptions: any 
   }
 
   return { model, providerOptions };
+}
+
+function buildCharacterCardMergePrompt(input: {
+  primaryTitle: string;
+  primaryContent: string;
+  secondary: Array<{ title: string; content: string }>;
+}) {
+  const secondaryBlock = input.secondary
+    .map((x, i) => [`【次卡 ${i + 1}】标题：${x.title}`, "内容：", x.content].join("\n"))
+    .join("\n\n");
+  return [
+    "你是小说写作助手。现在要把“同一个角色”的多张角色卡，合并成一张最终角色卡（Markdown）。",
+    "",
+    "输出要求（必须严格遵守）：",
+    "- 只输出 Markdown 纯文本：不要代码块，不要 ``` fence，不要多余解释。",
+    "- 必须包含极简 YAML frontmatter，且只允许两个字段：role、tags。例如：",
+    "---",
+    "role: 配角",
+    "tags: [盟友, 反派]",
+    "---",
+    "- frontmatter 之后必须有一个 H1：# 角色名（用主卡标题作为角色名）。",
+    "- tags：从所有卡中合并去重，最多 30 个。",
+    "- role：优先沿用主卡的 role；如果主卡没有 role，再从次卡选择最合适的一个。",
+    "- 正文请融合去重，尽量保持结构清晰，建议包含：目标/动机/弱点/外貌/关系（可为空但保留条目）。",
+    "",
+    `主卡标题：${input.primaryTitle}`,
+    "【主卡内容】",
+    input.primaryContent,
+    "",
+    secondaryBlock ? "【次卡列表】\n" + secondaryBlock : "【次卡列表】（空）",
+    "",
+    "现在开始输出最终合并后的角色卡 Markdown："
+  ].join("\n");
+}
+
+async function generateCharacterCardMarkdownWithAiSdk(input: { cfg: ModelConfig; prompt: string }): Promise<string> {
+  const { cfg, prompt } = input;
+  const { model, providerOptions } = createAiSdkModel(cfg);
+  const { text } = await generateText({
+    model,
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.2,
+    ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
+    providerOptions
+  } as any);
+  return String(text || "");
+}
+
+function buildAuditCharacterMergePrompt(input: {
+  primaryName: string;
+  primaryProfile: any;
+  secondaryProfiles: any[];
+}) {
+  return [
+    "你是小说写作助手。现在要把“同一个角色”被拆分成的多个【角色画像条目】合并为一个。",
+    "",
+    "请严格输出 JSON（不要解释、不要 markdown、不要代码块）。",
+    "输出 JSON schema：",
+    JSON.stringify(
+      {
+        merged: {
+          name: input.primaryName,
+          role: "主角/配角/反派等（可空）",
+          tags: ["标签（可空，最多 30）"],
+          state: { "任意字段": "任意值（可空对象）" },
+          socialTags: { profession: "职业", class: "阶级", titles: ["头衔"], other: ["其他标签"] },
+          historicalDebts: ["历史债（可空）"],
+          occurredNotes: ["发生过的事情（可空）"],
+          narrativeDrives: {
+            want: "想要",
+            need: "需要",
+            moralCompass: "道德罗盘",
+            flaws: ["缺点"],
+            blindSpots: ["认知盲点"]
+          },
+          fingerprints: {
+            linguisticStyle: ["句式/语气特征"],
+            catchphrases: ["口头禅"],
+            mannerisms: ["标志性动作"],
+            mask: [{ context: "在何场景", persona: "面具/人设" }]
+          },
+          relationalHooks: {
+            relations: [
+              {
+                targetName: "对方角色名（必须是字符串）",
+                types: ["可选标签"],
+                emotionalPolarity: "情感倾向",
+                conflictIndex: "冲突点",
+                sharedSecrets: ["共享秘密"]
+              }
+            ],
+            freeText: "兜底自由文本"
+          },
+          personalityAnalysis: "性格分析（可空）"
+        }
+      },
+      null,
+      2
+    ),
+    "",
+    "合并规则：",
+    "- name 必须等于主角色名。",
+    "- 去重融合：同义信息合并为更清晰、更稳定的一份，不要把冲突信息都堆叠；不确定的可以留空。",
+    "- tags 最多 30 个。",
+    "- relations.targetName 若出现“被合并角色名”，请改为主角色名。",
+    "",
+    "主角色条目（primary）：",
+    JSON.stringify(input.primaryProfile || {}, null, 2),
+    "",
+    "待合并条目（secondary list）：",
+    JSON.stringify(input.secondaryProfiles || [], null, 2),
+    "",
+    "现在输出 JSON："
+  ].join("\n");
+}
+
+async function generateAuditCharacterMergeDraftWithAiSdk(input: { cfg: ModelConfig; prompt: string }): Promise<any> {
+  const { cfg, prompt } = input;
+  const { model, providerOptions } = createAiSdkModel(cfg);
+  const { text } = await generateText({
+    model,
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.2,
+    ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
+    providerOptions
+  } as any);
+  const jsonText = stripJsonFence(String(text || ""));
+  const parsed = JSON.parse(jsonText);
+  return parsed;
 }
 
 /** 第一步：仅把「可展示思考」流式推到 UI（不包含最终 JSON）。 */
@@ -1435,6 +1573,97 @@ app.put("/api/books/:slug/story/file", async (req) => {
   return { ok: true };
 });
 
+app.post("/api/books/:slug/story/characters/merge", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({
+    primaryPath: z.string().min(1),
+    secondaryPaths: z.array(z.string().min(1)).min(1),
+    modelConfigId: z.string().nullable().optional()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+
+  const isSafeCharacterPath = (p: string) =>
+    p.startsWith("story/characters/") && p.endsWith(".md") && !p.includes("..") && !p.includes("\\");
+  if (!isSafeCharacterPath(body.primaryPath)) {
+    return reply.code(400).send({ message: "primaryPath 非法" });
+  }
+  const secondary = [...new Set(body.secondaryPaths)];
+  if (secondary.includes(body.primaryPath)) {
+    return reply.code(400).send({ message: "secondaryPaths 不能包含 primaryPath" });
+  }
+  for (const p of secondary) {
+    if (!isSafeCharacterPath(p)) return reply.code(400).send({ message: `secondaryPath 非法：${p}` });
+  }
+
+  try {
+    // 读取模型配置（用活动模型）
+    const settings = await readModelSettings();
+    const activeId = body.modelConfigId ?? settings.activeId;
+    const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+    if (!cfg) throw new Error("未配置模型");
+
+    // 先读全量内容（失败则不做任何写入）
+    const primaryContent = await readStoryFile(dataDir, params.slug, body.primaryPath);
+    const primaryTitle = path.basename(body.primaryPath).replace(/\.md$/, "");
+    const secondaryCards: Array<{ path: string; title: string; content: string }> = [];
+    for (const p of secondary) {
+      const c = await readStoryFile(dataDir, params.slug, p);
+      secondaryCards.push({ path: p, title: path.basename(p).replace(/\.md$/, ""), content: c });
+    }
+
+    const prompt = buildCharacterCardMergePrompt({
+      primaryTitle,
+      primaryContent,
+      secondary: secondaryCards.map((x) => ({ title: x.title, content: x.content }))
+    });
+    const raw = await generateCharacterCardMarkdownWithAiSdk({ cfg, prompt });
+    const merged = stripMarkdownFence(raw);
+    const mergedTrim = merged.trim();
+    if (mergedTrim.length < 60 || (!mergedTrim.includes("\n# ") && !mergedTrim.startsWith("# "))) {
+      throw new Error("AI 合并失败：返回内容不符合预期（过短或缺少标题）");
+    }
+
+    // 先写主卡，成功后再备份搬运次卡
+    await updateStoryFile(dataDir, params.slug, body.primaryPath, mergedTrim.endsWith("\n") ? mergedTrim : `${mergedTrim}\n`);
+
+    const now = new Date();
+    const stamp = now.toISOString().replace(/[:.]/g, "-");
+    const mergedDirRel = "story/characters/_merged";
+    const mergedDirAbs = path.join(dataDir, params.slug, mergedDirRel);
+    await fs.mkdir(mergedDirAbs, { recursive: true });
+
+    const exists = async (p: string) => {
+      try {
+        await fs.access(p);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    const allocDest = async (baseName: string) => {
+      const safeBase = baseName.replace(/[\/\\]/g, "_");
+      for (let i = 0; i < 50; i++) {
+        const name = i === 0 ? `${stamp}_${safeBase}` : `${stamp}_${i}_${safeBase}`;
+        const abs = path.join(mergedDirAbs, name);
+        if (!(await exists(abs))) return abs;
+      }
+      throw new Error("备份文件名分配失败（冲突过多）");
+    };
+
+    for (const card of secondaryCards) {
+      const srcAbs = path.join(dataDir, params.slug, card.path);
+      const destAbs = await allocDest(path.basename(card.path));
+      await fs.rename(srcAbs, destAbs);
+    }
+
+    const { charFiles } = await listStoryFiles(dataDir, params.slug);
+    return { ok: true, charFiles };
+  } catch (e: any) {
+    return reply.code(400).send({ message: e?.message || String(e) });
+  }
+});
+
 app.post("/api/books/:slug/chapters/:filename/audit", async (req, reply) => {
   const paramsSchema = z.object({ slug: z.string().min(1), filename: z.string().min(1) });
   const bodySchema = z.object({ modelConfigId: z.string().nullable().optional() });
@@ -1868,6 +2097,308 @@ app.post("/api/books/:slug/audit/characters/update", async (req, reply) => {
       body.personalityAnalysis !== undefined ? body.personalityAnalysis : prev.personalityAnalysis,
     updatedAt: now
   };
+  idx.updatedAt = now;
+  await writeAuditCharactersIndex(dataDir, params.slug, idx);
+  return { ok: true, index: idx };
+});
+
+app.post("/api/books/:slug/audit/characters/merge", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({
+    primaryName: z.string().min(1),
+    secondaryNames: z.array(z.string().min(1)).min(1)
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+
+  const primaryName = body.primaryName.trim();
+  const secondaryNames = [...new Set(body.secondaryNames.map((s: string) => s.trim()).filter(Boolean))].filter(
+    (n) => n !== primaryName
+  );
+  if (!primaryName || secondaryNames.length < 1) {
+    return reply.code(400).send({ message: "参数非法" });
+  }
+
+  const idx = await readAuditCharactersIndex(dataDir, params.slug);
+  const now = new Date().toISOString();
+  const normStr = (v: any) => (typeof v === "string" ? v.trim() : "");
+  const uniqStrs = (arr: any) =>
+    [...new Set((Array.isArray(arr) ? arr : []).map((x) => String(x).trim()).filter(Boolean))];
+  const mergeStrArr = (a: any, b: any) => uniqStrs([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]);
+  const hasVal = (v: any) => {
+    if (v === null || v === undefined) return false;
+    if (typeof v === "string") return v.trim().length > 0;
+    if (typeof v === "number") return Number.isFinite(v);
+    if (typeof v === "boolean") return true;
+    if (Array.isArray(v)) return v.length > 0;
+    if (typeof v === "object") return Object.keys(v).length > 0;
+    return false;
+  };
+  const mergeObjNonEmpty = (p: any, n: any) => {
+    const out: any = { ...(p && typeof p === "object" ? p : {}) };
+    if (!n || typeof n !== "object") return out;
+    for (const [k, v] of Object.entries(n)) {
+      if (!hasVal(v)) continue;
+      out[k] = v;
+    }
+    return out;
+  };
+  const mergeMask = (a: any, b: any) => {
+    const arrA = Array.isArray(a) ? a : [];
+    const arrB = Array.isArray(b) ? b : [];
+    const out: any[] = [];
+    const seen = new Set<string>();
+    for (const it of [...arrA, ...arrB]) {
+      const ctx = normStr((it as any)?.context);
+      const persona = normStr((it as any)?.persona);
+      if (!ctx && !persona) continue;
+      const key = `${ctx}@@${persona}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ context: ctx, persona });
+    }
+    return out;
+  };
+  const mergeRelations = (a: any, b: any) => {
+    const arrA = Array.isArray(a) ? a : [];
+    const arrB = Array.isArray(b) ? b : [];
+    const byTarget = new Map<string, any>();
+    for (const r of [...arrA, ...arrB]) {
+      const targetName = normStr((r as any)?.targetName);
+      if (!targetName) continue;
+      const prevR = byTarget.get(targetName) || { targetName };
+      const mergedR = {
+        ...prevR,
+        targetName,
+        types: mergeStrArr(prevR.types, (r as any)?.types),
+        emotionalPolarity: hasVal((r as any)?.emotionalPolarity) ? normStr((r as any)?.emotionalPolarity) : prevR.emotionalPolarity,
+        conflictIndex: hasVal((r as any)?.conflictIndex) ? normStr((r as any)?.conflictIndex) : prevR.conflictIndex,
+        sharedSecrets: mergeStrArr(prevR.sharedSecrets, (r as any)?.sharedSecrets)
+      };
+      byTarget.set(targetName, mergedR);
+    }
+    return [...byTarget.values()].sort((x, y) => String(x.targetName).localeCompare(String(y.targetName), "zh-Hans-CN"));
+  };
+  const mergeFreeText = (a: any, b: any) => {
+    const ta = normStr(a);
+    const tb = normStr(b);
+    if (!tb) return ta;
+    if (!ta) return tb;
+    if (ta.includes(tb)) return ta;
+    return `${ta}\n${tb}`;
+  };
+
+  const mergeOne = (input: { idx: any; primaryName: string; secondaryName: string }) => {
+    const { idx, primaryName, secondaryName } = input;
+    const chars = Array.isArray(idx.characters) ? idx.characters : [];
+    const pi = chars.findIndex((c: any) => String(c?.name || "").trim() === primaryName);
+    const si = chars.findIndex((c: any) => String(c?.name || "").trim() === secondaryName);
+    if (pi < 0 || si < 0) throw new Error("角色不存在");
+    const primary = chars[pi] || {};
+    const secondary = chars[si] || {};
+    const merged = {
+      ...primary,
+      name: primaryName,
+      role: normStr(primary.role) ? primary.role : secondary.role,
+      tags: mergeStrArr(primary.tags, secondary.tags),
+      state: mergeObjNonEmpty(primary.state, secondary.state),
+      socialTags: mergeObjNonEmpty(primary.socialTags, secondary.socialTags),
+      historicalDebts: mergeStrArr(primary.historicalDebts, secondary.historicalDebts),
+      occurredNotes: mergeStrArr(primary.occurredNotes, secondary.occurredNotes),
+      narrativeDrives: mergeObjNonEmpty(primary.narrativeDrives, secondary.narrativeDrives),
+      fingerprints: (() => {
+        const out: any = mergeObjNonEmpty(primary.fingerprints, secondary.fingerprints);
+        out.mask = mergeMask((primary.fingerprints as any)?.mask, (secondary.fingerprints as any)?.mask);
+        if (Array.isArray((primary.fingerprints as any)?.linguisticStyle) || Array.isArray((secondary.fingerprints as any)?.linguisticStyle))
+          out.linguisticStyle = mergeStrArr((primary.fingerprints as any)?.linguisticStyle, (secondary.fingerprints as any)?.linguisticStyle);
+        if (Array.isArray((primary.fingerprints as any)?.catchphrases) || Array.isArray((secondary.fingerprints as any)?.catchphrases))
+          out.catchphrases = mergeStrArr((primary.fingerprints as any)?.catchphrases, (secondary.fingerprints as any)?.catchphrases);
+        if (Array.isArray((primary.fingerprints as any)?.mannerisms) || Array.isArray((secondary.fingerprints as any)?.mannerisms))
+          out.mannerisms = mergeStrArr((primary.fingerprints as any)?.mannerisms, (secondary.fingerprints as any)?.mannerisms);
+        return out;
+      })(),
+      relationalHooks: (() => {
+        const out: any = mergeObjNonEmpty(primary.relationalHooks, secondary.relationalHooks);
+        out.relations = mergeRelations((primary.relationalHooks as any)?.relations, (secondary.relationalHooks as any)?.relations);
+        out.freeText = mergeFreeText((primary.relationalHooks as any)?.freeText, (secondary.relationalHooks as any)?.freeText);
+        return out;
+      })(),
+      personalityAnalysis: normStr(primary.personalityAnalysis) ? primary.personalityAnalysis : secondary.personalityAnalysis,
+      locks: hasVal(primary.locks) ? primary.locks : secondary.locks,
+      updatedAt: now
+    };
+
+    const nextChars = chars.filter((_: any, i: number) => i !== si).map((c: any, i: number) => (i === (si < pi ? pi - 1 : pi) ? merged : c));
+    for (const c of nextChars) {
+      const rh = c?.relationalHooks;
+      if (rh && typeof rh === "object" && Array.isArray((rh as any).relations)) {
+        (rh as any).relations = (rh as any).relations
+          .map((r: any) => {
+            const t = normStr(r?.targetName);
+            if (!t) return null;
+            return { ...(r || {}), targetName: t === secondaryName ? primaryName : t };
+          })
+          .filter(Boolean);
+      }
+    }
+
+    const hiddenSet = new Set((idx.hiddenNames || []).map((x: any) => String(x)));
+    hiddenSet.delete(secondaryName);
+    idx.hiddenNames = [...hiddenSet];
+    idx.characters = nextChars;
+    return idx;
+  };
+
+  try {
+    for (const sec of secondaryNames) mergeOne({ idx, primaryName, secondaryName: sec });
+  } catch (e: any) {
+    const msg = e?.message || String(e);
+    if (msg.includes("角色不存在")) return reply.code(404).send({ message: "角色不存在" });
+    return reply.code(400).send({ message: msg });
+  }
+
+  idx.characters = (idx.characters || []).sort((a: any, b: any) =>
+    String(a?.name || "").localeCompare(String(b?.name || ""), "zh-Hans-CN")
+  );
+  idx.updatedAt = now;
+  await writeAuditCharactersIndex(dataDir, params.slug, idx);
+  return { ok: true, index: idx, mergedNames: secondaryNames };
+});
+
+app.post("/api/books/:slug/audit/characters/merge/preview", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({
+    primaryName: z.string().min(1),
+    secondaryNames: z.array(z.string().min(1)).min(1),
+    modelConfigId: z.string().nullable().optional()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+  const primaryName = body.primaryName.trim();
+  const secondaryNames = [...new Set(body.secondaryNames.map((s: string) => s.trim()).filter(Boolean))].filter(
+    (n) => n !== primaryName
+  );
+  if (!primaryName || secondaryNames.length < 1) return reply.code(400).send({ message: "参数非法" });
+
+  try {
+    const settings = await readModelSettings();
+    const activeId = body.modelConfigId ?? settings.activeId;
+    const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+    if (!cfg) throw new Error("未配置模型");
+
+    const idx = await readAuditCharactersIndex(dataDir, params.slug);
+    const chars = Array.isArray(idx.characters) ? idx.characters : [];
+    const primary = chars.find((c: any) => String(c?.name || "").trim() === primaryName);
+    const secondaryProfiles = secondaryNames
+      .map((n) => chars.find((c: any) => String(c?.name || "").trim() === n))
+      .filter(Boolean);
+    if (!primary || secondaryProfiles.length !== secondaryNames.length) return reply.code(404).send({ message: "角色不存在" });
+
+    const prompt = buildAuditCharacterMergePrompt({
+      primaryName,
+      primaryProfile: primary,
+      secondaryProfiles
+    });
+    const out = await generateAuditCharacterMergeDraftWithAiSdk({ cfg, prompt });
+    const merged = (out as any)?.merged;
+    if (!merged || typeof merged !== "object") throw new Error("模型未返回 merged 字段");
+    (merged as any).name = primaryName;
+    return { ok: true, draft: merged };
+  } catch (e: any) {
+    return reply.code(400).send({ message: e?.message || String(e) });
+  }
+});
+
+app.post("/api/books/:slug/audit/characters/merge/apply", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({
+    primaryName: z.string().min(1),
+    secondaryNames: z.array(z.string().min(1)).min(1),
+    draft: z.any()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+  const primaryName = body.primaryName.trim();
+  const secondaryNames = [...new Set(body.secondaryNames.map((s: string) => s.trim()).filter(Boolean))].filter(
+    (n) => n !== primaryName
+  );
+  if (!primaryName || secondaryNames.length < 1) return reply.code(400).send({ message: "参数非法" });
+  if (!body.draft || typeof body.draft !== "object") return reply.code(400).send({ message: "draft 非法" });
+
+  const idx = await readAuditCharactersIndex(dataDir, params.slug);
+  const chars = Array.isArray(idx.characters) ? idx.characters : [];
+  const pi = chars.findIndex((c: any) => String(c?.name || "").trim() === primaryName);
+  if (pi < 0) return reply.code(404).send({ message: "角色不存在" });
+  for (const n of secondaryNames) {
+    if (!chars.some((c: any) => String(c?.name || "").trim() === n)) return reply.code(404).send({ message: "角色不存在" });
+  }
+
+  const now = new Date().toISOString();
+  const normStr = (v: any) => (typeof v === "string" ? v.trim() : "");
+  const uniqStrs = (arr: any) =>
+    [...new Set((Array.isArray(arr) ? arr : []).map((x) => String(x).trim()).filter(Boolean))];
+  const mergeStrArr = (a: any, b: any) => uniqStrs([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]);
+  const hasVal = (v: any) => {
+    if (v === null || v === undefined) return false;
+    if (typeof v === "string") return v.trim().length > 0;
+    if (typeof v === "number") return Number.isFinite(v);
+    if (typeof v === "boolean") return true;
+    if (Array.isArray(v)) return v.length > 0;
+    if (typeof v === "object") return Object.keys(v).length > 0;
+    return false;
+  };
+  const mergeObjNonEmpty = (p: any, n: any) => {
+    const out: any = { ...(p && typeof p === "object" ? p : {}) };
+    if (!n || typeof n !== "object") return out;
+    for (const [k, v] of Object.entries(n)) {
+      if (!hasVal(v)) continue;
+      out[k] = v;
+    }
+    return out;
+  };
+
+  const primary = chars[pi] || {};
+  const draft = body.draft as any;
+  const merged = {
+    ...primary,
+    ...draft,
+    name: primaryName,
+    // locks 始终以主角色为准，避免 AI 覆盖用户锁定意图
+    locks: hasVal(primary.locks) ? primary.locks : draft.locks,
+    tags: Array.isArray(draft.tags) ? mergeStrArr([], draft.tags).slice(0, 30) : primary.tags,
+    updatedAt: now
+  };
+  // 清洗对象字段（避免 draft 传 null 直接抹掉）
+  merged.state = mergeObjNonEmpty(primary.state, draft.state);
+  merged.socialTags = mergeObjNonEmpty(primary.socialTags, draft.socialTags);
+  merged.narrativeDrives = mergeObjNonEmpty(primary.narrativeDrives, draft.narrativeDrives);
+  merged.fingerprints = mergeObjNonEmpty(primary.fingerprints, draft.fingerprints);
+  merged.relationalHooks = mergeObjNonEmpty(primary.relationalHooks, draft.relationalHooks);
+
+  // 替换主角色条目、移除次角色条目
+  const nextChars = chars
+    .filter((c: any) => !secondaryNames.includes(String(c?.name || "").trim()))
+    .map((c: any) => (String(c?.name || "").trim() === primaryName ? merged : c));
+
+  // 修正全局引用：relations[].targetName 指向 secondaryName → primaryName
+  for (const c of nextChars) {
+    const rh = (c as any)?.relationalHooks;
+    if (rh && typeof rh === "object" && Array.isArray((rh as any).relations)) {
+      (rh as any).relations = (rh as any).relations
+        .map((r: any) => {
+          const t = normStr(r?.targetName);
+          if (!t) return null;
+          return { ...(r || {}), targetName: secondaryNames.includes(t) ? primaryName : t };
+        })
+        .filter(Boolean);
+    }
+  }
+  // hiddenNames：移除所有 secondary
+  const hiddenSet = new Set((idx.hiddenNames || []).map((x: any) => String(x)));
+  for (const n of secondaryNames) hiddenSet.delete(n);
+  idx.hiddenNames = [...hiddenSet];
+
+  idx.characters = nextChars.sort((a: any, b: any) => String(a?.name || "").localeCompare(String(b?.name || ""), "zh-Hans-CN"));
   idx.updatedAt = now;
   await writeAuditCharactersIndex(dataDir, params.slug, idx);
   return { ok: true, index: idx };
