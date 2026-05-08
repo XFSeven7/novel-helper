@@ -287,6 +287,26 @@ export async function updateAuditPlace(
   });
 }
 
+export async function previewMergeAuditPlaces(
+  slug: string,
+  input: { primaryName: string; secondaryNames: string[]; modelConfigId: string | null }
+) {
+  return await http<{ ok: true; draft: any }>(`/api/books/${encodeURIComponent(slug)}/audit/places/merge/preview`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function applyMergeAuditPlaces(
+  slug: string,
+  input: { primaryName: string; secondaryNames: string[]; draft: any }
+) {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/places/merge/apply`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
 export async function getAuditOrgs(slug: string) {
   return await http<{ index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/orgs`);
 }

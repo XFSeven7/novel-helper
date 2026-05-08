@@ -52,6 +52,8 @@ import {
   updateAuditCharacter,
   getAuditPlaces,
   hideAuditPlace,
+  previewMergeAuditPlaces,
+  applyMergeAuditPlaces,
   updateAuditPlace,
   getAuditOrgs,
   hideAuditOrg,
@@ -1089,6 +1091,11 @@ export function App() {
   const [editPlaceName, setEditPlaceName] = useState("");
   const [editPlaceDesc, setEditPlaceDesc] = useState("");
   const [editPlaceLastNote, setEditPlaceLastNote] = useState("");
+  const [mergePlaceOpen, setMergePlaceOpen] = useState(false);
+  const [mergePlaceSelected, setMergePlaceSelected] = useState<Record<string, boolean>>({});
+  const [mergePlaceDraft, setMergePlaceDraft] = useState<any | null>(null);
+  const [mergePlaceDraftText, setMergePlaceDraftText] = useState("");
+  const [mergePlaceDraftBusy, setMergePlaceDraftBusy] = useState(false);
   const [placeGroupCollapsed, setPlaceGroupCollapsed] = useState<Record<string, boolean>>({});
   const [placeTextExpanded, setPlaceTextExpanded] = useState<Record<string, boolean>>({});
   const [hiddenCharPanelOpen, setHiddenCharPanelOpen] = useState(false);
@@ -1750,6 +1757,10 @@ export function App() {
     setEditPlaceName(name);
     setEditPlaceDesc(String(p?.description || "").trim());
     setEditPlaceLastNote(String(p?.lastNote || "").trim());
+    setMergePlaceOpen(false);
+    setMergePlaceSelected({});
+    setMergePlaceDraft(null);
+    setMergePlaceDraftText("");
     setEditPlaceOpen(true);
   }
 
@@ -3468,20 +3479,25 @@ export function App() {
                                               </span>
                                             </button>
                                             {!collapsed ? (
-                                              <div className="placeGroupBody">
+                                              <div className="placeGroupBody placeGroupBodyCompact">
                                                 {list.map((p) => {
                                                   const key = `${g}::${p.name}`;
                                                   const expanded = !!placeTextExpanded[key];
                                                   const noteText = String(p.lastNote || "").trim() || "—";
                                                   const noteNeedToggle = noteText.length >= 36;
+                                                  const descText = String(p.description || "").trim() || "—";
+                                                  const meta = p.lastChapter ? `第 ${p.lastChapter} 章` : "";
                                                   return (
-                                                    <div key={p.name} className="placeCard" data-place-name={p.name}>
-                                                      <div className="placeCardTop">
-                                                        <div className="placeName">{p.name}</div>
-                                                        <div className="row">
+                                                    <div key={p.name} className="placeItem" data-place-name={p.name}>
+                                                      <div className="placeItemTop">
+                                                        <div className="placeItemTitleRow">
+                                                          <div className="placeName">{p.name}</div>
+                                                          {meta ? <div className="muted placeItemMeta">{meta}</div> : null}
+                                                        </div>
+                                                        <div className="row placeItemActions">
                                                           <button
                                                             type="button"
-                                                            className="btnSort"
+                                                            className="btnMini"
                                                             disabled={busy || !activeBook}
                                                             onClick={() => openEditPlace(p)}
                                                           >
@@ -3489,15 +3505,12 @@ export function App() {
                                                           </button>
                                                           <button
                                                             type="button"
-                                                            className="btnSort"
+                                                            className="btnMini"
                                                             disabled={busy || !activeBook}
                                                             onClick={async () => {
                                                               if (!activeBook) return;
                                                               try {
-                                                                const { index } = await hideAuditPlace(activeBook, {
-                                                                  name: p.name,
-                                                                  hidden: true
-                                                                });
+                                                                const { index } = await hideAuditPlace(activeBook, { name: p.name, hidden: true });
                                                                 setAuditPlacesIndex(index);
                                                               } catch (e: any) {
                                                                 setStatus(e?.message || String(e));
@@ -3508,33 +3521,27 @@ export function App() {
                                                           </button>
                                                         </div>
                                                       </div>
-                                                      <div className="placeBody">
-                                                        <div className="placeRow">
-                                                          <div className="placeLabel">简述</div>
-                                                          <div className="placeValue">{String(p.description || "").trim() || "—"}</div>
+
+                                                      <div className="placeItemBody">
+                                                        <div className="placeItemLine">
+                                                          <span className="placeItemLabel">简述</span>
+                                                          <span className="placeItemValue">{descText}</span>
                                                         </div>
-                                                        <div className="placeRow">
-                                                          <div className="placeLabel">本地发生</div>
-                                                          <div className="placeValue">
-                                                            <div className={expanded ? "placeNote" : "placeNote placeNoteClamp2"}>
-                                                              {noteText}
-                                                            </div>
+                                                        <div className="placeItemLine">
+                                                          <span className="placeItemLabel">本地发生</span>
+                                                          <span className="placeItemValue">
+                                                            <span className={expanded ? "placeNote" : "placeNote placeNoteClamp2"}>{noteText}</span>
                                                             {noteNeedToggle ? (
                                                               <button
                                                                 type="button"
                                                                 className="btnLinkMuted placeNoteToggle"
-                                                                onClick={() =>
-                                                                  setPlaceTextExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
-                                                                }
+                                                                onClick={() => setPlaceTextExpanded((prev) => ({ ...prev, [key]: !prev[key] }))}
                                                                 disabled={busy}
                                                               >
                                                                 {expanded ? "收起" : "…展开"}
                                                               </button>
                                                             ) : null}
-                                                          </div>
-                                                        </div>
-                                                        <div className="placeMeta muted">
-                                                          {p.lastChapter ? `最近出现：第 ${p.lastChapter} 章` : ""}
+                                                          </span>
                                                         </div>
                                                       </div>
                                                     </div>
@@ -5856,6 +5863,197 @@ export function App() {
             <h2 id="modal-edit-place-heading" className="modalHeading">
               编辑地点：{editPlaceName}
             </h2>
+
+            <div className="modalTopActions">
+              <button
+                type="button"
+                className="btnSort"
+                disabled={busy || !activeBook}
+                onClick={() => {
+                  setMergePlaceOpen((v) => !v);
+                  if (!Object.keys(mergePlaceSelected).some((k) => mergePlaceSelected[k])) setMergePlaceSelected({});
+                }}
+                title="合并其它地点到当前地点"
+              >
+                {mergePlaceOpen ? "收起合并" : "合并地点"}
+              </button>
+            </div>
+
+            {mergePlaceOpen ? (
+              <div className="modalField" style={{ marginTop: 10, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                {(() => {
+                  const primaryName = editPlaceName.trim();
+                  const all = Array.isArray(auditPlacesIndex?.places)
+                    ? (auditPlacesIndex.places as any[])
+                        .map((p) => ({ ...p, name: String(p?.name || "").trim() }))
+                        .filter((p) => p.name)
+                    : [];
+                  const similarityScore = (a: string, b: string) => {
+                    const A = String(a || "").trim();
+                    const B = String(b || "").trim();
+                    if (!A || !B) return -1;
+                    if (A === B) return 1e9;
+                    if (A.includes(B) || B.includes(A)) return 5e6 + Math.min(A.length, B.length) * 1000;
+                    let p = 0;
+                    for (let i = 0; i < Math.min(A.length, B.length); i++) {
+                      if (A[i] !== B[i]) break;
+                      p += 1;
+                    }
+                    const s1 = A.slice(0, 12);
+                    const s2 = B.slice(0, 12);
+                    const n = s1.length;
+                    const m = s2.length;
+                    const dp: number[] = new Array(m + 1);
+                    for (let j = 0; j <= m; j++) dp[j] = j;
+                    for (let i = 1; i <= n; i++) {
+                      let prev = dp[0];
+                      dp[0] = i;
+                      for (let j = 1; j <= m; j++) {
+                        const tmp = dp[j];
+                        const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+                        dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + cost);
+                        prev = tmp;
+                      }
+                    }
+                    const dist = dp[m];
+                    return p * 100000 - dist * 1000 - Math.abs(A.length - B.length);
+                  };
+
+                  const options = all
+                    .filter((p) => p.name !== primaryName)
+                    .map((p) => p.name)
+                    .sort((a, b) => {
+                      const sa = similarityScore(primaryName, a);
+                      const sb = similarityScore(primaryName, b);
+                      if (sa !== sb) return sb - sa;
+                      return a.localeCompare(b, "zh-Hans-CN");
+                    });
+                  const pickedList = options.filter((n) => mergePlaceSelected[n]);
+
+                  const doPreview = async () => {
+                    if (!activeBook) return;
+                    const secondaryNames = pickedList;
+                    if (!primaryName || secondaryNames.length < 1) return;
+                    setMergePlaceDraftBusy(true);
+                    setStatus("");
+                    try {
+                      const { draft } = await previewMergeAuditPlaces(activeBook, {
+                        primaryName,
+                        secondaryNames,
+                        modelConfigId: null
+                      });
+                      setMergePlaceDraft(draft);
+                      setMergePlaceDraftText(JSON.stringify(draft, null, 2));
+                    } catch (e: any) {
+                      setStatus(e?.message || String(e));
+                    } finally {
+                      setMergePlaceDraftBusy(false);
+                    }
+                  };
+
+                  const doApply = async () => {
+                    if (!activeBook) return;
+                    const secondaryNames = pickedList;
+                    if (!primaryName || secondaryNames.length < 1) return;
+                    if (!mergePlaceDraft) {
+                      setStatus("请先生成合并预览。");
+                      return;
+                    }
+                    const ok = window.confirm(
+                      `确认应用合并？\n\n保留：${primaryName}\n合并并移除：${secondaryNames.join("、")}\n\n提示：将按预览草稿写入地点库。`
+                    );
+                    if (!ok) return;
+                    setBusy(true);
+                    setStatus("");
+                    try {
+                      let draftObj: any = mergePlaceDraft;
+                      const text = mergePlaceDraftText.trim();
+                      if (text) {
+                        try {
+                          draftObj = JSON.parse(text);
+                        } catch {
+                          setStatus("预览 JSON 解析失败，请检查格式。");
+                          return;
+                        }
+                      }
+                      const { index } = await applyMergeAuditPlaces(activeBook, { primaryName, secondaryNames, draft: draftObj });
+                      setAuditPlacesIndex(index);
+                      setMergePlaceDraft(draftObj);
+                      setMergePlaceDraftText(JSON.stringify(draftObj, null, 2));
+                      setStatus("已合并。");
+                    } catch (e: any) {
+                      setStatus(e?.message || String(e));
+                    } finally {
+                      setBusy(false);
+                    }
+                  };
+
+                  return (
+                    <>
+                      <div className="muted" style={{ marginBottom: 8 }}>
+                        选择要合并进“{primaryName}”的其它地点（可多选）
+                      </div>
+                      <div className="checkList">
+                        {options.map((n) => (
+                          <label key={n} className="checkItem">
+                            <input
+                              type="checkbox"
+                              checked={!!mergePlaceSelected[n]}
+                              disabled={busy}
+                              onChange={(e) => setMergePlaceSelected((prev) => ({ ...prev, [n]: e.target.checked }))}
+                            />
+                            <span className="checkItemText">{n}</span>
+                          </label>
+                        ))}
+                      </div>
+
+                      <div className="modalActions" style={{ justifyContent: "flex-start", gap: 8, marginTop: 10 }}>
+                        <button type="button" className="btnModalSecondary" disabled={busy || mergePlaceDraftBusy} onClick={() => void doPreview()}>
+                          {mergePlaceDraftBusy ? "生成中…" : "生成合并预览（AI）"}
+                        </button>
+                        <button
+                          type="button"
+                          className="btnModalSecondary"
+                          disabled={busy}
+                          onClick={() => {
+                            setMergePlaceDraft(null);
+                            setMergePlaceDraftText("");
+                          }}
+                        >
+                          清空预览
+                        </button>
+                        <button
+                          type="button"
+                          className="btnModalPrimary"
+                          disabled={busy || !mergePlaceDraft}
+                          onClick={() => void doApply()}
+                        >
+                          开始合并
+                        </button>
+                      </div>
+
+                      {mergePlaceDraftText ? (
+                        <div className="modalField" style={{ marginTop: 10 }}>
+                          <label className="modalLabel" htmlFor="modal-merge-place-draft">
+                            合并预览（可编辑 JSON）
+                          </label>
+                          <textarea
+                            id="modal-merge-place-draft"
+                            className="modalTextarea"
+                            value={mergePlaceDraftText}
+                            onChange={(e) => setMergePlaceDraftText(e.target.value)}
+                            disabled={busy}
+                            rows={10}
+                            spellCheck={false}
+                          />
+                        </div>
+                      ) : null}
+                    </>
+                  );
+                })()}
+              </div>
+            ) : null}
+
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-place-desc">
                 地点描述

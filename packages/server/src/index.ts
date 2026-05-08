@@ -2454,6 +2454,155 @@ app.post("/api/books/:slug/audit/places/update", async (req, reply) => {
   return { ok: true, index: idx };
 });
 
+app.post("/api/books/:slug/audit/places/merge/preview", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({
+    primaryName: z.string().min(1),
+    secondaryNames: z.array(z.string().min(1)).min(1),
+    modelConfigId: z.string().nullable().optional()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+  const primaryName = body.primaryName.trim();
+  const secondaryNames = [...new Set(body.secondaryNames.map((s: string) => s.trim()).filter(Boolean))].filter(
+    (n) => n !== primaryName
+  );
+  if (!primaryName || secondaryNames.length < 1) return reply.code(400).send({ message: "参数非法" });
+
+  try {
+    const settings = await readModelSettings();
+    const activeId = body.modelConfigId ?? settings.activeId;
+    const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+    if (!cfg) throw new Error("未配置模型");
+
+    const idx = await readAuditPlacesIndex(dataDir, params.slug);
+    const places = Array.isArray(idx.places) ? idx.places : [];
+    const primary = places.find((p: any) => String(p?.name || "").trim() === primaryName);
+    const secondary = secondaryNames
+      .map((n) => places.find((p: any) => String(p?.name || "").trim() === n))
+      .filter(Boolean);
+    if (!primary || secondary.length !== secondaryNames.length) return reply.code(404).send({ message: "地点不存在" });
+
+    const prompt = [
+      "你是小说写作助手。现在要把“同一个地点”被拆分成的多个【地点条目】合并为一个。",
+      "",
+      "请严格输出 JSON（不要解释、不要 markdown、不要代码块）。",
+      "输出 JSON schema：",
+      JSON.stringify(
+        {
+          merged: {
+            name: primaryName,
+            description: "地点描述（可空）",
+            lastNote: "发生的事简述（可空）",
+            group: "可选分组名（可空）"
+          }
+        },
+        null,
+        2
+      ),
+      "",
+      "合并规则：",
+      "- name 必须等于主地点名。",
+      "- 对 description/lastNote 去重融合，不要机械拼接重复句。",
+      "- 如果 group 缺失，可根据地名推断一个大类（例如“青石村”）。",
+      "",
+      "主地点条目（primary）：",
+      JSON.stringify(primary || {}, null, 2),
+      "",
+      "待合并条目（secondary list）：",
+      JSON.stringify(secondary || [], null, 2),
+      "",
+      "现在输出 JSON："
+    ].join("\n");
+
+    const { model, providerOptions } = createAiSdkModel(cfg);
+    const { text } = await generateText({
+      model,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.2,
+      ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
+      providerOptions
+    } as any);
+    const parsed = JSON.parse(stripJsonFence(String(text || "")));
+    const merged = (parsed as any)?.merged;
+    if (!merged || typeof merged !== "object") throw new Error("模型未返回 merged 字段");
+    (merged as any).name = primaryName;
+    return { ok: true, draft: merged };
+  } catch (e: any) {
+    return reply.code(400).send({ message: e?.message || String(e) });
+  }
+});
+
+app.post("/api/books/:slug/audit/places/merge/apply", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({
+    primaryName: z.string().min(1),
+    secondaryNames: z.array(z.string().min(1)).min(1),
+    draft: z.any()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+  const primaryName = body.primaryName.trim();
+  const secondaryNames = [...new Set(body.secondaryNames.map((s: string) => s.trim()).filter(Boolean))].filter(
+    (n) => n !== primaryName
+  );
+  if (!primaryName || secondaryNames.length < 1) return reply.code(400).send({ message: "参数非法" });
+  if (!body.draft || typeof body.draft !== "object") return reply.code(400).send({ message: "draft 非法" });
+
+  const idx = await readAuditPlacesIndex(dataDir, params.slug);
+  const places = Array.isArray(idx.places) ? idx.places : [];
+  const pi = places.findIndex((p: any) => String(p?.name || "").trim() === primaryName);
+  if (pi < 0) return reply.code(404).send({ message: "地点不存在" });
+  for (const n of secondaryNames) {
+    if (!places.some((p: any) => String(p?.name || "").trim() === n)) return reply.code(404).send({ message: "地点不存在" });
+  }
+
+  const now = new Date().toISOString();
+  const hasVal = (v: any) => {
+    if (v === null || v === undefined) return false;
+    if (typeof v === "string") return v.trim().length > 0;
+    if (typeof v === "number") return Number.isFinite(v);
+    if (typeof v === "boolean") return true;
+    if (Array.isArray(v)) return v.length > 0;
+    if (typeof v === "object") return Object.keys(v).length > 0;
+    return false;
+  };
+  const mergeObjNonEmpty = (p: any, n: any) => {
+    const out: any = { ...(p && typeof p === "object" ? p : {}) };
+    if (!n || typeof n !== "object") return out;
+    for (const [k, v] of Object.entries(n)) {
+      if (!hasVal(v)) continue;
+      out[k] = v;
+    }
+    return out;
+  };
+
+  const primary = places[pi] || {};
+  const draft = body.draft as any;
+  const merged = {
+    ...primary,
+    ...draft,
+    name: primaryName,
+    updatedAt: now
+  };
+  const cleaned = mergeObjNonEmpty(primary, merged);
+  cleaned.name = primaryName;
+  cleaned.updatedAt = now;
+
+  const nextPlaces = places
+    .filter((p: any) => !secondaryNames.includes(String(p?.name || "").trim()))
+    .map((p: any) => (String(p?.name || "").trim() === primaryName ? cleaned : p));
+
+  const hiddenSet = new Set((idx.hiddenNames || []).map((x: any) => String(x)));
+  for (const n of secondaryNames) hiddenSet.delete(n);
+  idx.hiddenNames = [...hiddenSet];
+
+  idx.places = nextPlaces.sort((a: any, b: any) => String(a?.name || "").localeCompare(String(b?.name || ""), "zh-Hans-CN"));
+  idx.updatedAt = now;
+  await writeAuditPlacesIndex(dataDir, params.slug, idx);
+  return { ok: true, index: idx };
+});
+
 app.get("/api/books/:slug/audit/orgs", async (req) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);

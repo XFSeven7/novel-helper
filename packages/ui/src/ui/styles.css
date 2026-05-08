@@ -976,6 +976,33 @@ code {
   border-bottom: none;
 }
 
+.checkList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.checkItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  line-height: 1.35;
+}
+
+.checkItem > input[type="checkbox"] {
+  flex: none;
+  width: auto;
+  padding: 0;
+  margin-top: 2px;
+}
+
+.checkItemText {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .center {
   min-height: 0;
   display: flex;
@@ -1838,21 +1865,7 @@ code {
 .placeList {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.placeCard {
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  background: color-mix(in srgb, var(--panel2) 82%, transparent);
-  border-radius: 12px;
-  padding: 10px;
-}
-
-.placeCardTop {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
+  gap: 0;
 }
 
 .placeName {
@@ -1862,42 +1875,75 @@ code {
   overflow-wrap: anywhere;
 }
 
-.placeBody {
-  margin-top: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.placeGroupBodyCompact {
+  padding: 0;
+  gap: 0;
 }
 
-.placeRow {
+.placeItem {
+  padding: 8px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+.placeItemTop {
   display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 10px;
 }
 
-.placeLabel {
+.placeItemTitleRow {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.placeItemMeta {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.placeItemActions {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.placeItemBody {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.placeItemLine {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.placeItemLabel {
   width: 62px;
   flex-shrink: 0;
   font-size: 12px;
   color: color-mix(in srgb, var(--text) 72%, transparent);
 }
 
-.placeValue {
+.placeItemValue {
   flex: 1;
   font-size: 12px;
-  line-height: 1.55;
+  line-height: 1.5;
   overflow-wrap: anywhere;
   word-break: break-word;
-}
-
-.placeMeta {
-  font-size: 12px;
+  min-width: 0;
 }
 
 .placeGroup {
-  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-  background: color-mix(in srgb, var(--panel2) 70%, transparent);
+  border: 0;
+  background: transparent;
   border-radius: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .placeGroupHead {
@@ -1905,12 +1951,13 @@ code {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 0;
   background: transparent;
   color: var(--text);
   cursor: pointer;
   text-align: left;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
 }
 
 .placeGroupHead:hover:not(:disabled) {
@@ -1943,10 +1990,10 @@ code {
 }
 
 .placeGroupBody {
-  padding: 10px;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
 }
 
 .placeNoteClamp2 {
