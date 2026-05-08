@@ -4,8 +4,6 @@ import remarkGfm from "remark-gfm";
 import {
   CHARACTER_ROLE_OPTIONS,
   type CharacterRole,
-  MOBILE_PRESETS,
-  type MobilePresetId,
   MODEL_ACTIVE_ID_STORAGE_KEY,
   MODEL_CONFIGS_STORAGE_KEY,
   NAV_COLLAPSED_STORAGE_KEY,
@@ -63,6 +61,7 @@ import {
   updateAuditForeshadow,
   hideAuditForeshadow,
   getAuditProgress,
+  suggestChapterTitlesBatch,
   getWritingPack,
   generateWritingPack,
   getTimelineIndex,
@@ -728,7 +727,6 @@ export function App() {
   const [auditReadModeOn, setAuditReadModeOn] = useState(false);
   const [polishModeOn, setPolishModeOn] = useState(false);
   const [expandModeOn, setExpandModeOn] = useState(false);
-  const [mobilePreset, setMobilePreset] = useState<MobilePresetId>("iphone-14");
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => loadThemePreference());
   const [fullscreenOn, setFullscreenOn] = useState(false);
   const [{ configs: modelConfigs, activeId: activeModelId }, setModelState] = useState(() =>
@@ -754,6 +752,15 @@ export function App() {
   const [bookOverviewAutosaveHint, setBookOverviewAutosaveHint] = useState("");
   const [chapterRenameDraft, setChapterRenameDraft] = useState("");
   const [chapterTitleEditing, setChapterTitleEditing] = useState(false);
+  const [chapterTitleSuggestOpen, setChapterTitleSuggestOpen] = useState(false);
+  const [chapterTitleSuggestBusy, setChapterTitleSuggestBusy] = useState(false);
+  const [chapterTitleSuggestErr, setChapterTitleSuggestErr] = useState("");
+  const [chapterTitleSuggestList, setChapterTitleSuggestList] = useState<string[]>([]);
+  const [chapterTitleSuggestByStyle, setChapterTitleSuggestByStyle] = useState<Record<string, string[]>>({});
+  const [chapterTitleSuggestPicked, setChapterTitleSuggestPicked] = useState("");
+  const [chapterTitleSuggestStyle, setChapterTitleSuggestStyle] = useState<
+    "boom" | "suspense" | "hotblood" | "funny" | "poetic" | "minimal" | "normal"
+  >("boom");
 
   const chapterTitleInputRef = useRef<HTMLInputElement>(null);
   const chapterGapTitleInputRef = useRef<HTMLInputElement>(null);
@@ -835,9 +842,9 @@ export function App() {
   const chapterWordCount = useMemo(() => approximateWordCount(chapterContent || ""), [chapterContent]);
 
   const mobileViewport = useMemo(() => {
-    const preset = MOBILE_PRESETS.find((p) => p.id === mobilePreset) || MOBILE_PRESETS[1];
+    const preset = { w: 390, h: 844, label: "iPhone 14 (390×844)" };
     return { w: preset.w, h: preset.h, label: preset.label };
-  }, [mobilePreset]);
+  }, []);
 
   const showBookOverview = Boolean(activeBook && !selectedChapter);
 
@@ -2600,6 +2607,68 @@ export function App() {
     if (ok) setChapterTitleEditing(false);
   }
 
+  async function openChapterTitleSuggestModal() {
+    if (!activeBook || !selectedChapter) return;
+    setChapterTitleSuggestOpen(true);
+    setChapterTitleSuggestBusy(true);
+    setChapterTitleSuggestErr("");
+    setChapterTitleSuggestList([]);
+    setChapterTitleSuggestByStyle({});
+    setChapterTitleSuggestPicked("");
+    try {
+      await flushChapterSave();
+      const { results } = await suggestChapterTitlesBatch(activeBook, selectedChapter.filename, {
+        modelConfigId: activeModelId ?? null,
+        count: 5
+      });
+      const map: Record<string, string[]> = {};
+      for (const r of results || []) {
+        const style = String((r as any)?.style || "").trim();
+        const titles = Array.isArray((r as any)?.titles) ? (r as any).titles : [];
+        const uniq = [...new Set(titles.map((t: any) => String(t || "").trim()).filter(Boolean))].slice(0, 8) as string[];
+        if (style && uniq.length) map[style] = uniq;
+      }
+      setChapterTitleSuggestByStyle(map);
+      const firstStyle =
+        (["boom", "suspense", "hotblood", "funny", "poetic", "minimal", "normal"] as const).find((s) => map[s]?.length) ||
+        Object.keys(map)[0] ||
+        "boom";
+      setChapterTitleSuggestStyle(firstStyle as any);
+      const list = map[firstStyle] || [];
+      setChapterTitleSuggestList(list);
+      setChapterTitleSuggestPicked(list[0] || "");
+      if (!Object.keys(map).length) setChapterTitleSuggestErr("没有生成到可用的标题候选。");
+    } catch (e: any) {
+      setChapterTitleSuggestErr(e?.message || String(e));
+    } finally {
+      setChapterTitleSuggestBusy(false);
+    }
+  }
+
+  async function applySuggestedChapterTitle() {
+    if (!activeBook || !selectedChapter) return;
+    const picked = chapterTitleSuggestPicked.trim();
+    if (!picked) return;
+    setBusy(true);
+    setStatus("");
+    try {
+      await flushChapterSave();
+      const { chapter } = await renameChapter(activeBook, selectedChapter.filename, picked);
+      await refreshChapters(activeBook);
+      setSelectedChapter({ bookSlug: activeBook, filename: chapter.filename });
+      const { content } = await readChapter(activeBook, chapter.filename);
+      setChapterContent(content);
+      chapterBaselineRef.current = content;
+      setChapterRenameDraft(chapter.title);
+      setChapterTitleSuggestOpen(false);
+      setStatus("已应用章节标题。");
+    } catch (e: any) {
+      setStatus(e?.message || String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function onOpenCard(f: StoryFile) {
     if (!activeBook) return;
     setBusy(true);
@@ -4087,6 +4156,18 @@ export function App() {
                     >
                       {selectedChapterMeta.id}
                     </div>
+                    {canRenameChapterFilename ? (
+                      <button
+                        type="button"
+                        className="btnSquare"
+                        style={{ marginLeft: 8 }}
+                        disabled={busy || chapterTitleSuggestBusy}
+                        onClick={() => void openChapterTitleSuggestModal()}
+                        title="根据本章正文生成多个标题候选"
+                      >
+                        {chapterTitleSuggestBusy ? "生成中…" : "生成标题"}
+                      </button>
+                    ) : null}
                     <span
                       className={`titleAutosave autosaveHint ${
                         chapterAutosaveHint === "保存失败" ? "autosaveErr" : ""
@@ -4196,19 +4277,7 @@ export function App() {
                 >
                   {auditReadModeOn ? "退出审计" : "审计"}
                 </button>
-                <select
-                  className="select"
-                  value={mobilePreset}
-                  onChange={(e) => setMobilePreset(e.target.value as MobilePresetId)}
-                  disabled={busy || !mobileReading || polishModeOn || expandModeOn}
-                  title="常见机型尺寸预设"
-                >
-                  {MOBILE_PRESETS.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
+                {/* 移动端预览固定 iPhone 14 尺寸，不再提供机型切换 */}
               </div>
             ) : null}
           </div>
@@ -7059,6 +7128,117 @@ export function App() {
                 onClick={() => void confirmChapterGapFill()}
               >
                 补齐第 {chapterGapModalIndexes[0]} 章
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {chapterTitleSuggestOpen ? (
+        <div
+          className="modalBackdrop"
+          role="presentation"
+          onClick={() => {
+            if (!busy && !chapterTitleSuggestBusy) setChapterTitleSuggestOpen(false);
+          }}
+        >
+          <div
+            className="modalPanel modalPanelOpaque modalPanelLarge titleSuggestModal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-chapter-title-suggest-heading"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 id="modal-chapter-title-suggest-heading" className="modalHeading">
+              章节名候选
+            </h2>
+            <div className="muted titleSuggestCurrent">
+              {selectedChapterMeta ? `当前：${selectedChapterMeta.title}` : ""}
+            </div>
+            <div className="titleSuggestControls" role="radiogroup" aria-label="章节名生成风格">
+              {[
+                ["boom", "爆点"],
+                ["suspense", "悬疑钩子"],
+                ["hotblood", "热血燃"],
+                ["funny", "轻松幽默"],
+                ["poetic", "文艺质感"],
+                ["minimal", "极简有力"],
+                ["normal", "中性"]
+              ].map(([id, label]) => {
+                const disabledStyle = busy || chapterTitleSuggestBusy || !(chapterTitleSuggestByStyle as any)?.[id]?.length;
+                return (
+                  <label key={id} className={`titleSuggestStyleItem ${disabledStyle ? "disabled" : ""}`}>
+                    <input
+                      type="radio"
+                      name="chapterTitleStyle"
+                      value={id}
+                      checked={chapterTitleSuggestStyle === (id as any)}
+                      onChange={() => {
+                        const next = id as any;
+                        setChapterTitleSuggestStyle(next);
+                        const list = (chapterTitleSuggestByStyle as any)?.[id] || [];
+                        setChapterTitleSuggestList(list);
+                        setChapterTitleSuggestPicked(list[0] || "");
+                      }}
+                      disabled={disabledStyle}
+                    />
+                    <span>{label}</span>
+                  </label>
+                );
+              })}
+            </div>
+            {chapterTitleSuggestErr ? (
+              <div className="auditErrorBox titleSuggestErr">
+                <div className="auditErrorTitle">生成失败</div>
+                <div className="auditErrorMsg">{chapterTitleSuggestErr}</div>
+              </div>
+            ) : null}
+
+            {chapterTitleSuggestBusy ? (
+              <div className="muted">生成中…</div>
+            ) : chapterTitleSuggestList.length ? (
+              <div className="titleSuggestList" role="radiogroup" aria-label="章节名候选">
+                {chapterTitleSuggestList.map((t) => (
+                  <label key={t} className="titleSuggestItem">
+                    <input
+                      type="radio"
+                      name="chapterTitleSuggest"
+                      checked={chapterTitleSuggestPicked === t}
+                      onChange={() => setChapterTitleSuggestPicked(t)}
+                      disabled={busy}
+                    />
+                    <span className="titleSuggestText">{t}</span>
+                  </label>
+                ))}
+              </div>
+            ) : (
+              <div className="muted">暂无候选。</div>
+            )}
+
+            <div className="modalActions">
+              <button
+                type="button"
+                className="btnModalSecondary"
+                disabled={busy || chapterTitleSuggestBusy}
+                onClick={() => setChapterTitleSuggestOpen(false)}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="btnModalSecondary"
+                disabled={busy || chapterTitleSuggestBusy || !activeBook || !selectedChapter}
+                onClick={() => void openChapterTitleSuggestModal()}
+              >
+                重新生成
+              </button>
+              <button
+                type="button"
+                className="btnModalPrimary"
+                disabled={busy || chapterTitleSuggestBusy || !chapterTitleSuggestPicked.trim()}
+                onClick={() => void applySuggestedChapterTitle()}
+              >
+                使用该标题
               </button>
             </div>
           </div>

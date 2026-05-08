@@ -2446,6 +2446,180 @@ app.post("/api/books/:slug/writing-pack/generate", async (req, reply) => {
   }
 });
 
+app.post("/api/books/:slug/chapters/:filename/title/suggest", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1), filename: z.string().min(1) });
+  const bodySchema = z.object({
+    modelConfigId: z.string().nullable().optional(),
+    count: z.number().int().min(2).max(8).optional(),
+    style: z
+      .enum(["normal", "boom", "suspense", "hotblood", "funny", "poetic", "minimal"])
+      .optional()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+
+  try {
+    const settings = await readModelSettings();
+    const activeId = body.modelConfigId ?? settings.activeId;
+    const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+    if (!cfg) throw new Error("未配置模型");
+
+    const raw = await readChapter(dataDir, params.slug, params.filename);
+    const content = String(raw || "").slice(0, 12000);
+    const n = body.count ?? 5;
+    const style = body.style ?? "boom";
+
+    const styleGuide: Record<string, string> = {
+      normal: "中性、清晰、信息充分，略带网文味。",
+      boom: "爆点强、爽感强、冲突感强：更抓眼球，允许更有张力的动词与短语，但不要浮夸堆叠。",
+      suspense: "悬疑钩子强、疑问感强：强调信息差、反转、谜团，不要直接揭底。",
+      hotblood: "热血燃向：强调逆袭、硬刚、突破、压迫与反击的气势。",
+      funny: "轻松幽默：带一点反差和俏皮，但不要网络烂梗、不要太口水。",
+      poetic: "文艺质感：更有画面感与意象，但仍要像章节标题，不写散文句。",
+      minimal: "极简有力：4~10字优先，短促、干脆、像刀一样。"
+    };
+
+    const prompt = [
+      "你是网文小说编辑。请根据下面“章节正文”生成多个章节标题候选。",
+      `风格：${style}（${styleGuide[style] || styleGuide.boom}）`,
+      "",
+      "硬性要求：",
+      "- 只输出 JSON（不要解释、不要 markdown、不要代码块）。",
+      `- 生成 ${n} 个候选标题，放在 titles 数组里。`,
+      "- 标题必须是中文为主，简短有力，尽量 8~18 个字，不要书名号，不要句号。",
+      "- 标题要有“网文章节点”的味道：更像预告/钩子/名场面，而不是流水账概括。",
+      "- 不要捏造本章未出现的关键新设定/新角色。",
+      "- 尽量让每个候选标题风格一致但表达角度不同（冲突/反转/目标/代价/人物）。",
+      "",
+      "输出 schema：",
+      JSON.stringify({ titles: new Array(n).fill("标题候选") }, null, 2),
+      "",
+      "章节正文（可能截断）：",
+      content,
+      "",
+      "现在输出 JSON："
+    ].join("\n");
+
+    const { model, providerOptions } = createAiSdkModel(cfg);
+    const { text } = await generateText({
+      model,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.6,
+      ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
+      providerOptions
+    } as any);
+    const parsed = JSON.parse(stripJsonFence(String(text || "")));
+    const titlesRaw = Array.isArray((parsed as any)?.titles) ? (parsed as any).titles : [];
+    const titles = titlesRaw
+      .map((t: any) =>
+        String(t || "")
+          .replace(/[“”"'《》<>]/g, "")
+          .replace(/[。！？!?]+$/g, "")
+          .trim()
+      )
+      .map((t: string) => t.replace(/^第\s*\d+\s*章[:：]?\s*/g, "").trim())
+      .filter((t: string) => t.length >= 2 && t.length <= 40)
+      .slice(0, n);
+    if (!titles.length) throw new Error("模型未返回标题候选");
+    return { ok: true, titles };
+  } catch (e: any) {
+    return reply.code(400).send({ message: e?.message || String(e) });
+  }
+});
+
+app.post("/api/books/:slug/chapters/:filename/title/suggest/batch", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1), filename: z.string().min(1) });
+  const bodySchema = z.object({
+    modelConfigId: z.string().nullable().optional(),
+    count: z.number().int().min(2).max(8).optional(),
+    styles: z
+      .array(z.enum(["normal", "boom", "suspense", "hotblood", "funny", "poetic", "minimal"]))
+      .min(1)
+      .max(10)
+      .optional()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+
+  const styleGuide: Record<string, string> = {
+    normal: "中性、清晰、信息充分，略带网文味。",
+    boom: "爆点强、爽感强、冲突感强：更抓眼球，允许更有张力的动词与短语，但不要浮夸堆叠。",
+    suspense: "悬疑钩子强、疑问感强：强调信息差、反转、谜团，不要直接揭底。",
+    hotblood: "热血燃向：强调逆袭、硬刚、突破、压迫与反击的气势。",
+    funny: "轻松幽默：带一点反差和俏皮，但不要网络烂梗、不要太口水。",
+    poetic: "文艺质感：更有画面感与意象，但仍要像章节标题，不写散文句。",
+    minimal: "极简有力：4~10字优先，短促、干脆、像刀一样。"
+  };
+  const sanitizeTitles = (parsed: any, n: number): string[] => {
+    const titlesRaw = Array.isArray(parsed?.titles) ? parsed.titles : [];
+    return titlesRaw
+      .map((t: any) =>
+        String(t || "")
+          .replace(/[“”"'《》<>]/g, "")
+          .replace(/[。！？!?]+$/g, "")
+          .trim()
+      )
+      .map((t: string) => t.replace(/^第\s*\d+\s*章[:：]?\s*/g, "").trim())
+      .filter((t: string) => t.length >= 2 && t.length <= 40)
+      .slice(0, n);
+  };
+
+  try {
+    const settings = await readModelSettings();
+    const activeId = body.modelConfigId ?? settings.activeId;
+    const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+    if (!cfg) throw new Error("未配置模型");
+
+    const raw = await readChapter(dataDir, params.slug, params.filename);
+    const content = String(raw || "").slice(0, 12000);
+    const n = body.count ?? 5;
+    const styles = body.styles?.length
+      ? body.styles
+      : (["boom", "suspense", "hotblood", "funny", "poetic", "minimal", "normal"] as const);
+
+    const { model, providerOptions } = createAiSdkModel(cfg);
+    const results: Array<{ style: string; titles: string[] }> = [];
+    for (const style of styles) {
+      const prompt = [
+        "你是网文小说编辑。请根据下面“章节正文”生成多个章节标题候选。",
+        `风格：${style}（${styleGuide[String(style)] || styleGuide.boom}）`,
+        "",
+        "硬性要求：",
+        "- 只输出 JSON（不要解释、不要 markdown、不要代码块）。",
+        `- 生成 ${n} 个候选标题，放在 titles 数组里。`,
+        "- 标题必须是中文为主，简短有力，尽量 8~18 个字（极简风格可更短），不要书名号，不要句号。",
+        "- 标题要有“网文章节点”的味道：更像预告/钩子/名场面，而不是流水账概括。",
+        "- 不要捏造本章未出现的关键新设定/新角色。",
+        "- 尽量让每个候选标题风格一致但表达角度不同（冲突/反转/目标/代价/人物）。",
+        "",
+        "输出 schema：",
+        JSON.stringify({ titles: new Array(n).fill("标题候选") }, null, 2),
+        "",
+        "章节正文（可能截断）：",
+        content,
+        "",
+        "现在输出 JSON："
+      ].join("\n");
+
+      const { text } = await generateText({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.7,
+        ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
+        providerOptions
+      } as any);
+
+      const parsed = JSON.parse(stripJsonFence(String(text || "")));
+      const titles = sanitizeTitles(parsed, n);
+      results.push({ style: String(style), titles });
+    }
+
+    return { ok: true, results };
+  } catch (e: any) {
+    return reply.code(400).send({ message: e?.message || String(e) });
+  }
+});
+
 app.get("/api/books/:slug/timeline/index", async (req) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);

@@ -114,6 +114,36 @@ export async function renameChapter(slug: string, filename: string, title: strin
   );
 }
 
+export async function suggestChapterTitles(
+  slug: string,
+  filename: string,
+  input: {
+    modelConfigId: string | null;
+    count?: number;
+    style?: "normal" | "boom" | "suspense" | "hotblood" | "funny" | "poetic" | "minimal";
+  }
+) {
+  return await http<{ ok: true; titles: string[] }>(
+    `/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}/title/suggest`,
+    { method: "POST", body: JSON.stringify(input) }
+  );
+}
+
+export async function suggestChapterTitlesBatch(
+  slug: string,
+  filename: string,
+  input: {
+    modelConfigId: string | null;
+    count?: number;
+    styles?: Array<"normal" | "boom" | "suspense" | "hotblood" | "funny" | "poetic" | "minimal">;
+  }
+) {
+  return await http<{ ok: true; results: Array<{ style: string; titles: string[] }> }>(
+    `/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}/title/suggest/batch`,
+    { method: "POST", body: JSON.stringify(input) }
+  );
+}
+
 export async function deleteChapter(slug: string, filename: string) {
   return await http<{ ok: true }>(
     `/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}`,

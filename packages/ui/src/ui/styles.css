@@ -3440,3 +3440,83 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis) {
   }
 }
 
+/* 章节标题候选弹窗：不透明 + 紧凑布局 */
+.titleSuggestModal {
+  padding: 16px 18px;
+}
+
+.titleSuggestCurrent {
+  margin-bottom: 10px;
+}
+
+.titleSuggestControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  margin-bottom: 10px;
+}
+
+.titleSuggestStyleItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  cursor: pointer;
+  user-select: none;
+}
+
+.titleSuggestStyleItem.disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.titleSuggestStyleItem input[type="radio"] {
+  width: auto;
+  padding: 0;
+}
+
+.titleSuggestErr {
+  margin-bottom: 10px;
+}
+
+.titleSuggestList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 44vh;
+  overflow: auto;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.titleSuggestItem {
+  display: grid;
+  grid-template-columns: 18px 1fr;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--bg) 72%, transparent);
+  cursor: pointer;
+}
+
+.titleSuggestItem:hover {
+  background: color-mix(in srgb, var(--bg) 84%, transparent);
+}
+
+.titleSuggestItem input[type="radio"] {
+  margin-top: 2px;
+  width: auto;
+  padding: 0;
+}
+
+.titleSuggestText {
+  min-width: 0;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
