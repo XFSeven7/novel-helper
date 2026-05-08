@@ -78,6 +78,13 @@ export type AuditRun = {
     wordCount: number;
     auditedAt: string;
   };
+  /** 该次分析基于的正文快照信息，用于判断是否“过期” */
+  source?: {
+    /** 章节正文 hash（服务端计算，前端对比判断 dirty） */
+    contentHash: string;
+    /** 分析时正文长度（字符数，便于提示变更幅度） */
+    contentLength: number;
+  };
   gistL1: string;
   entities: {
     characters: Array<{

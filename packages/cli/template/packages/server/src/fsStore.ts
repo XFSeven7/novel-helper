@@ -71,6 +71,10 @@ export type AuditRun = {
     wordCount: number;
     auditedAt: string;
   };
+  source?: {
+    contentHash: string;
+    contentLength: number;
+  };
   gistL1: string;
   entities: {
     characters: Array<{

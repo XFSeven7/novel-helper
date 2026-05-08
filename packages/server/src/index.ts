@@ -1135,6 +1135,18 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
   run.ledgerUpdates = run.ledgerUpdates || { openLoops: [], closedLoops: [] };
   run.uiInjection = run.uiInjection || { spotlightCharacters: [], spotlightTags: [] };
 
+  // 绑定分析到“正文快照”（用于前端 dirty 判断）
+  try {
+    const raw = await readChapter(dataDir, slug, filename);
+    const normalized = String(raw || "").replace(/\r/g, "");
+    const hash = crypto.createHash("sha1").update(normalized, "utf8").digest("hex");
+    run.source = { contentHash: hash, contentLength: normalized.length };
+    // 若模型输出的 wordCount 不可靠，至少确保存在
+    if (!Number.isFinite(Number(run?.chapter?.wordCount))) run.chapter.wordCount = normalized.length;
+  } catch {
+    // ignore: 不阻断审计落盘
+  }
+
   await writeAuditRun(dataDir, slug, filename, run);
 
   const idx = await readAuditCharactersIndex(dataDir, slug);

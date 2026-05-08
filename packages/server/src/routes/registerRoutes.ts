@@ -1,6 +1,7 @@
 import { z } from "zod";
 import fs from "node:fs/promises";
 import path from "node:path";
+import crypto from "node:crypto";
 import { generateText, streamText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
@@ -650,6 +651,17 @@ export async function registerRoutes(app: any, input: { dataDir: string }) {
     run.compression = run.compression || { l2Pruning: null, mergeCandidates: null };
     run.ledgerUpdates = run.ledgerUpdates || { openLoops: [], closedLoops: [] };
     run.uiInjection = run.uiInjection || { spotlightCharacters: [], spotlightTags: [] };
+
+    // 绑定分析到“正文快照”（用于前端 dirty 判断）
+    try {
+      const raw = await readChapter(dataDir, slug, filename);
+      const normalized = String(raw || "").replace(/\r/g, "");
+      const hash = crypto.createHash("sha1").update(normalized, "utf8").digest("hex");
+      run.source = { contentHash: hash, contentLength: normalized.length };
+      if (!Number.isFinite(Number(run?.chapter?.wordCount))) run.chapter.wordCount = normalized.length;
+    } catch {
+      // ignore
+    }
 
     await writeAuditRun(dataDir, slug, filename, run);
 

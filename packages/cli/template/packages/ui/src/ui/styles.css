@@ -2729,6 +2729,31 @@ button:disabled {
   gap: 10px;
 }
 
+.auditDirtyBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, #f5c542 55%, var(--border));
+  background: color-mix(in srgb, #f5c542 14%, var(--panel));
+  color: color-mix(in srgb, var(--text) 92%, #000);
+}
+
+.auditDirtyText {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+}
+
+.auditDirtyMeta {
+  margin-left: 6px;
+  font-weight: 400;
+}
+
 /* 全局 .muted 默认单行省略；分析摘要 / 一致性问题等需要完整换行展示 */
 .auditPanel .muted {
   white-space: normal;

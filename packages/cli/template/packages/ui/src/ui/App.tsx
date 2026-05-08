@@ -1022,6 +1022,8 @@ export function App() {
   }, [modelConfigs, activeModelId]);
 
   const [auditRun, setAuditRun] = useState<any | null>(null);
+  const [auditDirty, setAuditDirty] = useState(false);
+  const [auditDirtyDelta, setAuditDirtyDelta] = useState<{ abs: number; ratio: number } | null>(null);
   const [timelineIndex, setTimelineIndex] = useState<TimelineIndex | null>(null);
   const [timelineBusy, setTimelineBusy] = useState(false);
   const [timelineCompressStart, setTimelineCompressStart] = useState("");
@@ -1045,6 +1047,47 @@ export function App() {
   const [auditPlacesIndex, setAuditPlacesIndex] = useState<any | null>(null);
   const [auditOrgsIndex, setAuditOrgsIndex] = useState<any | null>(null);
   const [auditForeshadowsIndex, setAuditForeshadowsIndex] = useState<any | null>(null);
+
+  async function sha1Hex(text: string): Promise<string> {
+    const normalized = String(text || "").replace(/\r/g, "");
+    const buf = new TextEncoder().encode(normalized);
+    const digest = await crypto.subtle.digest("SHA-1", buf);
+    const bytes = Array.from(new Uint8Array(digest));
+    return bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  useEffect(() => {
+    const auditedHash = String((auditRun as any)?.source?.contentHash || "").trim();
+    const auditedLenRaw = Number((auditRun as any)?.source?.contentLength);
+    if (!selectedChapter || !auditedHash) {
+      setAuditDirty(false);
+      setAuditDirtyDelta(null);
+      return;
+    }
+    let cancelled = false;
+    const current = String(chapterContentRef.current || "");
+    void (async () => {
+      try {
+        const curHash = await sha1Hex(current);
+        if (cancelled) return;
+        const dirty = curHash !== auditedHash;
+        setAuditDirty(dirty);
+        const curLen = String(current || "").replace(/\r/g, "").length;
+        const baseLen = Number.isFinite(auditedLenRaw) ? auditedLenRaw : 0;
+        const abs = Math.abs(curLen - baseLen);
+        const ratio = baseLen > 0 ? abs / baseLen : curLen > 0 ? 1 : 0;
+        setAuditDirtyDelta(dirty ? { abs, ratio } : null);
+      } catch {
+        if (cancelled) return;
+        setAuditDirty(false);
+        setAuditDirtyDelta(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- auditedHash/len 来自 auditRun
+  }, [selectedChapter?.filename, auditRun, chapterContent]);
 
   const [foreshadowCreateOpen, setForeshadowCreateOpen] = useState(false);
   const [foreshadowCreateTitle, setForeshadowCreateTitle] = useState("");
@@ -3944,6 +3987,27 @@ export function App() {
                     <div className="auditPanel">
                       {auditRun ? (
                         <div className="auditPanelBody">
+                          {auditDirty ? (
+                            <div className="auditDirtyBar" role="status" aria-label="分析可能过期提示">
+                              <div className="auditDirtyText">
+                                正文已修改，分析可能过期
+                                {auditDirtyDelta ? (
+                                  <span className="auditDirtyMeta muted">
+                                    （约 {auditDirtyDelta.abs} 字变动 · {(auditDirtyDelta.ratio * 100).toFixed(0)}%）
+                                  </span>
+                                ) : null}
+                              </div>
+                              <button
+                                type="button"
+                                className="btnSquare"
+                                disabled={busy || auditBusy || !okModelConfigs.length}
+                                onClick={() => void onAuditSelectedChapter()}
+                                title={!okModelConfigs.length ? "请先在「模型配置」里测试连接" : "重新分析本章以同步内容整理"}
+                              >
+                                重新分析
+                              </button>
+                            </div>
+                          ) : null}
                           <div className="auditPanelTitle">本章摘要</div>
                           <div className="auditPanelMuted muted">
                             {auditRun?.chapter?.filename ? `来源：${auditRun.chapter.filename}` : "未选择章节"}
