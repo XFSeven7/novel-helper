@@ -841,6 +841,11 @@ export function App() {
 
   const chapterWordCount = useMemo(() => approximateWordCount(chapterContent || ""), [chapterContent]);
 
+  const bookTotalWordCount = useMemo(() => {
+    const list = Array.isArray(chapters) ? chapters : [];
+    return list.reduce((sum, c) => sum + (Number(c?.wordCount) || 0), 0);
+  }, [chapters]);
+
   const mobileViewport = useMemo(() => {
     const preset = { w: 390, h: 844, label: "iPhone 14 (390×844)" };
     return { w: preset.w, h: preset.h, label: preset.label };
@@ -4191,6 +4196,8 @@ export function App() {
                 <span>{activeBookMeta.status}</span>
                 <span className="centerMetaSep">·</span>
                 <span>{activeBookMeta.chapterCount} 章</span>
+                <span className="centerMetaSep">·</span>
+                <span>总字数：{bookTotalWordCount}</span>
                 <span className="centerMetaSep">·</span>
                 <span className="muted">标识 {activeBookMeta.slug}</span>
               </div>
