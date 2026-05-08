@@ -2242,6 +2242,33 @@ export function App() {
       setStatus("没有可用模型：请先在「模型配置」里测试连接，连接成功后再分析。");
       return;
     }
+
+    // 提醒：如果本章之前存在未分析章节，直接分析本章可能遗漏上下文
+    try {
+      const parseNo = (filename: string) => {
+        const m = String(filename || "").match(/^(\d+)[_\.]/);
+        const n = Math.floor(Number(m?.[1] || ""));
+        return Number.isFinite(n) && n > 0 ? n : null;
+      };
+      const curNo = parseNo(selectedChapter.filename);
+      if (curNo != null && chapters.length) {
+        const prevMissing = chapters
+          .map((c) => ({ fn: c.filename, no: parseNo(c.filename) }))
+          .filter((x) => x.no != null && (x.no as number) < curNo && !auditedChapterFilenameSet.has(x.fn))
+          .map((x) => x.no as number)
+          .sort((a, b) => a - b);
+        const uniq = [...new Set(prevMissing)].slice(0, 24);
+        if (uniq.length) {
+          const ok = window.confirm(
+            `提示：检测到本章之前仍有未分析章节：第 ${uniq.join("、")} 章。\n\n直接分析本章可能会出现内容遗漏。\n\n仍要继续分析本章吗？`
+          );
+          if (!ok) return;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
     if (auditRunningChapter && auditRunningChapter.bookSlug === activeBook && auditRunningChapter.filename !== selectedChapter.filename) {
       const runningMeta = chapters.find((x) => x.filename === auditRunningChapter.filename);
       const noFromName = Number(String(auditRunningChapter.filename).match(/^(\d+)/)?.[1] || "");
