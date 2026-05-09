@@ -86,6 +86,97 @@ import type { BookSearchGroup, BookSearchHit } from "./api";
 type SelectedChapter = { bookSlug: string; filename: string } | null;
 type SelectedCard = { bookSlug: string; path: string } | null;
 
+/** 灵感库 · 地点生成落库的 JSON content 结构 */
+type InspirationPlaceContent = {
+  atmosphere?: string;
+  layout?: string;
+  functions?: string;
+  hazards?: string;
+  hidden_hooks?: string;
+  sensory_fingerprints?: { sound?: string; visual?: string; smell?: string };
+  relationship_hooks?: Array<{ target?: string; nature?: string; description?: string }>;
+};
+
+function parseInspirationPlaceContent(raw: string): InspirationPlaceContent | null {
+  const t = String(raw || "").trim();
+  if (!t.startsWith("{")) return null;
+  try {
+    const o = JSON.parse(t) as Record<string, unknown>;
+    if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+    const keys = [
+      "atmosphere",
+      "layout",
+      "functions",
+      "hazards",
+      "hidden_hooks",
+      "sensory_fingerprints",
+      "relationship_hooks"
+    ];
+    if (!keys.some((k) => Object.prototype.hasOwnProperty.call(o, k))) return null;
+    return o as InspirationPlaceContent;
+  } catch {
+    return null;
+  }
+}
+
+function inspirationPlaceCollapsedBlurb(data: InspirationPlaceContent, title: string): string {
+  const a = String(data.atmosphere || "").trim();
+  if (a) return a.length > 140 ? `${a.slice(0, 140)}…` : a;
+  const l = String(data.layout || "").trim();
+  if (l) return l.length > 140 ? `${l.slice(0, 140)}…` : l;
+  return title ? `「${title}」` : "地点卡";
+}
+
+function InspirationPlaceStructuredView({ data }: { data: InspirationPlaceContent }) {
+  const sf = data.sensory_fingerprints;
+  const hooks = Array.isArray(data.relationship_hooks) ? data.relationship_hooks : [];
+  const row = (label: string, body: string) =>
+    body.trim() ? (
+      <div className="inspirationPlaceBlock">
+        <div className="inspirationPlaceLabel">{label}</div>
+        <div className="inspirationPlaceBody">{body.trim()}</div>
+      </div>
+    ) : null;
+  return (
+    <div className="inspirationPlaceCard">
+      {row("氛围", String(data.atmosphere || ""))}
+      {row("空间布局", String(data.layout || ""))}
+      {row("功能用途", String(data.functions || ""))}
+      {row("危险与限制", String(data.hazards || ""))}
+      {row("隐藏钩子 / 伏笔", String(data.hidden_hooks || ""))}
+      {sf && (sf.sound || sf.visual || sf.smell) ? (
+        <div className="inspirationPlaceBlock">
+          <div className="inspirationPlaceLabel">感官印记</div>
+          <div className="inspirationPlaceBody">
+            {sf.sound?.trim() ? <div>声：{sf.sound.trim()}</div> : null}
+            {sf.visual?.trim() ? <div>视：{sf.visual.trim()}</div> : null}
+            {sf.smell?.trim() ? <div>嗅：{sf.smell.trim()}</div> : null}
+          </div>
+        </div>
+      ) : null}
+      {hooks.length ? (
+        <div className="inspirationPlaceBlock">
+          <div className="inspirationPlaceLabel">关系钩子</div>
+          <div className="inspirationPlaceBody inspirationPlaceHooks">
+            {hooks.map((h, i) => {
+              const t = String(h?.target || "").trim();
+              const n = String(h?.nature || "").trim();
+              const d = String(h?.description || "").trim();
+              if (!t && !n && !d) return null;
+              return (
+                <div key={i} className="inspirationPlaceHook">
+                  {[t, n].filter(Boolean).join(" · ")}
+                  {d ? <div className="inspirationPlaceHookDesc">{d}</div> : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function friendlyAuditFieldKey(k: string): string {
   const map: Record<string, string> = {
     personality: "性格",
@@ -3222,7 +3313,7 @@ export function App() {
                   </div>
 
                   <div className="browserTabsBar" role="tablist" aria-label="左侧页签">
-                    <div className="browserTabsStrip">
+                    <div className="browserTabsStrip tabsWrap">
                       <button
                         type="button"
                         role="tab"
@@ -3338,7 +3429,7 @@ export function App() {
                         <div className="auditPanelBody">
                           {/* 顶部标题/刷新按钮移除：左侧 Tab 已是“灵感库”，保持面板紧凑 */}
 
-                          <div className="browserTabsBar" role="tablist" aria-label="灵感库分类" style={{ marginTop: 10 }}>
+                          <div className="browserTabsBar" role="tablist" aria-label="灵感库分类" style={{ marginTop: 0 }}>
                             <div className="browserTabsStrip tabsWrap">
                               <button
                                 type="button"
@@ -3393,7 +3484,7 @@ export function App() {
                             </div>
                           </div>
 
-                          <div className="browserTabsBar" role="tablist" aria-label="灵感库功能" style={{ marginTop: 8 }}>
+                          <div className="browserTabsBar" role="tablist" aria-label="灵感库功能" style={{ marginTop: 0 }}>
                             <div className="browserTabsStrip tabsWrap">
                               <button
                                 type="button"
@@ -3533,7 +3624,7 @@ export function App() {
                                           setInspirationErr("");
                                           try {
                                             let options: any = {};
-                                            if (kindForUi !== "character") {
+                                            if (kindForUi !== "character" && kindForUi !== "place") {
                                               const t = genOptionsJson.trim();
                                               if (t) {
                                                 try {
@@ -3608,7 +3699,11 @@ export function App() {
                                         className="auditTextarea"
                                         value={genFreeText}
                                         onChange={(e) => setGenFreeText(e.target.value)}
-                                        placeholder="自由输入（可选）：例如“更阴谋一点”“不要低俗”“与主角是盟友但暗藏私心”…"
+                                        placeholder={
+                                          inspirationTypeTab === "place"
+                                            ? "自由输入（可选）：例如「突出地形阻隔与可通行路线」「需要与势力分布联动的区域沙盘感」「边境/水系/制高点等地图锚点」「适合追缉或埋伏的街巷尺度」…"
+                                            : "自由输入（可选）：例如“更阴谋一点”“不要低俗”“与主角是盟友但暗藏私心”…"
+                                        }
                                         disabled={busy || inspirationBusy}
                                         style={{ marginTop: 0, minHeight: 70 }}
                                       />
@@ -3623,6 +3718,8 @@ export function App() {
                                             const saved = Boolean(savedIdSet[key]);
                                             const title = String(it.title || "").trim();
                                             const content = String(it.content || "").trim();
+                                            const placeParsed =
+                                              kindForUi === "place" ? parseInspirationPlaceContent(content) : null;
                                             const expanded = Boolean(inspirationExpanded[key]);
                                             const editing = inspirationEditingId === key;
                                             return (
@@ -3724,9 +3821,15 @@ export function App() {
                                                     />
                                                   </div>
                                                 ) : expanded ? (
-                                                  <div className="timelineRangeSummary" style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
-                                                    {content}
-                                                  </div>
+                                                  placeParsed ? (
+                                                    <div className="timelineRangeSummary" style={{ marginTop: 6 }}>
+                                                      <InspirationPlaceStructuredView data={placeParsed} />
+                                                    </div>
+                                                  ) : (
+                                                    <div className="timelineRangeSummary" style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
+                                                      {content}
+                                                    </div>
+                                                  )
                                                 ) : null}
                                               </div>
                                             );
@@ -3734,7 +3837,7 @@ export function App() {
                                         </div>
                                       </div>
                                     ) : null}
-                                    {kindForUi !== "character" ? (
+                                    {kindForUi !== "character" && kindForUi !== "place" ? (
                                       <textarea
                                         className="auditTextarea"
                                         value={genOptionsJson}
@@ -3796,6 +3899,8 @@ export function App() {
                                         const title = String(it.title || "").trim();
                                         const tags = Array.isArray(it.tags) ? it.tags : [];
                                         const content = String(it.content || "").trim();
+                                        const placeParsed =
+                                          it.subtype === "place" ? parseInspirationPlaceContent(content) : null;
                                         const expanded = Boolean(inspirationExpanded[it.id]);
                                         return (
                                           <div key={it.id} className="timelineRangeItem">
@@ -3877,12 +3982,18 @@ export function App() {
                                             ) : null}
 
                                             {expanded ? (
-                                              <div className="timelineRangeSummary" style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
-                                                {content}
-                                              </div>
+                                              placeParsed ? (
+                                                <div className="timelineRangeSummary" style={{ marginTop: 6 }}>
+                                                  <InspirationPlaceStructuredView data={placeParsed} />
+                                                </div>
+                                              ) : (
+                                                <div className="timelineRangeSummary" style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
+                                                  {content}
+                                                </div>
+                                              )
                                             ) : (
                                               <div className="timelineRangeSummary memoryClamp2" style={{ marginTop: 6 }}>
-                                                {content}
+                                                {placeParsed ? inspirationPlaceCollapsedBlurb(placeParsed, title) : content}
                                               </div>
                                             )}
 

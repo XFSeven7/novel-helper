@@ -142,6 +142,20 @@ function safeJsonParse<T = any>(raw: string): T | null {
   }
 }
 
+/** 地点卡等允许 content 为结构化对象；落库与 UI 统一为字符串 */
+function stringifyInspirationContent(subtypeOrKind: string, card: any): string {
+  const raw = card?.content;
+  if (raw == null) return "";
+  if (subtypeOrKind === "place" && typeof raw === "object" && !Array.isArray(raw)) {
+    try {
+      return JSON.stringify(raw, null, 2).trim();
+    } catch {
+      return String(raw).trim();
+    }
+  }
+  return String(raw).trim();
+}
+
 function newId(): string {
   return crypto.randomUUID();
 }
@@ -336,12 +350,61 @@ function buildInspirationPrompt(input: {
   }
 
   if (kind === "place") {
+    const memorySnapshot =
+      useMemory && String(memoryText || "").trim()
+        ? String(memoryText).trim()
+        : "（未启用全书记忆或无可用快照。）";
+    const coreDirection =
+      free || "设计一个能承载当前矛盾冲突、且具备探索深度的场景。";
+    const optsBlock =
+      opts && typeof opts === "object" && Object.keys(opts).length
+        ? ["【结构化可选项（来自用户 JSON）】", JSON.stringify(opts, null, 2), ""].join("\n")
+        : "";
+
     return [
-      ...common,
-      "【任务】只生成【地点卡】，不要生成角色/道具为主体。",
-      ...taskMetaLines,
-      "要求：title=地点名；content需包含：氛围/规则或危险/可写场景钩子(至少2条)。",
-      "现在输出 JSON 数组："
+      "你是一位顶尖的叙事场景设计师。你负责在给定的世界观框架下，策划具备强功能性、高辨识度且能激发冲突的【场景/地点灵感卡片】。",
+      "",
+      "地点设计逻辑",
+      "1. 容器原则：地点不仅是空间，更是‘矛盾的容器’。它必须为角色提供交互的可能性（如：藏身、交易、对峙）。",
+      "2. 资源与限制：每个地点必须明确‘它能提供什么’（资源/庇护）以及‘它禁止什么’（危险/规则）。",
+      "3. 叙事余波：地点应带有历史或事件的痕迹，体现世界观的宏观逻辑（如：战乱后的废墟、繁荣背后的阴影）。",
+      "4. 空间层次：描述需具备空间感（由远及近、由表及里），拒绝平铺直叙的形容词堆砌。",
+      "",
+      "## Context Injection (上下文对齐)",
+      "【全书记忆快照】",
+      memorySnapshot,
+      "",
+      placeLine,
+      optsBlock ? optsBlock : "",
+      "## Task Requirements (任务定义)",
+      `- 生成数量：${count}`,
+      `- 核心方向：${coreDirection}`,
+      "",
+      "只生成【地点卡】；不要以角色或道具作为卡片主体。title 必须与【当前书籍已存在地点名】中的任一条不同（禁止同名）。",
+      "",
+      "## Output Format (JSON Array)",
+      "请严格输出 JSON 数组（顶层为数组，长度等于生成数量），禁止任何解释说明、禁止 markdown、禁止代码块。每个对象必须包含：",
+      "{",
+      '  "title": "地点名称(需符合世界观风格)",',
+      '  "tags": ["环境类型", "危险等级", "功能属性"],',
+      '  "content": {',
+      '    "atmosphere": "核心氛围描述(通过光线、气味、温度等具体感官切入)",',
+      '    "layout": "空间布局简述(关键坐标点或视野层级)",',
+      '    "functions": "该地点能为角色提供的实际用途(如：疗伤、情报、隐匿)",',
+      '    "hazards": "该地点的潜在威胁、禁忌或环境限制(剧情压制力)",',
+      '    "hidden_hooks": "此处隐藏的秘密、伏笔或可能关联的业力点(与已知剧情挂钩)",',
+      '    "sensory_fingerprints": {',
+      '      "sound": "独特的背景声响",',
+      '      "visual": "具有视觉冲击力的标志性景物",',
+      '      "smell": "空气中弥漫的特征气味"',
+      "    },",
+      '    "relationship_hooks": [',
+      '      { "target": "已知势力/角色", "nature": "关联性质(如：领地、禁区、接头点)", "description": "具体的逻辑联系" }',
+      "    ]",
+      "  }",
+      "}",
+      "",
+      "若缺少已知关联信息，relationship_hooks 仍须输出数组（可为空数组 []），不得省略 content 内任一字段；字段内容尽量具体，避免空字符串占位。"
     ].join("\n");
   }
 
@@ -4326,7 +4389,7 @@ app.post("/api/books/:slug/inspiration/generate", async (req, reply) => {
   const now = new Date().toISOString();
   const items: IdeaItem[] = [];
   for (const c of cards.slice(0, count)) {
-    const content = String(c?.content ?? "").trim();
+    const content = stringifyInspirationContent(kind === "place" ? "place" : "", c);
     if (!content) continue;
     const it: IdeaItem = {
       id: newId(),
@@ -4407,7 +4470,7 @@ app.post("/api/books/:slug/inspiration/generate-preview", async (req, reply) => 
   const now = new Date().toISOString();
   const items: IdeaItem[] = [];
   for (const c of cards.slice(0, count)) {
-    const content = String(c?.content ?? "").trim();
+    const content = stringifyInspirationContent(kind === "place" ? "place" : "", c);
     if (!content) continue;
     items.push({
       id: newId(),
@@ -4501,7 +4564,7 @@ app.post("/api/books/:slug/inspiration/variant", async (req, reply) => {
   const now = new Date().toISOString();
   const items: IdeaItem[] = [];
   for (const c of cards.slice(0, count)) {
-    const content = String(c?.content ?? "").trim();
+    const content = stringifyInspirationContent(String(base.subtype || ""), c);
     if (!content) continue;
     items.push({
       id: newId(),

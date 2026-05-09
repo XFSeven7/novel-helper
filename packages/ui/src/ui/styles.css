@@ -1426,6 +1426,62 @@ code {
   margin-bottom: 0;
 }
 
+/* 灵感库：多层页签纵向间距收紧 */
+.inspirationPanelFlat .auditPanelBody {
+  margin-top: 0;
+  gap: 4px;
+}
+
+/* 灵感库 · 地点卡结构化展示 */
+.inspirationPlaceCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--text) 92%, var(--muted));
+}
+
+.inspirationPlaceBlock {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  padding-bottom: 8px;
+}
+
+.inspirationPlaceBlock:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.inspirationPlaceLabel {
+  font-weight: 650;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--text) 88%, var(--muted));
+  margin-bottom: 4px;
+  letter-spacing: 0.02em;
+}
+
+.inspirationPlaceBody {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.inspirationPlaceHooks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inspirationPlaceHook {
+  padding-left: 8px;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+}
+
+.inspirationPlaceHookDesc {
+  margin-top: 4px;
+  color: color-mix(in srgb, var(--muted) 88%, var(--text));
+}
+
 /* 写作包希望更“直角/紧凑”，不要圆角卡片感 */
 .writingPackPanel.auditPanel {
   border-radius: 0;
@@ -2751,6 +2807,8 @@ code {
   flex: none;
   margin: 0 -2px 0 0;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  overflow: visible;
+  max-height: none;
 }
 
 .browserTabsStrip {
@@ -2758,8 +2816,10 @@ code {
   align-items: flex-end;
   gap: 3px;
   overflow-x: auto;
+  overflow-y: hidden;
   flex-wrap: nowrap;
   min-width: 0;
+  max-height: none;
 }
 
 .browserTabsStrip.tabsWrap {
