@@ -70,7 +70,16 @@ import {
   deleteTimelineRange,
   markTimelineEvent,
   TimelineIndex,
-  WritingPack
+  WritingPack,
+  getInspirationIndex,
+  upsertInspirationItem,
+  setInspirationItemStatus,
+  purgeInspirationDeleted,
+  generateInspiration,
+  generateInspirationPreview,
+  generateInspirationVariants,
+  type InspirationIndex,
+  type IdeaItem
 } from "./api";
 import type { BookSearchGroup, BookSearchHit } from "./api";
 
@@ -673,7 +682,7 @@ function IconFullscreenExit(props: React.SVGProps<SVGSVGElement>) {
 }
 
 export function App() {
-  const [leftTab, setLeftTab] = useState<"chapters" | "global" | "progress">("chapters");
+  const [leftTab, setLeftTab] = useState<"chapters" | "global" | "progress" | "inspiration">("chapters");
   const [globalTab, setGlobalTab] = useState<
     "auditCharacters" | "relations" | "places" | "timeline" | "foreshadows"
   >(
@@ -715,6 +724,30 @@ export function App() {
   const [rightTab, setRightTab] = useState<"chapterAnalysis" | "chapterSummary" | "chapterEntities" | "writingPack">(
     "chapterAnalysis"
   );
+  const [inspirationTypeTab, setInspirationTypeTab] = useState<
+    "naming" | "character" | "place" | "org" | "item" | "recycle"
+  >("character");
+  const [inspirationFuncTab, setInspirationFuncTab] = useState<"generate" | "list" | "recycle">("generate");
+  const [inspirationIndex, setInspirationIndex] = useState<InspirationIndex | null>(null);
+  const [inspirationBusy, setInspirationBusy] = useState(false);
+  const [inspirationErr, setInspirationErr] = useState("");
+  const [inspirationFilter, setInspirationFilter] = useState<"all" | "pinned">("all");
+  // 搜索框已按需求移除（减少占用空间）
+  // const [inspirationSearch, setInspirationSearch] = useState("");
+
+  const [genPreviewItems, setGenPreviewItems] = useState<IdeaItem[]>([]);
+
+  const [genUseMemory, setGenUseMemory] = useState(true);
+  const [genCount, setGenCount] = useState(3);
+  const [genOptionsJson, setGenOptionsJson] = useState("");
+  const [genFreeText, setGenFreeText] = useState("");
+
+  const [inspirationExpanded, setInspirationExpanded] = useState<Record<string, boolean>>({});
+  const [inspirationEditingId, setInspirationEditingId] = useState<string | null>(null);
+  const [inspirationEditTitle, setInspirationEditTitle] = useState("");
+  const [inspirationEditContent, setInspirationEditContent] = useState("");
+
+  const [savedIdSet, setSavedIdSet] = useState<Record<string, boolean>>({});
   const [expandedAuditCharIds, setExpandedAuditCharIds] = useState<Record<string, boolean>>({});
   const [status, setStatus] = useState<string>("");
   const [busy, setBusy] = useState(false);
@@ -777,6 +810,23 @@ export function App() {
   >("boom");
 
   const chapterTitleInputRef = useRef<HTMLInputElement>(null);
+
+  const loadInspiration = useCallback(
+    async (bookSlug: string) => {
+      if (!bookSlug) return;
+      setInspirationBusy(true);
+      setInspirationErr("");
+      try {
+        const { index } = await getInspirationIndex(bookSlug);
+        setInspirationIndex(index);
+      } catch (e: any) {
+        setInspirationErr(e?.message || String(e));
+      } finally {
+        setInspirationBusy(false);
+      }
+    },
+    []
+  );
   const chapterGapTitleInputRef = useRef<HTMLInputElement>(null);
   const createBookTitleInputRef = useRef<HTMLInputElement>(null);
   const chapterTitleSkipBlurRef = useRef(false);
@@ -1641,6 +1691,7 @@ export function App() {
     setCardAutosaveHint("");
     setChapterTitleEditing(false);
     // 进入书籍后默认展示书籍概览（selectedChapter=null）
+    void loadInspiration(b.slug);
   }
 
   function openCreateBookModal() {
@@ -1664,6 +1715,7 @@ export function App() {
       setActiveBook(book.slug);
       setNavHome(false);
       setStatus(`已创建书籍：${book.title}`);
+      void loadInspiration(book.slug);
     } catch (e: any) {
       setStatus(e?.message || String(e));
     } finally {
@@ -1729,6 +1781,7 @@ export function App() {
         setSelectedCard(null);
         setCardContent("");
         cardBaselineRef.current = "";
+        void loadInspiration(bookSlug);
       }
 
       await refreshChapters(bookSlug);
@@ -3200,6 +3253,20 @@ export function App() {
                       >
                         进行中
                       </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      className={`browserTab ${leftTab === "inspiration" ? "active" : ""}`}
+                      aria-selected={leftTab === "inspiration"}
+                      onClick={() => {
+                        setLeftTab("inspiration");
+                        if (activeBook) void loadInspiration(activeBook);
+                      }}
+                      disabled={busy}
+                      title="灵感库：AI取名 / 灵感生成 / 灵感记录"
+                    >
+                      灵感库
+                    </button>
                     </div>
                   </div>
 
@@ -3265,6 +3332,573 @@ export function App() {
                         </div>
                       </div>
                     </>
+                  ) : leftTab === "inspiration" ? (
+                    <div className="navGlobalScroll">
+                      <div className="auditPanel inspirationPanelFlat">
+                        <div className="auditPanelBody">
+                          {/* 顶部标题/刷新按钮移除：左侧 Tab 已是“灵感库”，保持面板紧凑 */}
+
+                          <div className="browserTabsBar" role="tablist" aria-label="灵感库分类" style={{ marginTop: 10 }}>
+                            <div className="browserTabsStrip tabsWrap">
+                              <button
+                                type="button"
+                                role="tab"
+                                className={`browserTab tabCompact ${inspirationTypeTab === "naming" ? "active" : ""}`}
+                                aria-selected={inspirationTypeTab === "naming"}
+                                onClick={() => setInspirationTypeTab("naming")}
+                                disabled={busy}
+                              >
+                                取名
+                              </button>
+                              <button
+                                type="button"
+                                role="tab"
+                                className={`browserTab tabCompact ${inspirationTypeTab === "character" ? "active" : ""}`}
+                                aria-selected={inspirationTypeTab === "character"}
+                                onClick={() => setInspirationTypeTab("character")}
+                                disabled={busy}
+                              >
+                                角色
+                              </button>
+                              <button
+                                type="button"
+                                role="tab"
+                                className={`browserTab tabCompact ${inspirationTypeTab === "place" ? "active" : ""}`}
+                                aria-selected={inspirationTypeTab === "place"}
+                                onClick={() => setInspirationTypeTab("place")}
+                                disabled={busy}
+                              >
+                                地点
+                              </button>
+                              <button
+                                type="button"
+                                role="tab"
+                                className={`browserTab tabCompact ${inspirationTypeTab === "org" ? "active" : ""}`}
+                                aria-selected={inspirationTypeTab === "org"}
+                                onClick={() => setInspirationTypeTab("org")}
+                                disabled={busy}
+                              >
+                                组织
+                              </button>
+                              <button
+                                type="button"
+                                role="tab"
+                                className={`browserTab tabCompact ${inspirationTypeTab === "item" ? "active" : ""}`}
+                                aria-selected={inspirationTypeTab === "item"}
+                                onClick={() => setInspirationTypeTab("item")}
+                                disabled={busy}
+                              >
+                                道具
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="browserTabsBar" role="tablist" aria-label="灵感库功能" style={{ marginTop: 8 }}>
+                            <div className="browserTabsStrip tabsWrap">
+                              <button
+                                type="button"
+                                role="tab"
+                                className={`browserTab tabCompact ${inspirationFuncTab === "generate" ? "active" : ""}`}
+                                aria-selected={inspirationFuncTab === "generate"}
+                                onClick={() => setInspirationFuncTab("generate")}
+                                disabled={busy}
+                              >
+                                生成
+                              </button>
+                              <button
+                                type="button"
+                                role="tab"
+                                className={`browserTab tabCompact ${inspirationFuncTab === "list" ? "active" : ""}`}
+                                aria-selected={inspirationFuncTab === "list"}
+                                onClick={() => setInspirationFuncTab("list")}
+                                disabled={busy}
+                              >
+                                列表
+                              </button>
+                              <button
+                                type="button"
+                                role="tab"
+                                className={`browserTab tabCompact ${inspirationFuncTab === "recycle" ? "active" : ""}`}
+                                aria-selected={inspirationFuncTab === "recycle"}
+                                onClick={() => setInspirationFuncTab("recycle")}
+                                disabled={busy}
+                              >
+                                回收站
+                              </button>
+                            </div>
+                          </div>
+
+                          {inspirationErr ? (
+                            <div className="auditErrorBox" style={{ marginTop: 10 }}>
+                              <div className="auditErrorTitle">灵感库加载失败</div>
+                              <div className="auditErrorMsg">{inspirationErr}</div>
+                            </div>
+                          ) : null}
+
+                          {(() => {
+                            const idx = inspirationIndex;
+                            const all: IdeaItem[] = Array.isArray(idx?.items) ? (idx!.items as any) : [];
+                            const q = "";
+
+                            const typeMatch = (it: IdeaItem) => {
+                              const subtype = String((it as any)?.subtype || "").trim();
+                              if (inspirationTypeTab === "naming") return it.type === "naming";
+                              if (inspirationTypeTab === "character") return subtype === "character";
+                              if (inspirationTypeTab === "place") return subtype === "place";
+                              if (inspirationTypeTab === "org") return subtype === "organization";
+                              if (inspirationTypeTab === "item") return subtype === "item";
+                              return true;
+                            };
+
+                            const statusMatch = (it: IdeaItem) => {
+                              if (inspirationFilter === "pinned") return Boolean(it.pinned) && it.status !== "deleted";
+                              return inspirationFuncTab === "recycle" ? it.status === "deleted" : it.status !== "deleted";
+                            };
+
+                            const searchMatch = (it: IdeaItem) => {
+                              if (!q) return true;
+                              const title = String(it.title || "");
+                              const content = String(it.content || "");
+                              const tags = Array.isArray(it.tags) ? it.tags.join(" ") : "";
+                              return `${title} ${content} ${tags}`.toLowerCase().includes(q);
+                            };
+
+                            const filtered = all.filter(typeMatch).filter(statusMatch).filter(searchMatch);
+
+                            const kindForUi =
+                              inspirationTypeTab === "naming"
+                                ? ("naming" as const)
+                                : inspirationTypeTab === "character"
+                                  ? ("character" as const)
+                                  : inspirationTypeTab === "place"
+                                    ? ("place" as const)
+                                    : inspirationTypeTab === "org"
+                                      ? ("org" as const)
+                                      : inspirationTypeTab === "item"
+                                        ? ("item" as const)
+                                        : ("character" as const);
+
+                            return (
+                              <>
+                                {inspirationFuncTab === "generate" ? (
+                                  <div className="timelineSection" style={{ marginTop: 12 }}>
+                                    <div className="auditPanelTitle">
+                                      {inspirationTypeTab === "naming" ? "AI取名" : "生成"}
+                                    </div>
+                                    <div
+                                      className="row"
+                                      style={{
+                                        display: "flex",
+                                        gap: 8,
+                                        alignItems: "center",
+                                        flexWrap: "nowrap",
+                                        justifyContent: "flex-start"
+                                      }}
+                                    >
+                                      {/* 生成类型由上方内容页签决定；这里不再提供下拉框 */}
+
+                                      <label className="toggle timelineToggle" style={{ margin: 0 }}>
+                                        <input
+                                          type="checkbox"
+                                          checked={genUseMemory}
+                                          onChange={(e) => setGenUseMemory(e.target.checked)}
+                                          disabled={busy || inspirationBusy}
+                                        />
+                                        参考全书记忆
+                                      </label>
+
+                                      <span className="muted" style={{ whiteSpace: "nowrap" }}>
+                                        数量
+                                      </span>
+                                      <input
+                                        className="timelineInput"
+                                        value={String(genCount)}
+                                        onChange={(e) => {
+                                          const n = parseInt(e.target.value || "3", 10);
+                                          if (!Number.isFinite(n)) return;
+                                          setGenCount(clamp(n, 1, 10));
+                                        }}
+                                        inputMode="numeric"
+                                        disabled={busy || inspirationBusy}
+                                        style={{ width: 70, height: 28, padding: "4px 10px", lineHeight: "18px" }}
+                                      />
+
+                                      <button
+                                        type="button"
+                                        className="btnSquare btnCompact"
+                                        disabled={busy || inspirationBusy || !activeBook}
+                                        onClick={async () => {
+                                          if (!activeBook) return;
+                                          setInspirationBusy(true);
+                                          setInspirationErr("");
+                                          try {
+                                            let options: any = {};
+                                            if (kindForUi !== "character") {
+                                              const t = genOptionsJson.trim();
+                                              if (t) {
+                                                try {
+                                                  options = JSON.parse(t);
+                                                } catch {
+                                                  setInspirationErr("可选项 JSON 解析失败：请填写合法 JSON（或留空）。");
+                                                  return;
+                                                }
+                                              }
+                                            }
+                                            const { items, debug } = await generateInspirationPreview(activeBook, {
+                                              modelConfigId: activeModelId,
+                                              kind: kindForUi as any,
+                                              count: clamp(genCount, 1, 10),
+                                              useMemory: genUseMemory,
+                                              options,
+                                              freeText: genFreeText
+                                            });
+                                            try {
+                                              console.groupCollapsed(
+                                                `[灵感库] 生成 preview kind=${String(kindForUi)} count=${clamp(genCount, 1, 10)}`
+                                              );
+                                              if (debug?.prompt) console.log("[prompt]\n" + debug.prompt);
+                                              if (debug?.rawText) console.log("[raw]\n" + debug.rawText);
+                                              console.log("[parsed items]", items);
+                                              console.groupEnd();
+                                            } catch {}
+                                            setGenPreviewItems(items);
+                                            setSavedIdSet({});
+                                            setStatus("已生成（未保存）。");
+                                          } catch (e: any) {
+                                            setInspirationErr(e?.message || String(e));
+                                          } finally {
+                                            setInspirationBusy(false);
+                                          }
+                                        }}
+                                        title="调用模型生成并保存"
+                                      >
+                                        {inspirationBusy ? "生成中…" : "生成"}
+                                      </button>
+
+                                      {genPreviewItems.length ? (
+                                        <button
+                                          type="button"
+                                          className="btnSquare btnCompact"
+                                          disabled={busy || inspirationBusy}
+                                          onClick={() => {
+                                            setGenPreviewItems([]);
+                                            setSavedIdSet({});
+                                            setInspirationExpanded({});
+                                            setInspirationEditingId(null);
+                                            setInspirationEditTitle("");
+                                            setInspirationEditContent("");
+                                            setStatus("已清空本次生成结果（不影响已保存）。");
+                                          }}
+                                          title="仅清空本次生成的预览结果"
+                                        >
+                                          清空
+                                        </button>
+                                      ) : null}
+                                    </div>
+
+                                    <div
+                                      style={{
+                                        marginTop: 10,
+                                        border: "1px solid color-mix(in srgb, var(--border) 72%, transparent)",
+                                        padding: 8,
+                                        background: "transparent"
+                                      }}
+                                    >
+                                      <textarea
+                                        className="auditTextarea"
+                                        value={genFreeText}
+                                        onChange={(e) => setGenFreeText(e.target.value)}
+                                        placeholder="自由输入（可选）：例如“更阴谋一点”“不要低俗”“与主角是盟友但暗藏私心”…"
+                                        disabled={busy || inspirationBusy}
+                                        style={{ marginTop: 0, minHeight: 70 }}
+                                      />
+                                    </div>
+
+                                    {genPreviewItems.length ? (
+                                      <div className="timelineSection" style={{ marginTop: 10 }}>
+                                        <div className="auditPanelTitle">生成结果（点保存后进入列表）</div>
+                                        <div className="timelineRangeList">
+                                          {genPreviewItems.map((it, idx) => {
+                                            const key = it.id || String(idx);
+                                            const saved = Boolean(savedIdSet[key]);
+                                            const title = String(it.title || "").trim();
+                                            const content = String(it.content || "").trim();
+                                            const expanded = Boolean(inspirationExpanded[key]);
+                                            const editing = inspirationEditingId === key;
+                                            return (
+                                              <div key={key} className="timelineRangeItem">
+                                                <div className="timelineRangeTop" style={{ gap: 8, flexWrap: "wrap" }}>
+                                                  <div className="timelineRangeTitle" style={{ flex: 1, minWidth: 120 }}>
+                                                    {title || "（生成内容）"}
+                                                  </div>
+                                                  <button
+                                                    type="button"
+                                                    className="btnSort"
+                                                    disabled={busy}
+                                                    onClick={() =>
+                                                      setInspirationExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
+                                                    }
+                                                  >
+                                                    {expanded ? "收起" : "展开"}
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    className="btnSort"
+                                                    disabled={busy || inspirationBusy}
+                                                    onClick={() => {
+                                                      if (!editing) {
+                                                        setInspirationEditingId(key);
+                                                        setInspirationEditTitle(title);
+                                                        setInspirationEditContent(content);
+                                                        setInspirationExpanded((prev) => ({ ...prev, [key]: true }));
+                                                      } else {
+                                                        setInspirationEditingId(null);
+                                                      }
+                                                    }}
+                                                    title="编辑生成内容"
+                                                  >
+                                                    {editing ? "取消编辑" : "编辑"}
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    className="btnSort"
+                                                    disabled={busy || inspirationBusy || saved || !activeBook}
+                                                    onClick={async () => {
+                                                      if (!activeBook) return;
+                                                      setInspirationBusy(true);
+                                                      setInspirationErr("");
+                                                      try {
+                                                        const finalTitle = (editing ? inspirationEditTitle : title).trim();
+                                                        const finalContent = (editing ? inspirationEditContent : content).trim();
+                                                        if (!finalContent) {
+                                                          setInspirationErr("内容不能为空。");
+                                                          return;
+                                                        }
+                                                        const { index } = await upsertInspirationItem(activeBook, {
+                                                          type: inspirationTypeTab === "naming" ? "naming" : "generation",
+                                                          subtype:
+                                                            inspirationTypeTab === "character"
+                                                              ? "character"
+                                                              : inspirationTypeTab === "place"
+                                                                ? "place"
+                                                                : inspirationTypeTab === "org"
+                                                                  ? "organization"
+                                                                  : inspirationTypeTab === "item"
+                                                                    ? "item"
+                                                                    : it.subtype,
+                                                          title: finalTitle || undefined,
+                                                          content: finalContent,
+                                                          tags: Array.isArray((it as any).tags) ? (it as any).tags : undefined,
+                                                          status: "active"
+                                                        });
+                                                        setInspirationIndex(index);
+                                                        setSavedIdSet((prev) => ({ ...prev, [key]: true }));
+                                                        setStatus("已保存到列表。");
+                                                      } catch (e: any) {
+                                                        setInspirationErr(e?.message || String(e));
+                                                      } finally {
+                                                        setInspirationBusy(false);
+                                                      }
+                                                    }}
+                                                    title="保存后才会出现在列表页"
+                                                  >
+                                                    {saved ? "已保存" : "保存"}
+                                                  </button>
+                                                </div>
+                                                {editing ? (
+                                                  <div style={{ marginTop: 8 }}>
+                                                    <input
+                                                      className="auditRelationsSearch"
+                                                      value={inspirationEditTitle}
+                                                      onChange={(e) => setInspirationEditTitle(e.target.value)}
+                                                      placeholder="标题（角色名/地点名…）"
+                                                      disabled={busy || inspirationBusy}
+                                                    />
+                                                    <textarea
+                                                      className="auditTextarea"
+                                                      value={inspirationEditContent}
+                                                      onChange={(e) => setInspirationEditContent(e.target.value)}
+                                                      placeholder="内容"
+                                                      disabled={busy || inspirationBusy}
+                                                      style={{ marginTop: 8, minHeight: 140 }}
+                                                    />
+                                                  </div>
+                                                ) : expanded ? (
+                                                  <div className="timelineRangeSummary" style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
+                                                    {content}
+                                                  </div>
+                                                ) : null}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    ) : null}
+                                    {kindForUi !== "character" ? (
+                                      <textarea
+                                        className="auditTextarea"
+                                        value={genOptionsJson}
+                                        onChange={(e) => setGenOptionsJson(e.target.value)}
+                                        placeholder='可选项 options（可选，JSON）：例如 {"风格":["古风"],"道具类型":"法器"}'
+                                        disabled={busy || inspirationBusy}
+                                        style={{ marginTop: 8, minHeight: 70 }}
+                                      />
+                                    ) : null}
+                                  </div>
+                                ) : null}
+
+                                <div
+                                  className="timelineSection"
+                                  style={{
+                                    marginTop: 12,
+                                    display: inspirationFuncTab === "list" || inspirationFuncTab === "recycle" ? undefined : "none"
+                                  }}
+                                >
+                                  <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                                    <div className="auditPanelTitle">
+                                      {inspirationFuncTab === "recycle" ? "回收站" : inspirationFilter === "pinned" ? "收藏" : "列表"}
+                                      <span className="muted" style={{ marginLeft: 8 }}>
+                                        {filtered.length} 条
+                                      </span>
+                                    </div>
+                                    {inspirationFuncTab === "recycle" ? (
+                                      <button
+                                        type="button"
+                                        className="btnSquare"
+                                        disabled={busy || inspirationBusy || !activeBook}
+                                        onClick={async () => {
+                                          if (!activeBook) return;
+                                          const ok = window.confirm("确认清空回收站？（彻底删除不可恢复）");
+                                          if (!ok) return;
+                                          setInspirationBusy(true);
+                                          setInspirationErr("");
+                                          try {
+                                            const { index, purged } = await purgeInspirationDeleted(activeBook);
+                                            setInspirationIndex(index);
+                                            setStatus(`已清空回收站：删除 ${purged} 条。`);
+                                          } catch (e: any) {
+                                            setInspirationErr(e?.message || String(e));
+                                          } finally {
+                                            setInspirationBusy(false);
+                                          }
+                                        }}
+                                      >
+                                        清空回收站
+                                      </button>
+                                    ) : null}
+                                  </div>
+
+                                  {!filtered.length ? (
+                                    <div className="muted auditPanelEmpty">暂无内容。</div>
+                                  ) : (
+                                    <div className="timelineRangeList">
+                                      {filtered.map((it) => {
+                                        const title = String(it.title || "").trim();
+                                        const tags = Array.isArray(it.tags) ? it.tags : [];
+                                        const content = String(it.content || "").trim();
+                                        const expanded = Boolean(inspirationExpanded[it.id]);
+                                        return (
+                                          <div key={it.id} className="timelineRangeItem">
+                                            <div className="timelineRangeTop" style={{ gap: 8, flexWrap: "wrap" }}>
+                                              <div className="timelineRangeTitle" style={{ flex: 1, minWidth: 120 }}>
+                                                {title || (it.type === "naming" ? "（名字）" : "（灵感）")}
+                                                {it.subtype ? <span className="muted"> · {it.subtype}</span> : null}
+                                              </div>
+                                              <button
+                                                type="button"
+                                                className="btnSort"
+                                                disabled={busy}
+                                                onClick={() =>
+                                                  setInspirationExpanded((prev) => ({ ...prev, [it.id]: !prev[it.id] }))
+                                                }
+                                              >
+                                                {expanded ? "收起" : "展开"}
+                                              </button>
+                                              <button
+                                                type="button"
+                                                className="btnSort"
+                                                disabled={busy}
+                                                onClick={async () => {
+                                                  if (!activeBook) return;
+                                                  const ok = window.confirm("确认移到回收站？（可在回收站恢复）");
+                                                  if (!ok) return;
+                                                  setInspirationBusy(true);
+                                                  setInspirationErr("");
+                                                  try {
+                                                    const { index } = await setInspirationItemStatus(activeBook, {
+                                                      id: it.id,
+                                                      status: "deleted"
+                                                    });
+                                                    setInspirationIndex(index);
+                                                    setStatus("已移到回收站。");
+                                                  } catch (e: any) {
+                                                    setInspirationErr(e?.message || String(e));
+                                                  } finally {
+                                                    setInspirationBusy(false);
+                                                  }
+                                                }}
+                                                style={{ display: inspirationFuncTab === "recycle" ? "none" : undefined }}
+                                              >
+                                                移到回收站
+                                              </button>
+                                        {inspirationFuncTab === "recycle" ? (
+                                          <button
+                                            type="button"
+                                            className="btnSort"
+                                            disabled={busy || !activeBook}
+                                            onClick={async () => {
+                                              if (!activeBook) return;
+                                              setInspirationBusy(true);
+                                              setInspirationErr("");
+                                              try {
+                                                const { index } = await setInspirationItemStatus(activeBook, {
+                                                  id: it.id,
+                                                  status: "active"
+                                                });
+                                                setInspirationIndex(index);
+                                                setStatus("已恢复。");
+                                              } catch (e: any) {
+                                                setInspirationErr(e?.message || String(e));
+                                              } finally {
+                                                setInspirationBusy(false);
+                                              }
+                                            }}
+                                            title="恢复到列表页"
+                                          >
+                                            恢复
+                                          </button>
+                                        ) : null}
+                                            </div>
+
+                                            {tags.length ? (
+                                              <div className="muted timelineSuggestionWhy" style={{ marginTop: 4 }}>
+                                                {tags.join(" · ")}
+                                              </div>
+                                            ) : null}
+
+                                            {expanded ? (
+                                              <div className="timelineRangeSummary" style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
+                                                {content}
+                                              </div>
+                                            ) : (
+                                              <div className="timelineRangeSummary memoryClamp2" style={{ marginTop: 6 }}>
+                                                {content}
+                                              </div>
+                                            )}
+
+                                            {/* 列表变体功能已按需求移除 */}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    </div>
                   ) : (
                     <>
                       {leftTab === "progress" ? (

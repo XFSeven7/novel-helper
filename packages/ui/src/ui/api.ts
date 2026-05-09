@@ -518,6 +518,101 @@ export async function getTimelineIndex(slug: string) {
   return await http<{ index: TimelineIndex }>(`/api/books/${encodeURIComponent(slug)}/timeline/index`);
 }
 
+export type IdeaItemStatus = "active" | "hidden" | "deleted";
+export type IdeaItemType = "naming" | "note" | "generation";
+export type IdeaItem = {
+  id: string;
+  type: IdeaItemType;
+  subtype?: string;
+  title?: string;
+  content: string;
+  tags?: string[];
+  pinned?: boolean;
+  status: IdeaItemStatus;
+  createdAt: string;
+  updatedAt: string;
+  source?: { provider?: string; model?: string; prompt?: string };
+  meta?: { parentId?: string; variantPolicy?: any; usedMemory?: boolean };
+};
+export type InspirationIndex = { version: 1; updatedAt: string; items: IdeaItem[] };
+
+export async function getInspirationIndex(slug: string) {
+  return await http<{ index: InspirationIndex }>(`/api/books/${encodeURIComponent(slug)}/inspiration`);
+}
+
+export async function upsertInspirationItem(
+  slug: string,
+  item: Partial<IdeaItem> & { content: string }
+) {
+  return await http<{ ok: true; index: InspirationIndex; item: IdeaItem }>(`/api/books/${encodeURIComponent(slug)}/inspiration/upsert`, {
+    method: "POST",
+    body: JSON.stringify({ item })
+  });
+}
+
+export async function setInspirationItemStatus(slug: string, input: { id: string; status: IdeaItemStatus }) {
+  return await http<{ ok: true; index: InspirationIndex }>(`/api/books/${encodeURIComponent(slug)}/inspiration/status`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function purgeInspirationDeleted(slug: string) {
+  return await http<{ ok: true; index: InspirationIndex; purged: number }>(`/api/books/${encodeURIComponent(slug)}/inspiration/purge`, {
+    method: "POST"
+  });
+}
+
+export async function generateInspiration(slug: string, input: {
+  modelConfigId: string | null;
+  kind: "naming" | "character" | "place" | "org" | "item" | "other";
+  count?: number;
+  useMemory?: boolean;
+  options?: any;
+  freeText?: string;
+}) {
+  return await http<{ ok: true; index: InspirationIndex; items: IdeaItem[]; debug?: { prompt: string; rawText: string } }>(
+    `/api/books/${encodeURIComponent(slug)}/inspiration/generate`,
+    {
+    method: "POST",
+    body: JSON.stringify(input)
+    }
+  );
+}
+
+export async function generateInspirationPreview(slug: string, input: {
+  modelConfigId: string | null;
+  kind: "naming" | "character" | "place" | "org" | "item" | "other";
+  count?: number;
+  useMemory?: boolean;
+  options?: any;
+  freeText?: string;
+}) {
+  return await http<{ ok: true; items: IdeaItem[]; debug?: { prompt: string; rawText: string } }>(
+    `/api/books/${encodeURIComponent(slug)}/inspiration/generate-preview`,
+    {
+    method: "POST",
+    body: JSON.stringify(input)
+    }
+  );
+}
+
+export async function generateInspirationVariants(slug: string, input: {
+  modelConfigId: string | null;
+  id: string;
+  count?: number;
+  preset?: string;
+  freeText?: string;
+}) {
+  return await http<{ ok: true; index: InspirationIndex; items: IdeaItem[]; debug?: { prompt: string; rawText: string } }>(
+    `/api/books/${encodeURIComponent(slug)}/inspiration/variant`,
+    {
+    method: "POST",
+    body: JSON.stringify(input)
+    }
+  );
+}
+
 export async function compressTimelineRange(
   slug: string,
   input: { startChapter: number; endChapter: number; modelConfigId: string | null }

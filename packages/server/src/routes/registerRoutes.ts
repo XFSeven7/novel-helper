@@ -38,7 +38,11 @@ import {
   readTimelineIndex,
   writeTimelineIndex,
   writeStoryTimelineMarkdownFromIndex,
-  TimelineIndex
+  TimelineIndex,
+  readInspirationIndex,
+  writeInspirationIndex,
+  InspirationIndex,
+  IdeaItem
 } from "../fsStore.js";
 import { safeSlug } from "../paths.js";
 
@@ -94,6 +98,83 @@ export async function registerRoutes(app: any, input: { dataDir: string }) {
     const j = t.lastIndexOf("```");
     if (i >= 0 && j > i) return t.slice(i + 1, j).trim();
     return t;
+  }
+
+  function safeJsonParse<T = any>(raw: string): T | null {
+    try {
+      return JSON.parse(stripJsonFence(String(raw || ""))) as T;
+    } catch {
+      return null;
+    }
+  }
+
+  function newId(): string {
+    return crypto.randomUUID();
+  }
+
+  function normalizeIdeaItem(x: any): IdeaItem | null {
+    if (!x || typeof x !== "object") return null;
+    const content = String((x as any).content ?? "").trim();
+    if (!content) return null;
+    const now = new Date().toISOString();
+    const statusRaw = String((x as any).status ?? "active");
+    const status: IdeaItem["status"] =
+      statusRaw === "hidden" || statusRaw === "deleted" || statusRaw === "active" ? (statusRaw as any) : "active";
+    return {
+      id: String((x as any).id || "").trim() || newId(),
+      type: (String((x as any).type || "generation") as any) || "generation",
+      subtype: typeof (x as any).subtype === "string" ? (x as any).subtype : undefined,
+      title: typeof (x as any).title === "string" ? (x as any).title : undefined,
+      content,
+      tags: Array.isArray((x as any).tags) ? (x as any).tags.map((t: any) => String(t)).filter(Boolean) : undefined,
+      pinned: Boolean((x as any).pinned),
+      status,
+      createdAt: typeof (x as any).createdAt === "string" && (x as any).createdAt ? (x as any).createdAt : now,
+      updatedAt: typeof (x as any).updatedAt === "string" && (x as any).updatedAt ? (x as any).updatedAt : now,
+      source: (x as any).source && typeof (x as any).source === "object" ? (x as any).source : undefined,
+      meta: (x as any).meta && typeof (x as any).meta === "object" ? (x as any).meta : undefined
+    };
+  }
+
+  function normalizeInspirationIndex(idx: InspirationIndex): InspirationIndex {
+    const items = Array.isArray((idx as any)?.items) ? (idx as any).items : [];
+    return {
+      version: 1,
+      updatedAt: typeof (idx as any)?.updatedAt === "string" ? (idx as any).updatedAt : "",
+      items: items.map(normalizeIdeaItem).filter(Boolean) as IdeaItem[]
+    };
+  }
+
+  function buildMemoryContextFromTimeline(tl: TimelineIndex): string {
+    const ranges = Array.isArray(tl?.compressedRanges) ? tl.compressedRanges : [];
+    const events = Array.isArray(tl?.events) ? tl.events : [];
+    const chapters = Array.isArray(tl?.chapters) ? tl.chapters : [];
+
+    const topRanges = [...ranges]
+      .sort((a: any, b: any) => (b?.endChapter ?? 0) - (a?.endChapter ?? 0))
+      .slice(0, 8)
+      .map((r: any) => `- 第${r.startChapter}-${r.endChapter}章：${String(r.summary || "").trim()}`)
+      .filter(Boolean);
+
+    const topEvents = [...events]
+      .filter((e: any) => String(e?.status ?? "open") !== "done")
+      .sort((a: any, b: any) => (b?.endChapter ?? 0) - (a?.endChapter ?? 0))
+      .slice(0, 15)
+      .map((e: any) => `- 第${e.startChapter}-${e.endChapter}章·${String(e.title || "").trim() || "事件"}：${String(e.summary || "").trim()}`)
+      .filter(Boolean);
+
+    const lastChapters = [...chapters]
+      .sort((a: any, b: any) => (b?.chapter ?? 0) - (a?.chapter ?? 0))
+      .slice(0, 10)
+      .map((c: any) => `- 第${c.chapter}章·${String(c.title || "").trim() || c.filename}：${String(c.gistL1 || "").trim()}`)
+      .filter(Boolean);
+
+    const parts: string[] = [];
+    if (topRanges.length) parts.push("【多章压缩摘要（最近）】", ...topRanges, "");
+    if (topEvents.length) parts.push("【关键事件（未完成/进行中）】", ...topEvents, "");
+    if (lastChapters.length) parts.push("【最近章节摘要】", ...lastChapters, "");
+    const txt = parts.join("\n").trim();
+    return txt ? txt : "（全书记忆为空：暂无时间线摘要/事件）";
   }
 
   function buildCharacterCardMergePrompt(input: {
@@ -2668,6 +2749,259 @@ export async function registerRoutes(app: any, input: { dataDir: string }) {
     await writeTimelineIndex(dataDir, params.slug, idx);
     await writeStoryTimelineMarkdownFromIndex(dataDir, params.slug, idx);
     return { ok: true, index: idx };
+  });
+
+  // -----------------------------
+  // 灵感库（inspiration.json）
+  // -----------------------------
+
+  app.get("/api/books/:slug/inspiration", async (req: any) => {
+    const paramsSchema = z.object({ slug: z.string().min(1) });
+    const params = paramsSchema.parse(req.params);
+    const idx = normalizeInspirationIndex(await readInspirationIndex(dataDir, params.slug));
+    return { index: idx };
+  });
+
+  app.post("/api/books/:slug/inspiration/upsert", async (req: any) => {
+    const paramsSchema = z.object({ slug: z.string().min(1) });
+    const bodySchema = z.object({
+      item: z.object({
+        id: z.string().optional(),
+        type: z.enum(["naming", "note", "generation"]).optional(),
+        subtype: z.string().optional(),
+        title: z.string().optional(),
+        content: z.string().min(1),
+        tags: z.array(z.string()).optional(),
+        pinned: z.boolean().optional(),
+        status: z.enum(["active", "hidden", "deleted"]).optional(),
+        source: z.any().optional(),
+        meta: z.any().optional()
+      })
+    });
+    const params = paramsSchema.parse(req.params);
+    const body = bodySchema.parse(req.body);
+
+    const idx = normalizeInspirationIndex(await readInspirationIndex(dataDir, params.slug));
+    const now = new Date().toISOString();
+    const incoming = normalizeIdeaItem({ ...body.item, updatedAt: now, createdAt: (body.item as any).createdAt || now });
+    if (!incoming) return { ok: false, message: "Invalid item" };
+    const i = idx.items.findIndex((x) => x.id === incoming.id);
+    if (i >= 0) {
+      idx.items[i] = { ...idx.items[i], ...incoming, id: idx.items[i].id, createdAt: idx.items[i].createdAt, updatedAt: now };
+    } else {
+      idx.items.unshift(incoming);
+    }
+    idx.updatedAt = now;
+    await writeInspirationIndex(dataDir, params.slug, idx);
+    return { ok: true, index: idx, item: incoming };
+  });
+
+  app.post("/api/books/:slug/inspiration/status", async (req: any) => {
+    const paramsSchema = z.object({ slug: z.string().min(1) });
+    const bodySchema = z.object({
+      id: z.string().min(1),
+      status: z.enum(["active", "hidden", "deleted"])
+    });
+    const params = paramsSchema.parse(req.params);
+    const body = bodySchema.parse(req.body);
+
+    const idx = normalizeInspirationIndex(await readInspirationIndex(dataDir, params.slug));
+    const i = idx.items.findIndex((x) => x.id === body.id);
+    if (i < 0) return { ok: false, message: "Not found", index: idx };
+    const now = new Date().toISOString();
+    idx.items[i] = { ...idx.items[i], status: body.status, updatedAt: now };
+    idx.updatedAt = now;
+    await writeInspirationIndex(dataDir, params.slug, idx);
+    return { ok: true, index: idx };
+  });
+
+  app.post("/api/books/:slug/inspiration/purge", async (req: any) => {
+    const paramsSchema = z.object({ slug: z.string().min(1) });
+    const params = paramsSchema.parse(req.params);
+    const idx = normalizeInspirationIndex(await readInspirationIndex(dataDir, params.slug));
+    const before = idx.items.length;
+    idx.items = idx.items.filter((x) => x.status !== "deleted");
+    if (idx.items.length === before) return { ok: true, index: idx, purged: 0 };
+    idx.updatedAt = new Date().toISOString();
+    await writeInspirationIndex(dataDir, params.slug, idx);
+    return { ok: true, index: idx, purged: before - idx.items.length };
+  });
+
+  app.post("/api/books/:slug/inspiration/generate", async (req: any, reply: any) => {
+    const paramsSchema = z.object({ slug: z.string().min(1) });
+    const bodySchema = z.object({
+      modelConfigId: z.string().nullable().optional(),
+      kind: z.enum(["naming", "character", "place", "org", "item", "other"]),
+      count: z.number().int().min(1).max(10).optional(),
+      useMemory: z.boolean().optional(),
+      options: z.any().optional(),
+      freeText: z.string().optional()
+    });
+    const params = paramsSchema.parse(req.params);
+    const body = bodySchema.parse(req.body);
+
+    const settings = await readModelSettings();
+    const activeId = body.modelConfigId || settings.activeId;
+    const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+    if (!cfg) return reply.code(400).send({ message: "未配置模型" });
+
+    const count = body.count ?? 3;
+    const useMemory = Boolean(body.useMemory);
+    const memoryText = useMemory ? buildMemoryContextFromTimeline(await readTimelineIndex(dataDir, params.slug)) : "";
+
+    const kind = body.kind;
+    const opts = body.options ?? {};
+    const free = String(body.freeText || "").trim();
+
+    const schemaHint = [
+      "请严格输出 JSON 数组（不要解释、不要 markdown、不要代码块）。",
+      "数组长度 = count。",
+      "每个元素字段：{ title?: string, content: string, tags?: string[] }。",
+      "content 必须是可直接用于写作/设定的中文文本。"
+    ].join("\n");
+
+    const prompt = [
+      "你是网络小说写作助手，负责生成可直接落地写作的“灵感卡片”。",
+      schemaHint,
+      "",
+      `count = ${count}`,
+      `生成类型 kind = ${kind}`,
+      opts && Object.keys(opts).length ? `可选项 options = ${JSON.stringify(opts, null, 2)}` : "可选项 options = {}",
+      free ? `自由输入 freeText = ${free}` : "自由输入 freeText = （空）",
+      "",
+      useMemory ? "【参考全书记忆】（用于一致性与避重复）\n" + memoryText : "【参考全书记忆】（未启用）",
+      "",
+      "现在输出 JSON 数组："
+    ].join("\n");
+
+    const { model, providerOptions } = createAiSdkModel(cfg);
+    const { text } = await generateText({
+      model,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.7,
+      ...(cfg.provider === "ollama" ? {} : { reasoning: "low" as const }),
+      providerOptions
+    } as any);
+
+    const arr = safeJsonParse<any[]>(String(text || "")) || [];
+    const cards = Array.isArray(arr) ? arr : [];
+    if (!cards.length) return reply.code(400).send({ message: "模型未返回有效 JSON 数组" });
+
+    const idx = normalizeInspirationIndex(await readInspirationIndex(dataDir, params.slug));
+    const now = new Date().toISOString();
+    const items: IdeaItem[] = [];
+    for (const c of cards.slice(0, count)) {
+      const content = String(c?.content ?? "").trim();
+      if (!content) continue;
+      const it: IdeaItem = {
+        id: newId(),
+        type: kind === "naming" ? "naming" : "generation",
+        subtype:
+          kind === "character" ? "character" : kind === "place" ? "place" : kind === "org" ? "organization" : kind === "item" ? "item" : kind,
+        title: typeof c?.title === "string" ? c.title : undefined,
+        content,
+        tags: Array.isArray(c?.tags) ? c.tags.map((x: any) => String(x)).filter(Boolean) : undefined,
+        pinned: false,
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+        source: { provider: cfg.provider, model: (cfg.model || "").trim(), prompt },
+        meta: { usedMemory: useMemory }
+      };
+      items.push(it);
+    }
+    if (!items.length) return reply.code(400).send({ message: "模型输出为空或不可用" });
+    idx.items = [...items, ...idx.items];
+    idx.updatedAt = now;
+    await writeInspirationIndex(dataDir, params.slug, idx);
+    return { ok: true, index: idx, items };
+  });
+
+  app.post("/api/books/:slug/inspiration/variant", async (req: any, reply: any) => {
+    const paramsSchema = z.object({ slug: z.string().min(1) });
+    const bodySchema = z.object({
+      modelConfigId: z.string().nullable().optional(),
+      id: z.string().min(1),
+      count: z.number().int().min(1).max(10).optional(),
+      preset: z.string().optional(),
+      freeText: z.string().optional()
+    });
+    const params = paramsSchema.parse(req.params);
+    const body = bodySchema.parse(req.body);
+
+    const settings = await readModelSettings();
+    const activeId = body.modelConfigId || settings.activeId;
+    const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+    if (!cfg) return reply.code(400).send({ message: "未配置模型" });
+
+    const idx = normalizeInspirationIndex(await readInspirationIndex(dataDir, params.slug));
+    const base = idx.items.find((x) => x.id === body.id);
+    if (!base) return reply.code(404).send({ message: "原条目不存在" });
+
+    const count = body.count ?? 3;
+    const preset = String(body.preset || "").trim();
+    const free = String(body.freeText || "").trim();
+
+    const schemaHint = [
+      "请严格输出 JSON 数组（不要解释、不要 markdown、不要代码块）。",
+      "数组长度 = count。",
+      "每个元素字段：{ title?: string, content: string, tags?: string[] }。",
+      "content 是对原内容的改写/变体，不能只是同义句，要体现变体策略。"
+    ].join("\n");
+
+    const prompt = [
+      "你是网络小说写作助手。现在要对“已有灵感卡”生成多个变体版本。",
+      schemaHint,
+      "",
+      `count = ${count}`,
+      preset ? `预设变体选项 preset = ${preset}` : "预设变体选项 preset = （空）",
+      free ? `自由输入 freeText = ${free}` : "自由输入 freeText = （空）",
+      "",
+      "【原卡】",
+      `type=${base.type} subtype=${base.subtype || ""} title=${base.title || ""}`,
+      base.content,
+      "",
+      "现在输出 JSON 数组："
+    ].join("\n");
+
+    const { model, providerOptions } = createAiSdkModel(cfg);
+    const { text } = await generateText({
+      model,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.7,
+      ...(cfg.provider === "ollama" ? {} : { reasoning: "low" as const }),
+      providerOptions
+    } as any);
+
+    const arr = safeJsonParse<any[]>(String(text || "")) || [];
+    const cards = Array.isArray(arr) ? arr : [];
+    if (!cards.length) return reply.code(400).send({ message: "模型未返回有效 JSON 数组" });
+
+    const now = new Date().toISOString();
+    const items: IdeaItem[] = [];
+    for (const c of cards.slice(0, count)) {
+      const content = String(c?.content ?? "").trim();
+      if (!content) continue;
+      items.push({
+        id: newId(),
+        type: base.type,
+        subtype: base.subtype,
+        title: typeof c?.title === "string" ? c.title : base.title,
+        content,
+        tags: Array.isArray(c?.tags) ? c.tags.map((x: any) => String(x)).filter(Boolean) : base.tags,
+        pinned: false,
+        status: "active",
+        createdAt: now,
+        updatedAt: now,
+        source: { provider: cfg.provider, model: (cfg.model || "").trim(), prompt },
+        meta: { parentId: base.id, variantPolicy: { preset, freeText: free, count } }
+      });
+    }
+    if (!items.length) return reply.code(400).send({ message: "模型输出为空或不可用" });
+    idx.items = [...items, ...idx.items];
+    idx.updatedAt = now;
+    await writeInspirationIndex(dataDir, params.slug, idx);
+    return { ok: true, index: idx, items };
   });
 
   app.get("/api/novels", async () => {

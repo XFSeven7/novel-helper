@@ -220,6 +220,39 @@ export type WritingPack = {
   disclaimer: string;
 };
 
+export type IdeaItemStatus = "active" | "hidden" | "deleted";
+export type IdeaItemType = "naming" | "note" | "generation";
+
+export type IdeaItem = {
+  id: string;
+  type: IdeaItemType;
+  /** 例如：character/place/organization/item（naming 或 generation 时可用） */
+  subtype?: string;
+  title?: string;
+  content: string;
+  tags?: string[];
+  pinned?: boolean;
+  status: IdeaItemStatus;
+  createdAt: string;
+  updatedAt: string;
+  source?: { provider?: string; model?: string; prompt?: string };
+  meta?: {
+    genreStyle?: string[];
+    tone?: string;
+    seedWords?: string[];
+    score?: number;
+    parentId?: string;
+    variantPolicy?: any;
+    usedMemory?: boolean;
+  };
+};
+
+export type InspirationIndex = {
+  version: 1;
+  updatedAt: string;
+  items: IdeaItem[];
+};
+
 export type CharacterSocialTags = {
   profession?: string;
   class?: string;
@@ -365,12 +398,20 @@ function auditDir(dataDir: string, novelSlug: string) {
   return path.join(dataDir, novelSlug, "meta", "audit");
 }
 
+function metaDir(dataDir: string, novelSlug: string) {
+  return path.join(dataDir, novelSlug, "meta");
+}
+
 function writingPacksDir(dataDir: string, novelSlug: string) {
   return path.join(auditDir(dataDir, novelSlug), "writingPacks");
 }
 
 function timelineIndexPath(dataDir: string, novelSlug: string) {
   return path.join(auditDir(dataDir, novelSlug), "timelineIndex.json");
+}
+
+function inspirationIndexPath(dataDir: string, novelSlug: string) {
+  return path.join(metaDir(dataDir, novelSlug), "inspiration.json");
 }
 
 function storyTimelinePath(dataDir: string, novelSlug: string) {
@@ -416,6 +457,28 @@ export async function writeTimelineIndex(dataDir: string, novelSlug: string, idx
   const dir = auditDir(dataDir, novelSlug);
   await ensureDir(dir);
   const p = timelineIndexPath(dataDir, novelSlug);
+  await fs.writeFile(p, JSON.stringify(idx, null, 2), "utf8");
+}
+
+export async function readInspirationIndex(dataDir: string, novelSlug: string): Promise<InspirationIndex> {
+  const p = inspirationIndexPath(dataDir, novelSlug);
+  if (!(await exists(p))) {
+    return { version: 1, updatedAt: "", items: [] };
+  }
+  const raw = await fs.readFile(p, "utf8");
+  const parsed = JSON.parse(raw) as any;
+  const items = Array.isArray(parsed?.items) ? parsed.items : [];
+  return {
+    version: 1,
+    updatedAt: typeof parsed?.updatedAt === "string" ? parsed.updatedAt : "",
+    items
+  };
+}
+
+export async function writeInspirationIndex(dataDir: string, novelSlug: string, idx: InspirationIndex) {
+  const dir = metaDir(dataDir, novelSlug);
+  await ensureDir(dir);
+  const p = inspirationIndexPath(dataDir, novelSlug);
   await fs.writeFile(p, JSON.stringify(idx, null, 2), "utf8");
 }
 
