@@ -83,6 +83,36 @@ import {
 } from "./api";
 import type { BookSearchGroup, BookSearchHit } from "./api";
 
+type InspTypeKey = "naming" | "character" | "place" | "org" | "item";
+
+type InspGenSlice = {
+  previewItems: IdeaItem[];
+  savedIdSet: Record<string, boolean>;
+  expanded: Record<string, boolean>;
+  editingId: string | null;
+  editTitle: string;
+  editContent: string;
+  freeText: string;
+  useMemory: boolean;
+  count: number;
+  optionsJson: string;
+};
+
+function emptyInspGenSlice(): InspGenSlice {
+  return {
+    previewItems: [],
+    savedIdSet: {},
+    expanded: {},
+    editingId: null,
+    editTitle: "",
+    editContent: "",
+    freeText: "",
+    useMemory: true,
+    count: 3,
+    optionsJson: ""
+  };
+}
+
 type SelectedChapter = { bookSlug: string; filename: string } | null;
 type SelectedCard = { bookSlug: string; path: string } | null;
 
@@ -815,10 +845,17 @@ export function App() {
   const [rightTab, setRightTab] = useState<"chapterAnalysis" | "chapterSummary" | "chapterEntities" | "writingPack">(
     "chapterAnalysis"
   );
-  const [inspirationTypeTab, setInspirationTypeTab] = useState<
-    "naming" | "character" | "place" | "org" | "item" | "recycle"
-  >("character");
-  const [inspirationFuncTab, setInspirationFuncTab] = useState<"generate" | "list" | "recycle">("generate");
+  const [inspirationTypeTab, setInspirationTypeTab] = useState<InspTypeKey>("character");
+  const [inspirationFuncByType, setInspirationFuncByType] = useState<
+    Record<InspTypeKey, "generate" | "list" | "recycle">
+  >({
+    naming: "generate",
+    character: "generate",
+    place: "generate",
+    org: "generate",
+    item: "generate"
+  });
+  const inspirationFuncTab = inspirationFuncByType[inspirationTypeTab];
   const [inspirationIndex, setInspirationIndex] = useState<InspirationIndex | null>(null);
   const [inspirationBusy, setInspirationBusy] = useState(false);
   const [inspirationErr, setInspirationErr] = useState("");
@@ -826,19 +863,17 @@ export function App() {
   // 搜索框已按需求移除（减少占用空间）
   // const [inspirationSearch, setInspirationSearch] = useState("");
 
-  const [genPreviewItems, setGenPreviewItems] = useState<IdeaItem[]>([]);
+  /** 按「取名/角色/地点…」分桶：生成预览、表单与编辑状态互不串台 */
+  const [inspGenByType, setInspGenByType] = useState<Record<InspTypeKey, InspGenSlice>>(() => ({
+    naming: emptyInspGenSlice(),
+    character: emptyInspGenSlice(),
+    place: emptyInspGenSlice(),
+    org: emptyInspGenSlice(),
+    item: emptyInspGenSlice()
+  }));
 
-  const [genUseMemory, setGenUseMemory] = useState(true);
-  const [genCount, setGenCount] = useState(3);
-  const [genOptionsJson, setGenOptionsJson] = useState("");
-  const [genFreeText, setGenFreeText] = useState("");
-
-  const [inspirationExpanded, setInspirationExpanded] = useState<Record<string, boolean>>({});
-  const [inspirationEditingId, setInspirationEditingId] = useState<string | null>(null);
-  const [inspirationEditTitle, setInspirationEditTitle] = useState("");
-  const [inspirationEditContent, setInspirationEditContent] = useState("");
-
-  const [savedIdSet, setSavedIdSet] = useState<Record<string, boolean>>({});
+  /** 列表/回收站条目展开（与生成预览的 expanded 分离） */
+  const [inspirationListExpanded, setInspirationListExpanded] = useState<Record<string, boolean>>({});
   const [expandedAuditCharIds, setExpandedAuditCharIds] = useState<Record<string, boolean>>({});
   const [status, setStatus] = useState<string>("");
   const [busy, setBusy] = useState(false);
@@ -3436,7 +3471,10 @@ export function App() {
                                 role="tab"
                                 className={`browserTab tabCompact ${inspirationTypeTab === "naming" ? "active" : ""}`}
                                 aria-selected={inspirationTypeTab === "naming"}
-                                onClick={() => setInspirationTypeTab("naming")}
+                                onClick={() => {
+                                  setInspirationTypeTab("naming");
+                                  setInspirationFuncByType((prev) => ({ ...prev, naming: "generate" }));
+                                }}
                                 disabled={busy}
                               >
                                 取名
@@ -3446,7 +3484,10 @@ export function App() {
                                 role="tab"
                                 className={`browserTab tabCompact ${inspirationTypeTab === "character" ? "active" : ""}`}
                                 aria-selected={inspirationTypeTab === "character"}
-                                onClick={() => setInspirationTypeTab("character")}
+                                onClick={() => {
+                                  setInspirationTypeTab("character");
+                                  setInspirationFuncByType((prev) => ({ ...prev, character: "generate" }));
+                                }}
                                 disabled={busy}
                               >
                                 角色
@@ -3456,7 +3497,10 @@ export function App() {
                                 role="tab"
                                 className={`browserTab tabCompact ${inspirationTypeTab === "place" ? "active" : ""}`}
                                 aria-selected={inspirationTypeTab === "place"}
-                                onClick={() => setInspirationTypeTab("place")}
+                                onClick={() => {
+                                  setInspirationTypeTab("place");
+                                  setInspirationFuncByType((prev) => ({ ...prev, place: "generate" }));
+                                }}
                                 disabled={busy}
                               >
                                 地点
@@ -3466,7 +3510,10 @@ export function App() {
                                 role="tab"
                                 className={`browserTab tabCompact ${inspirationTypeTab === "org" ? "active" : ""}`}
                                 aria-selected={inspirationTypeTab === "org"}
-                                onClick={() => setInspirationTypeTab("org")}
+                                onClick={() => {
+                                  setInspirationTypeTab("org");
+                                  setInspirationFuncByType((prev) => ({ ...prev, org: "generate" }));
+                                }}
                                 disabled={busy}
                               >
                                 组织
@@ -3476,7 +3523,10 @@ export function App() {
                                 role="tab"
                                 className={`browserTab tabCompact ${inspirationTypeTab === "item" ? "active" : ""}`}
                                 aria-selected={inspirationTypeTab === "item"}
-                                onClick={() => setInspirationTypeTab("item")}
+                                onClick={() => {
+                                  setInspirationTypeTab("item");
+                                  setInspirationFuncByType((prev) => ({ ...prev, item: "generate" }));
+                                }}
                                 disabled={busy}
                               >
                                 道具
@@ -3491,7 +3541,12 @@ export function App() {
                                 role="tab"
                                 className={`browserTab tabCompact ${inspirationFuncTab === "generate" ? "active" : ""}`}
                                 aria-selected={inspirationFuncTab === "generate"}
-                                onClick={() => setInspirationFuncTab("generate")}
+                                onClick={() =>
+                                  setInspirationFuncByType((prev) => ({
+                                    ...prev,
+                                    [inspirationTypeTab]: "generate"
+                                  }))
+                                }
                                 disabled={busy}
                               >
                                 生成
@@ -3501,7 +3556,12 @@ export function App() {
                                 role="tab"
                                 className={`browserTab tabCompact ${inspirationFuncTab === "list" ? "active" : ""}`}
                                 aria-selected={inspirationFuncTab === "list"}
-                                onClick={() => setInspirationFuncTab("list")}
+                                onClick={() =>
+                                  setInspirationFuncByType((prev) => ({
+                                    ...prev,
+                                    [inspirationTypeTab]: "list"
+                                  }))
+                                }
                                 disabled={busy}
                               >
                                 列表
@@ -3511,7 +3571,12 @@ export function App() {
                                 role="tab"
                                 className={`browserTab tabCompact ${inspirationFuncTab === "recycle" ? "active" : ""}`}
                                 aria-selected={inspirationFuncTab === "recycle"}
-                                onClick={() => setInspirationFuncTab("recycle")}
+                                onClick={() =>
+                                  setInspirationFuncByType((prev) => ({
+                                    ...prev,
+                                    [inspirationTypeTab]: "recycle"
+                                  }))
+                                }
                                 disabled={busy}
                               >
                                 回收站
@@ -3569,6 +3634,9 @@ export function App() {
                                         ? ("item" as const)
                                         : ("character" as const);
 
+                            const inspKey = inspirationTypeTab;
+                            const genSlice = inspGenByType[inspKey];
+
                             return (
                               <>
                                 {inspirationFuncTab === "generate" ? (
@@ -3591,8 +3659,13 @@ export function App() {
                                       <label className="toggle timelineToggle" style={{ margin: 0 }}>
                                         <input
                                           type="checkbox"
-                                          checked={genUseMemory}
-                                          onChange={(e) => setGenUseMemory(e.target.checked)}
+                                          checked={genSlice.useMemory}
+                                          onChange={(e) =>
+                                            setInspGenByType((prev) => ({
+                                              ...prev,
+                                              [inspKey]: { ...prev[inspKey], useMemory: e.target.checked }
+                                            }))
+                                          }
                                           disabled={busy || inspirationBusy}
                                         />
                                         参考全书记忆
@@ -3603,11 +3676,14 @@ export function App() {
                                       </span>
                                       <input
                                         className="timelineInput"
-                                        value={String(genCount)}
+                                        value={String(genSlice.count)}
                                         onChange={(e) => {
                                           const n = parseInt(e.target.value || "3", 10);
                                           if (!Number.isFinite(n)) return;
-                                          setGenCount(clamp(n, 1, 10));
+                                          setInspGenByType((prev) => ({
+                                            ...prev,
+                                            [inspKey]: { ...prev[inspKey], count: clamp(n, 1, 10) }
+                                          }));
                                         }}
                                         inputMode="numeric"
                                         disabled={busy || inspirationBusy}
@@ -3620,12 +3696,14 @@ export function App() {
                                         disabled={busy || inspirationBusy || !activeBook}
                                         onClick={async () => {
                                           if (!activeBook) return;
+                                          const previewBucket = inspKey;
+                                          const snap = inspGenByType[previewBucket];
                                           setInspirationBusy(true);
                                           setInspirationErr("");
                                           try {
                                             let options: any = {};
                                             if (kindForUi !== "character" && kindForUi !== "place") {
-                                              const t = genOptionsJson.trim();
+                                              const t = snap.optionsJson.trim();
                                               if (t) {
                                                 try {
                                                   options = JSON.parse(t);
@@ -3638,22 +3716,28 @@ export function App() {
                                             const { items, debug } = await generateInspirationPreview(activeBook, {
                                               modelConfigId: activeModelId,
                                               kind: kindForUi as any,
-                                              count: clamp(genCount, 1, 10),
-                                              useMemory: genUseMemory,
+                                              count: clamp(snap.count, 1, 10),
+                                              useMemory: snap.useMemory,
                                               options,
-                                              freeText: genFreeText
+                                              freeText: snap.freeText
                                             });
                                             try {
                                               console.groupCollapsed(
-                                                `[灵感库] 生成 preview kind=${String(kindForUi)} count=${clamp(genCount, 1, 10)}`
+                                                `[灵感库] 生成 preview kind=${String(kindForUi)} count=${clamp(snap.count, 1, 10)}`
                                               );
                                               if (debug?.prompt) console.log("[prompt]\n" + debug.prompt);
                                               if (debug?.rawText) console.log("[raw]\n" + debug.rawText);
                                               console.log("[parsed items]", items);
                                               console.groupEnd();
                                             } catch {}
-                                            setGenPreviewItems(items);
-                                            setSavedIdSet({});
+                                            setInspGenByType((prev) => ({
+                                              ...prev,
+                                              [previewBucket]: {
+                                                ...prev[previewBucket],
+                                                previewItems: items,
+                                                savedIdSet: {}
+                                              }
+                                            }));
                                             setStatus("已生成（未保存）。");
                                           } catch (e: any) {
                                             setInspirationErr(e?.message || String(e));
@@ -3666,21 +3750,27 @@ export function App() {
                                         {inspirationBusy ? "生成中…" : "生成"}
                                       </button>
 
-                                      {genPreviewItems.length ? (
+                                      {genSlice.previewItems.length ? (
                                         <button
                                           type="button"
                                           className="btnSquare btnCompact"
                                           disabled={busy || inspirationBusy}
                                           onClick={() => {
-                                            setGenPreviewItems([]);
-                                            setSavedIdSet({});
-                                            setInspirationExpanded({});
-                                            setInspirationEditingId(null);
-                                            setInspirationEditTitle("");
-                                            setInspirationEditContent("");
+                                            setInspGenByType((prev) => ({
+                                              ...prev,
+                                              [inspKey]: {
+                                                ...prev[inspKey],
+                                                previewItems: [],
+                                                savedIdSet: {},
+                                                expanded: {},
+                                                editingId: null,
+                                                editTitle: "",
+                                                editContent: ""
+                                              }
+                                            }));
                                             setStatus("已清空本次生成结果（不影响已保存）。");
                                           }}
-                                          title="仅清空本次生成的预览结果"
+                                          title="仅清空本次类型的生成预览"
                                         >
                                           清空
                                         </button>
@@ -3697,8 +3787,13 @@ export function App() {
                                     >
                                       <textarea
                                         className="auditTextarea"
-                                        value={genFreeText}
-                                        onChange={(e) => setGenFreeText(e.target.value)}
+                                        value={genSlice.freeText}
+                                        onChange={(e) =>
+                                          setInspGenByType((prev) => ({
+                                            ...prev,
+                                            [inspKey]: { ...prev[inspKey], freeText: e.target.value }
+                                          }))
+                                        }
                                         placeholder={
                                           inspirationTypeTab === "place"
                                             ? "自由输入（可选）：例如「突出地形阻隔与可通行路线」「需要与势力分布联动的区域沙盘感」「边境/水系/制高点等地图锚点」「适合追缉或埋伏的街巷尺度」…"
@@ -3709,19 +3804,19 @@ export function App() {
                                       />
                                     </div>
 
-                                    {genPreviewItems.length ? (
+                                    {genSlice.previewItems.length ? (
                                       <div className="timelineSection" style={{ marginTop: 10 }}>
                                         <div className="auditPanelTitle">生成结果（点保存后进入列表）</div>
                                         <div className="timelineRangeList">
-                                          {genPreviewItems.map((it, idx) => {
+                                          {genSlice.previewItems.map((it, idx) => {
                                             const key = it.id || String(idx);
-                                            const saved = Boolean(savedIdSet[key]);
+                                            const saved = Boolean(genSlice.savedIdSet[key]);
                                             const title = String(it.title || "").trim();
                                             const content = String(it.content || "").trim();
                                             const placeParsed =
                                               kindForUi === "place" ? parseInspirationPlaceContent(content) : null;
-                                            const expanded = Boolean(inspirationExpanded[key]);
-                                            const editing = inspirationEditingId === key;
+                                            const expanded = Boolean(genSlice.expanded[key]);
+                                            const editing = genSlice.editingId === key;
                                             return (
                                               <div key={key} className="timelineRangeItem">
                                                 <div className="timelineRangeTop" style={{ gap: 8, flexWrap: "wrap" }}>
@@ -3733,7 +3828,16 @@ export function App() {
                                                     className="btnSort"
                                                     disabled={busy}
                                                     onClick={() =>
-                                                      setInspirationExpanded((prev) => ({ ...prev, [key]: !prev[key] }))
+                                                      setInspGenByType((prev) => {
+                                                        const s = prev[inspKey];
+                                                        return {
+                                                          ...prev,
+                                                          [inspKey]: {
+                                                            ...s,
+                                                            expanded: { ...s.expanded, [key]: !s.expanded[key] }
+                                                          }
+                                                        };
+                                                      })
                                                     }
                                                   >
                                                     {expanded ? "收起" : "展开"}
@@ -3744,12 +3848,24 @@ export function App() {
                                                     disabled={busy || inspirationBusy}
                                                     onClick={() => {
                                                       if (!editing) {
-                                                        setInspirationEditingId(key);
-                                                        setInspirationEditTitle(title);
-                                                        setInspirationEditContent(content);
-                                                        setInspirationExpanded((prev) => ({ ...prev, [key]: true }));
+                                                        setInspGenByType((prev) => {
+                                                          const s = prev[inspKey];
+                                                          return {
+                                                            ...prev,
+                                                            [inspKey]: {
+                                                              ...s,
+                                                              editingId: key,
+                                                              editTitle: title,
+                                                              editContent: content,
+                                                              expanded: { ...s.expanded, [key]: true }
+                                                            }
+                                                          };
+                                                        });
                                                       } else {
-                                                        setInspirationEditingId(null);
+                                                        setInspGenByType((prev) => ({
+                                                          ...prev,
+                                                          [inspKey]: { ...prev[inspKey], editingId: null }
+                                                        }));
                                                       }
                                                     }}
                                                     title="编辑生成内容"
@@ -3765,8 +3881,8 @@ export function App() {
                                                       setInspirationBusy(true);
                                                       setInspirationErr("");
                                                       try {
-                                                        const finalTitle = (editing ? inspirationEditTitle : title).trim();
-                                                        const finalContent = (editing ? inspirationEditContent : content).trim();
+                                                        const finalTitle = (editing ? genSlice.editTitle : title).trim();
+                                                        const finalContent = (editing ? genSlice.editContent : content).trim();
                                                         if (!finalContent) {
                                                           setInspirationErr("内容不能为空。");
                                                           return;
@@ -3789,7 +3905,16 @@ export function App() {
                                                           status: "active"
                                                         });
                                                         setInspirationIndex(index);
-                                                        setSavedIdSet((prev) => ({ ...prev, [key]: true }));
+                                                        setInspGenByType((prev) => {
+                                                          const s = prev[inspKey];
+                                                          return {
+                                                            ...prev,
+                                                            [inspKey]: {
+                                                              ...s,
+                                                              savedIdSet: { ...s.savedIdSet, [key]: true }
+                                                            }
+                                                          };
+                                                        });
                                                         setStatus("已保存到列表。");
                                                       } catch (e: any) {
                                                         setInspirationErr(e?.message || String(e));
@@ -3806,15 +3931,25 @@ export function App() {
                                                   <div style={{ marginTop: 8 }}>
                                                     <input
                                                       className="auditRelationsSearch"
-                                                      value={inspirationEditTitle}
-                                                      onChange={(e) => setInspirationEditTitle(e.target.value)}
+                                                      value={genSlice.editTitle}
+                                                      onChange={(e) =>
+                                                        setInspGenByType((prev) => ({
+                                                          ...prev,
+                                                          [inspKey]: { ...prev[inspKey], editTitle: e.target.value }
+                                                        }))
+                                                      }
                                                       placeholder="标题（角色名/地点名…）"
                                                       disabled={busy || inspirationBusy}
                                                     />
                                                     <textarea
                                                       className="auditTextarea"
-                                                      value={inspirationEditContent}
-                                                      onChange={(e) => setInspirationEditContent(e.target.value)}
+                                                      value={genSlice.editContent}
+                                                      onChange={(e) =>
+                                                        setInspGenByType((prev) => ({
+                                                          ...prev,
+                                                          [inspKey]: { ...prev[inspKey], editContent: e.target.value }
+                                                        }))
+                                                      }
                                                       placeholder="内容"
                                                       disabled={busy || inspirationBusy}
                                                       style={{ marginTop: 8, minHeight: 140 }}
@@ -3840,8 +3975,13 @@ export function App() {
                                     {kindForUi !== "character" && kindForUi !== "place" ? (
                                       <textarea
                                         className="auditTextarea"
-                                        value={genOptionsJson}
-                                        onChange={(e) => setGenOptionsJson(e.target.value)}
+                                        value={genSlice.optionsJson}
+                                        onChange={(e) =>
+                                          setInspGenByType((prev) => ({
+                                            ...prev,
+                                            [inspKey]: { ...prev[inspKey], optionsJson: e.target.value }
+                                          }))
+                                        }
                                         placeholder='可选项 options（可选，JSON）：例如 {"风格":["古风"],"道具类型":"法器"}'
                                         disabled={busy || inspirationBusy}
                                         style={{ marginTop: 8, minHeight: 70 }}
@@ -3901,7 +4041,7 @@ export function App() {
                                         const content = String(it.content || "").trim();
                                         const placeParsed =
                                           it.subtype === "place" ? parseInspirationPlaceContent(content) : null;
-                                        const expanded = Boolean(inspirationExpanded[it.id]);
+                                        const expanded = Boolean(inspirationListExpanded[it.id]);
                                         return (
                                           <div key={it.id} className="timelineRangeItem">
                                             <div className="timelineRangeTop" style={{ gap: 8, flexWrap: "wrap" }}>
@@ -3914,7 +4054,7 @@ export function App() {
                                                 className="btnSort"
                                                 disabled={busy}
                                                 onClick={() =>
-                                                  setInspirationExpanded((prev) => ({ ...prev, [it.id]: !prev[it.id] }))
+                                                  setInspirationListExpanded((prev) => ({ ...prev, [it.id]: !prev[it.id] }))
                                                 }
                                               >
                                                 {expanded ? "收起" : "展开"}
