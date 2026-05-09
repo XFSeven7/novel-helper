@@ -3837,19 +3837,6 @@ export function App() {
                               <button
                                 type="button"
                                 role="tab"
-                                className={`browserTab tabCompact ${inspirationTypeTab === "place" ? "active" : ""}`}
-                                aria-selected={inspirationTypeTab === "place"}
-                                onClick={() => {
-                                  setInspirationTypeTab("place");
-                                  setInspirationFuncByType((prev) => ({ ...prev, place: "generate" }));
-                                }}
-                                disabled={busy}
-                              >
-                                地点
-                              </button>
-                              <button
-                                type="button"
-                                role="tab"
                                 className={`browserTab tabCompact ${inspirationTypeTab === "org" ? "active" : ""}`}
                                 aria-selected={inspirationTypeTab === "org"}
                                 onClick={() => {
@@ -3859,19 +3846,6 @@ export function App() {
                                 disabled={busy}
                               >
                                 组织
-                              </button>
-                              <button
-                                type="button"
-                                role="tab"
-                                className={`browserTab tabCompact ${inspirationTypeTab === "item" ? "active" : ""}`}
-                                aria-selected={inspirationTypeTab === "item"}
-                                onClick={() => {
-                                  setInspirationTypeTab("item");
-                                  setInspirationFuncByType((prev) => ({ ...prev, item: "generate" }));
-                                }}
-                                disabled={busy}
-                              >
-                                道具
                               </button>
                               <button
                                 type="button"
@@ -3889,15 +3863,28 @@ export function App() {
                               <button
                                 type="button"
                                 role="tab"
-                                className={`browserTab tabCompact ${inspirationTypeTab === "lore" ? "active" : ""}`}
-                                aria-selected={inspirationTypeTab === "lore"}
+                                className={`browserTab tabCompact ${inspirationTypeTab === "place" ? "active" : ""}`}
+                                aria-selected={inspirationTypeTab === "place"}
                                 onClick={() => {
-                                  setInspirationTypeTab("lore");
-                                  setInspirationFuncByType((prev) => ({ ...prev, lore: "generate" }));
+                                  setInspirationTypeTab("place");
+                                  setInspirationFuncByType((prev) => ({ ...prev, place: "generate" }));
                                 }}
                                 disabled={busy}
                               >
-                                秘闻
+                                地点
+                              </button>
+                              <button
+                                type="button"
+                                role="tab"
+                                className={`browserTab tabCompact ${inspirationTypeTab === "item" ? "active" : ""}`}
+                                aria-selected={inspirationTypeTab === "item"}
+                                onClick={() => {
+                                  setInspirationTypeTab("item");
+                                  setInspirationFuncByType((prev) => ({ ...prev, item: "generate" }));
+                                }}
+                                disabled={busy}
+                              >
+                                道具
                               </button>
                               <button
                                 type="button"
@@ -3911,6 +3898,19 @@ export function App() {
                                 disabled={busy}
                               >
                                 功法
+                              </button>
+                              <button
+                                type="button"
+                                role="tab"
+                                className={`browserTab tabCompact ${inspirationTypeTab === "lore" ? "active" : ""}`}
+                                aria-selected={inspirationTypeTab === "lore"}
+                                onClick={() => {
+                                  setInspirationTypeTab("lore");
+                                  setInspirationFuncByType((prev) => ({ ...prev, lore: "generate" }));
+                                }}
+                                disabled={busy}
+                              >
+                                秘闻
                               </button>
                             </div>
                           </div>
