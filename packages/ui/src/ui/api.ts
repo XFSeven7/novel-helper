@@ -532,7 +532,13 @@ export type IdeaItem = {
   createdAt: string;
   updatedAt: string;
   source?: { provider?: string; model?: string; prompt?: string };
-  meta?: { parentId?: string; variantPolicy?: any; usedMemory?: boolean };
+  meta?: {
+    parentId?: string;
+    variantPolicy?: any;
+    usedMemory?: boolean;
+    itemOwnerCharacterName?: string;
+    itemOwnerMode?: "bound" | "floating";
+  };
 };
 export type InspirationIndex = { version: 1; updatedAt: string; items: IdeaItem[] };
 
@@ -570,6 +576,7 @@ export async function generateInspiration(slug: string, input: {
   useMemory?: boolean;
   options?: any;
   freeText?: string;
+  itemOwnerCharacterName?: string;
 }) {
   return await http<{ ok: true; index: InspirationIndex; items: IdeaItem[]; debug?: { prompt: string; rawText: string } }>(
     `/api/books/${encodeURIComponent(slug)}/inspiration/generate`,
@@ -587,6 +594,7 @@ export async function generateInspirationPreview(slug: string, input: {
   useMemory?: boolean;
   options?: any;
   freeText?: string;
+  itemOwnerCharacterName?: string;
 }) {
   return await http<{ ok: true; items: IdeaItem[]; debug?: { prompt: string; rawText: string } }>(
     `/api/books/${encodeURIComponent(slug)}/inspiration/generate-preview`,

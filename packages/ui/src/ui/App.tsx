@@ -96,6 +96,8 @@ type InspGenSlice = {
   useMemory: boolean;
   count: number;
   optionsJson: string;
+  /** 道具生成：持有者角色名；空字符串表示无主/待定 */
+  itemOwnerCharacterName: string;
 };
 
 function emptyInspGenSlice(): InspGenSlice {
@@ -109,7 +111,8 @@ function emptyInspGenSlice(): InspGenSlice {
     freeText: "",
     useMemory: true,
     count: 3,
-    optionsJson: ""
+    optionsJson: "",
+    itemOwnerCharacterName: ""
   };
 }
 
@@ -155,6 +158,87 @@ function inspirationPlaceCollapsedBlurb(data: InspirationPlaceContent, title: st
   const l = String(data.layout || "").trim();
   if (l) return l.length > 140 ? `${l.slice(0, 140)}…` : l;
   return title ? `「${title}」` : "地点卡";
+}
+
+/** 灵感库 · 道具生成落库的 JSON content 结构 */
+type InspirationItemContent = {
+  appearance?: string;
+  ownership_status?: string;
+  functions?: string;
+  limitations?: string;
+  origin?: string;
+  narrative_hooks?: string;
+  relationship_hooks?: Array<{ target?: string; nature?: string; description?: string }>;
+};
+
+function parseInspirationItemContent(raw: string): InspirationItemContent | null {
+  const t = String(raw || "").trim();
+  if (!t.startsWith("{")) return null;
+  try {
+    const o = JSON.parse(t) as Record<string, unknown>;
+    if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+    const keys = [
+      "appearance",
+      "ownership_status",
+      "functions",
+      "limitations",
+      "origin",
+      "narrative_hooks",
+      "relationship_hooks"
+    ];
+    if (!keys.some((k) => Object.prototype.hasOwnProperty.call(o, k))) return null;
+    return o as InspirationItemContent;
+  } catch {
+    return null;
+  }
+}
+
+function inspirationItemCollapsedBlurb(data: InspirationItemContent, title: string): string {
+  const a = String(data.appearance || "").trim();
+  if (a) return a.length > 140 ? `${a.slice(0, 140)}…` : a;
+  const f = String(data.functions || "").trim();
+  if (f) return f.length > 140 ? `${f.slice(0, 140)}…` : f;
+  return title ? `「${title}」` : "道具卡";
+}
+
+function InspirationItemStructuredView({ data }: { data: InspirationItemContent }) {
+  const hooks = Array.isArray(data.relationship_hooks) ? data.relationship_hooks : [];
+  const row = (label: string, body: string) =>
+    body.trim() ? (
+      <div className="inspirationItemBlock">
+        <div className="inspirationItemLabel">{label}</div>
+        <div className="inspirationItemBody">{body.trim()}</div>
+      </div>
+    ) : null;
+  return (
+    <div className="inspirationItemCard">
+      {row("外观", String(data.appearance || ""))}
+      {row("归属状态", String(data.ownership_status || ""))}
+      {row("功能与触发", String(data.functions || ""))}
+      {row("限制与代价", String(data.limitations || ""))}
+      {row("来历", String(data.origin || ""))}
+      {row("叙事钩子", String(data.narrative_hooks || ""))}
+      {hooks.length ? (
+        <div className="inspirationItemBlock">
+          <div className="inspirationItemLabel">关系钩子</div>
+          <div className="inspirationItemBody inspirationItemHooks">
+            {hooks.map((h, i) => {
+              const t = String(h?.target || "").trim();
+              const n = String(h?.nature || "").trim();
+              const d = String(h?.description || "").trim();
+              if (!t && !n && !d) return null;
+              return (
+                <div key={i} className="inspirationItemHook">
+                  {[t, n].filter(Boolean).join(" · ")}
+                  {d ? <div className="inspirationItemHookDesc">{d}</div> : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function InspirationPlaceStructuredView({ data }: { data: InspirationPlaceContent }) {
@@ -3719,7 +3803,11 @@ export function App() {
                                               count: clamp(snap.count, 1, 10),
                                               useMemory: snap.useMemory,
                                               options,
-                                              freeText: snap.freeText
+                                              freeText: snap.freeText,
+                                              itemOwnerCharacterName:
+                                                kindForUi === "item"
+                                                  ? snap.itemOwnerCharacterName.trim() || undefined
+                                                  : undefined
                                             });
                                             try {
                                               console.groupCollapsed(
@@ -3785,6 +3873,60 @@ export function App() {
                                         background: "transparent"
                                       }}
                                     >
+                                      {kindForUi === "item" ? (
+                                        <div
+                                          className="row"
+                                          style={{
+                                            display: "flex",
+                                            alignItems: "center",
+                                            gap: 8,
+                                            marginBottom: 8,
+                                            flexWrap: "wrap"
+                                          }}
+                                        >
+                                          <span className="muted" style={{ whiteSpace: "nowrap" }}>
+                                            持有者
+                                          </span>
+                                          <select
+                                            className="timelineInput"
+                                            value={genSlice.itemOwnerCharacterName}
+                                            onChange={(e) =>
+                                              setInspGenByType((prev) => ({
+                                                ...prev,
+                                                [inspKey]: { ...prev[inspKey], itemOwnerCharacterName: e.target.value }
+                                              }))
+                                            }
+                                            disabled={busy || inspirationBusy}
+                                            style={{ flex: 1, minWidth: 160, height: 32 }}
+                                          >
+                                            <option value="">
+                                              无主 / 待定归属（先收灵感，后可分配给角色）
+                                            </option>
+                                            {(() => {
+                                              const all = Array.isArray(auditCharactersIndex?.characters)
+                                                ? (auditCharactersIndex.characters as any[])
+                                                : [];
+                                              const hiddenSet = new Set(
+                                                Array.isArray(auditCharactersIndex?.hiddenNames)
+                                                  ? (auditCharactersIndex.hiddenNames as any[]).map((x) => String(x))
+                                                  : []
+                                              );
+                                              const names = Array.from(
+                                                new Set(
+                                                  all
+                                                    .map((c) => String(c?.name || "").trim())
+                                                    .filter((n) => n && !hiddenSet.has(n))
+                                                )
+                                              ).sort();
+                                              return names.map((n) => (
+                                                <option key={n} value={n}>
+                                                  {n}
+                                                </option>
+                                              ));
+                                            })()}
+                                          </select>
+                                        </div>
+                                      ) : null}
                                       <textarea
                                         className="auditTextarea"
                                         value={genSlice.freeText}
@@ -3796,8 +3938,10 @@ export function App() {
                                         }
                                         placeholder={
                                           inspirationTypeTab === "place"
-                                            ? "自由输入（可选）：例如「突出地形阻隔与可通行路线」「需要与势力分布联动的区域沙盘感」「边境/水系/制高点等地图锚点」「适合追缉或埋伏的街巷尺度」…"
-                                            : "自由输入（可选）：例如“更阴谋一点”“不要低俗”“与主角是盟友但暗藏私心”…"
+                                            ? "自由输入（可选）：如：一个适合藏匿赃物、充满霉味的废弃杂役仓"
+                                            : inspirationTypeTab === "item"
+                                              ? "自由输入（可选）：如：偏邪道、与某事件证物相关、代价偏重…"
+                                              : "自由输入（可选）：例如“更阴谋一点”“不要低俗”“与主角是盟友但暗藏私心”…"
                                         }
                                         disabled={busy || inspirationBusy}
                                         style={{ marginTop: 0, minHeight: 70 }}
@@ -3815,6 +3959,8 @@ export function App() {
                                             const content = String(it.content || "").trim();
                                             const placeParsed =
                                               kindForUi === "place" ? parseInspirationPlaceContent(content) : null;
+                                            const itemParsed =
+                                              kindForUi === "item" ? parseInspirationItemContent(content) : null;
                                             const expanded = Boolean(genSlice.expanded[key]);
                                             const editing = genSlice.editingId === key;
                                             return (
@@ -3887,6 +4033,16 @@ export function App() {
                                                           setInspirationErr("内容不能为空。");
                                                           return;
                                                         }
+                                                        const baseMeta =
+                                                          (it as any).meta && typeof (it as any).meta === "object"
+                                                            ? { ...(it as any).meta }
+                                                            : {};
+                                                        if (inspirationTypeTab === "item") {
+                                                          const own = genSlice.itemOwnerCharacterName.trim();
+                                                          baseMeta.itemOwnerMode = own ? "bound" : "floating";
+                                                          if (own) baseMeta.itemOwnerCharacterName = own;
+                                                          else delete baseMeta.itemOwnerCharacterName;
+                                                        }
                                                         const { index } = await upsertInspirationItem(activeBook, {
                                                           type: inspirationTypeTab === "naming" ? "naming" : "generation",
                                                           subtype:
@@ -3902,7 +4058,8 @@ export function App() {
                                                           title: finalTitle || undefined,
                                                           content: finalContent,
                                                           tags: Array.isArray((it as any).tags) ? (it as any).tags : undefined,
-                                                          status: "active"
+                                                          status: "active",
+                                                          meta: Object.keys(baseMeta).length ? baseMeta : undefined
                                                         });
                                                         setInspirationIndex(index);
                                                         setInspGenByType((prev) => {
@@ -3959,6 +4116,10 @@ export function App() {
                                                   placeParsed ? (
                                                     <div className="timelineRangeSummary" style={{ marginTop: 6 }}>
                                                       <InspirationPlaceStructuredView data={placeParsed} />
+                                                    </div>
+                                                  ) : itemParsed ? (
+                                                    <div className="timelineRangeSummary" style={{ marginTop: 6 }}>
+                                                      <InspirationItemStructuredView data={itemParsed} />
                                                     </div>
                                                   ) : (
                                                     <div className="timelineRangeSummary" style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
@@ -4039,14 +4200,25 @@ export function App() {
                                         const title = String(it.title || "").trim();
                                         const tags = Array.isArray(it.tags) ? it.tags : [];
                                         const content = String(it.content || "").trim();
+                                        const itemOwnerSaved =
+                                          it.subtype === "item" &&
+                                          (it as any).meta &&
+                                          typeof (it as any).meta === "object"
+                                            ? String((it as any).meta.itemOwnerCharacterName || "").trim()
+                                            : "";
                                         const placeParsed =
                                           it.subtype === "place" ? parseInspirationPlaceContent(content) : null;
+                                        const itemParsed =
+                                          it.subtype === "item" ? parseInspirationItemContent(content) : null;
                                         const expanded = Boolean(inspirationListExpanded[it.id]);
                                         return (
                                           <div key={it.id} className="timelineRangeItem">
                                             <div className="timelineRangeTop" style={{ gap: 8, flexWrap: "wrap" }}>
                                               <div className="timelineRangeTitle" style={{ flex: 1, minWidth: 120 }}>
                                                 {title || (it.type === "naming" ? "（名字）" : "（灵感）")}
+                                                {itemOwnerSaved ? (
+                                                  <span className="muted"> · 持有：{itemOwnerSaved}</span>
+                                                ) : null}
                                                 {it.subtype ? <span className="muted"> · {it.subtype}</span> : null}
                                               </div>
                                               <button
@@ -4126,6 +4298,10 @@ export function App() {
                                                 <div className="timelineRangeSummary" style={{ marginTop: 6 }}>
                                                   <InspirationPlaceStructuredView data={placeParsed} />
                                                 </div>
+                                              ) : itemParsed ? (
+                                                <div className="timelineRangeSummary" style={{ marginTop: 6 }}>
+                                                  <InspirationItemStructuredView data={itemParsed} />
+                                                </div>
                                               ) : (
                                                 <div className="timelineRangeSummary" style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
                                                   {content}
@@ -4133,7 +4309,11 @@ export function App() {
                                               )
                                             ) : (
                                               <div className="timelineRangeSummary memoryClamp2" style={{ marginTop: 6 }}>
-                                                {placeParsed ? inspirationPlaceCollapsedBlurb(placeParsed, title) : content}
+                                                {placeParsed
+                                                  ? inspirationPlaceCollapsedBlurb(placeParsed, title)
+                                                  : itemParsed
+                                                    ? inspirationItemCollapsedBlurb(itemParsed, title)
+                                                    : content}
                                               </div>
                                             )}
 

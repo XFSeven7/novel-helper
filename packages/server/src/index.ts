@@ -142,11 +142,15 @@ function safeJsonParse<T = any>(raw: string): T | null {
   }
 }
 
-/** 地点卡等允许 content 为结构化对象；落库与 UI 统一为字符串 */
+/** 地点卡 / 道具卡等允许 content 为结构化对象；落库与 UI 统一为字符串 */
 function stringifyInspirationContent(subtypeOrKind: string, card: any): string {
   const raw = card?.content;
   if (raw == null) return "";
-  if (subtypeOrKind === "place" && typeof raw === "object" && !Array.isArray(raw)) {
+  if (
+    (subtypeOrKind === "place" || subtypeOrKind === "item") &&
+    typeof raw === "object" &&
+    !Array.isArray(raw)
+  ) {
     try {
       return JSON.stringify(raw, null, 2).trim();
     } catch {
@@ -262,6 +266,115 @@ async function listKnownPlaceNames(dataDir: string, novelSlug: string): Promise<
   }
 }
 
+const ITEM_OWNER_INFO_MAX_CHARS = 3600;
+
+function truncateForPrompt(s: string, max: number): string {
+  const t = String(s || "").trim();
+  if (t.length <= max) return t;
+  return t.slice(0, Math.max(0, max - 8)) + "…（截断）";
+}
+
+function summarizeRelationalHooksForItemOwner(rh: any): string {
+  if (!rh || typeof rh !== "object") return "";
+  const lines: string[] = [];
+  const ft = String(rh.freeText ?? "").trim();
+  if (ft) lines.push(ft);
+  const rels = Array.isArray(rh.relations) ? rh.relations : [];
+  for (const r of rels.slice(0, 14)) {
+    const tn = String(r?.targetName || "").trim();
+    if (!tn) continue;
+    const types = Array.isArray(r?.types) ? r.types.map((x: any) => String(x).trim()).filter(Boolean).join("/") : "";
+    const bits = [tn, types, r?.emotionalPolarity, r?.conflictIndex].filter(Boolean).map(String);
+    lines.push(bits.join(" · "));
+  }
+  return truncateForPrompt(lines.join("\n"), 1100);
+}
+
+/** 空名 → null（无主/待定语义由提示词侧说明）；找不到卡仍返回弱约束对象 */
+async function resolveItemOwnerInfo(dataDir: string, novelSlug: string, name?: string | null): Promise<object | null> {
+  const n = String(name ?? "").trim();
+  if (!n) return null;
+  let idx: any;
+  try {
+    idx = await readAuditCharactersIndex(dataDir, novelSlug);
+  } catch {
+    return { name: n, note: "未能读取角色索引；请将该名视为用户指定的持有者引用（弱约束）。" };
+  }
+  const hidden = new Set(
+    Array.isArray(idx?.hiddenNames) ? (idx.hiddenNames as any[]).map((x) => String(x).trim()).filter(Boolean) : []
+  );
+  const chars = Array.isArray(idx?.characters) ? idx.characters : [];
+  const profile = chars.find((c: any) => {
+    const cn = String(c?.name || "").trim();
+    return cn === n && !hidden.has(cn);
+  });
+  if (!profile) {
+    return {
+      name: n,
+      note: `审核角色卡中未找到「${n}」。生成时请与该姓名可叙事衔接，但不要编造卡中不存在的具体经历细节。`
+    };
+  }
+  const state = profile.state && typeof profile.state === "object" ? profile.state : undefined;
+  let stateSnippet: Record<string, unknown> | undefined;
+  if (state) {
+    stateSnippet = {};
+    for (const k of Object.keys(state).slice(0, 14)) {
+      const v = (state as any)[k];
+      if (v == null) continue;
+      const vs = typeof v === "object" ? JSON.stringify(v) : String(v);
+      (stateSnippet as any)[k] = vs.length > 220 ? vs.slice(0, 220) + "…" : vs;
+    }
+  }
+  let personalityAnalysis = truncateForPrompt(String(profile.personalityAnalysis || "").trim(), 900);
+  let relationalHooks_summary = summarizeRelationalHooksForItemOwner(profile.relationalHooks);
+  const base: Record<string, unknown> = {
+    name: profile.name,
+    role: profile.role,
+    tags: Array.isArray(profile.tags) ? profile.tags.slice(0, 24) : profile.tags,
+    state: stateSnippet,
+    personalityAnalysis: personalityAnalysis || undefined,
+    relationalHooks_summary: relationalHooks_summary || undefined
+  };
+  for (const k of Object.keys(base)) {
+    if (base[k] === undefined || base[k] === "") delete base[k];
+  }
+  const shrinkOnce = () => {
+    if (typeof base.personalityAnalysis === "string")
+      base.personalityAnalysis = truncateForPrompt(base.personalityAnalysis, 420);
+    if (typeof base.relationalHooks_summary === "string")
+      base.relationalHooks_summary = truncateForPrompt(base.relationalHooks_summary, 480);
+    if (base.state && typeof base.state === "object") {
+      const keys = Object.keys(base.state);
+      if (keys.length > 8) {
+        const next: Record<string, unknown> = {};
+        for (const k of keys.slice(0, 8)) next[k] = (base.state as any)[k];
+        base.state = next;
+      }
+    }
+  };
+  for (let pass = 0; pass < 3; pass++) {
+    const json = JSON.stringify(base, null, 2);
+    if (json.length <= ITEM_OWNER_INFO_MAX_CHARS) return base;
+    shrinkOnce();
+  }
+  let json = JSON.stringify(base, null, 2);
+  if (json.length > ITEM_OWNER_INFO_MAX_CHARS) {
+    delete base.relationalHooks_summary;
+    delete base.personalityAnalysis;
+    delete base.state;
+    base.note = "（持有者详情因篇幅限制已裁剪；请结合全书与角色名设计道具叙事）";
+    json = JSON.stringify(base, null, 2);
+  }
+  if (json.length > ITEM_OWNER_INFO_MAX_CHARS) {
+    return {
+      name: profile.name,
+      role: profile.role,
+      tags: Array.isArray(profile.tags) ? profile.tags.slice(0, 8) : undefined
+    };
+  }
+  return base;
+}
+
 function buildInspirationPrompt(input: {
   kind: "naming" | "character" | "place" | "org" | "item" | "other";
   count: number;
@@ -271,8 +384,9 @@ function buildInspirationPrompt(input: {
   memoryText: string;
   knownCharacterNames: string[];
   knownPlaceNames?: string[];
+  itemOwnerInfo?: object | null;
 }): string {
-  const { kind, count, opts, free, useMemory, memoryText, knownCharacterNames, knownPlaceNames } = input;
+  const { kind, count, opts, free, useMemory, memoryText, knownCharacterNames, knownPlaceNames, itemOwnerInfo } = input;
 
   const characterDirectorPreamble = [
     "你是一位拥有‘全知视角’的叙事逻辑架构师与叙事导演。你负责在给定的世界观与剧情框架下，策划具备高逻辑粘性、强冲突张力的【角色灵感卡片】。",
@@ -419,12 +533,73 @@ function buildInspirationPrompt(input: {
   }
 
   if (kind === "item") {
+    const memorySnapshot =
+      useMemory && String(memoryText || "").trim()
+        ? String(memoryText).trim()
+        : "（未启用全书记忆或无可用快照。）";
+    const coreDirection = free || "设计一件能推动矛盾、并与当前叙事张力相匹配的关键道具或器物。";
+    const optsBlock =
+      opts && typeof opts === "object" && Object.keys(opts).length
+        ? ["【结构化可选项（来自用户 JSON）】", JSON.stringify(opts, null, 2), ""].join("\n")
+        : "";
+    const ownershipBlock =
+      itemOwnerInfo != null
+        ? [
+            "## Ownership Logic（有主 / 已绑定持有者）",
+            "下列 JSON 为【指定持有者】自审核角色卡组装的精简信息（可能已截断）。道具的叙事钩子、使用习惯与代价应优先与该持有者的心理动机、关系网与当前状态相容；禁止把道具写成与持有者完全无关的孤立设定。",
+            JSON.stringify(itemOwnerInfo, null, 2),
+            ""
+          ].join("\n")
+        : [
+            "## Ownership Logic（无主 / 待定归属）",
+            "用户未指定持有者：道具应为「可先收灵感、后分配角色」的待定归属物。",
+            "语义说明：这是「归属尚未在工具中绑定」，不是要求你假设世界上绝对无人认领；允许写成路边遗物、组织公物、无主赃物等。",
+            "请让 ownership_status 明确写出当前叙事上的归属状态（如：无主/公物/来历不明/暂由某人保管但非心认之主 等）。",
+            ""
+          ].join("\n");
+
     return [
-      ...common,
-      "【任务】只生成【道具卡】，不要生成角色/地点为主体。",
-      ...taskMetaLines,
-      "要求：title=道具名；content需包含：核心效果/触发条件/限制或代价(必填)/来源传闻/剧情用法(至少2条)。",
-      "现在输出 JSON 数组："
+      "你是一位顶尖的叙事道具与器物设计师。你负责在给定的世界观与剧情框架下，策划具备功能张力、代价清晰、可反复在章节中回收的【道具灵感卡片】。",
+      "",
+      "道具设计逻辑",
+      "1. 业力工具：道具必须改变信息、资源或权力平衡；禁止纯装饰品式设定。",
+      "2. 触发与代价：写清如何生效、对谁有效、失败或滥用的反噬/限制。",
+      "3. 叙事可回收：提供可在多章复用的钩子，而非一次性说明文。",
+      "4. 归属一致：有主时与持有者动机咬合；无主时保留可被多角色争夺或认领的空间。",
+      "",
+      "## Context Injection（上下文对齐）",
+      "【全书记忆快照】",
+      memorySnapshot,
+      "",
+      "（本任务不注入全书角色名列表与地点名列表；若用户指定持有者，其信息仅见下方 Ownership 段。）",
+      "",
+      optsBlock ? optsBlock : "",
+      ownershipBlock,
+      "## Task Requirements（任务定义）",
+      `- 生成数量：${count}`,
+      `- 核心方向：${coreDirection}`,
+      "",
+      "只生成【道具卡】；不要以角色或地点作为卡片主体。title 为器物/道具名称，符合世界观即可。",
+      "",
+      "## Output Format（JSON Array）",
+      "请严格输出 JSON 数组（顶层为数组，长度等于生成数量），禁止任何解释说明、禁止 markdown、禁止代码块。每个对象必须包含：",
+      "{",
+      '  "title": "道具名称(符合世界观)",',
+      '  "tags": ["器物类型", "风险等级", "叙事功能"],',
+      '  "content": {',
+      '    "appearance": "外观与质感（具体可见可触，避免空泛形容词）",',
+      '    "ownership_status": "归属与流转状态（与 Ownership Logic 一致）",',
+      '    "functions": "核心效果与典型使用方式（含触发条件）",',
+      '    "limitations": "限制、代价、反噬或失效条件（必填）",',
+      '    "origin": "来历、传闻或获取路径（可与全书记忆挂钩）",',
+      '    "narrative_hooks": "可跨章复用的剧情切入点（2-4 条，可用换行分隔）",',
+      '    "relationship_hooks": [',
+      '      { "target": "角色/势力/地点", "nature": "关联性质", "description": "具体叙事联系" }',
+      "    ]",
+      "  }",
+      "}",
+      "",
+      "relationship_hooks 必须输出数组（可为空数组 []）；不得省略 content 内任一字段；字段内容尽量具体，避免空字符串占位。"
     ].join("\n");
   }
 
@@ -4349,7 +4524,8 @@ app.post("/api/books/:slug/inspiration/generate", async (req, reply) => {
     count: z.number().int().min(1).max(10).optional(),
     useMemory: z.boolean().optional(),
     options: z.any().optional(),
-    freeText: z.string().optional()
+    freeText: z.string().optional(),
+    itemOwnerCharacterName: z.string().optional()
   });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
@@ -4368,8 +4544,21 @@ app.post("/api/books/:slug/inspiration/generate", async (req, reply) => {
   const kind = body.kind;
   const opts = body.options ?? {};
   const free = String(body.freeText || "").trim();
+  const itemOwnerCharacterName = kind === "item" ? String(body.itemOwnerCharacterName || "").trim() : "";
+  const itemOwnerInfo =
+    kind === "item" ? await resolveItemOwnerInfo(dataDir, params.slug, itemOwnerCharacterName || undefined) : null;
 
-  const prompt = buildInspirationPrompt({ kind, count, opts, free, useMemory, memoryText, knownCharacterNames, knownPlaceNames });
+  const prompt = buildInspirationPrompt({
+    kind,
+    count,
+    opts,
+    free,
+    useMemory,
+    memoryText,
+    knownCharacterNames,
+    knownPlaceNames,
+    itemOwnerInfo
+  });
 
   const { model, providerOptions } = createAiSdkModel(cfg);
   const { text } = await generateText({
@@ -4389,7 +4578,7 @@ app.post("/api/books/:slug/inspiration/generate", async (req, reply) => {
   const now = new Date().toISOString();
   const items: IdeaItem[] = [];
   for (const c of cards.slice(0, count)) {
-    const content = stringifyInspirationContent(kind === "place" ? "place" : "", c);
+    const content = stringifyInspirationContent(kind === "place" ? "place" : kind === "item" ? "item" : "", c);
     if (!content) continue;
     const it: IdeaItem = {
       id: newId(),
@@ -4412,7 +4601,15 @@ app.post("/api/books/:slug/inspiration/generate", async (req, reply) => {
       createdAt: now,
       updatedAt: now,
       source: { provider: cfg.provider, model: (cfg.model || "").trim(), prompt },
-      meta: { usedMemory: useMemory }
+      meta: {
+        usedMemory: useMemory,
+        ...(kind === "item"
+          ? {
+              itemOwnerMode: itemOwnerCharacterName ? ("bound" as const) : ("floating" as const),
+              ...(itemOwnerCharacterName ? { itemOwnerCharacterName } : {})
+            }
+          : {})
+      }
     };
     items.push(it);
   }
@@ -4431,7 +4628,8 @@ app.post("/api/books/:slug/inspiration/generate-preview", async (req, reply) => 
     count: z.number().int().min(1).max(10).optional(),
     useMemory: z.boolean().optional(),
     options: z.any().optional(),
-    freeText: z.string().optional()
+    freeText: z.string().optional(),
+    itemOwnerCharacterName: z.string().optional()
   });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
@@ -4450,8 +4648,21 @@ app.post("/api/books/:slug/inspiration/generate-preview", async (req, reply) => 
   const kind = body.kind;
   const opts = body.options ?? {};
   const free = String(body.freeText || "").trim();
+  const itemOwnerCharacterName = kind === "item" ? String(body.itemOwnerCharacterName || "").trim() : "";
+  const itemOwnerInfo =
+    kind === "item" ? await resolveItemOwnerInfo(dataDir, params.slug, itemOwnerCharacterName || undefined) : null;
 
-  const prompt = buildInspirationPrompt({ kind, count, opts, free, useMemory, memoryText, knownCharacterNames, knownPlaceNames });
+  const prompt = buildInspirationPrompt({
+    kind,
+    count,
+    opts,
+    free,
+    useMemory,
+    memoryText,
+    knownCharacterNames,
+    knownPlaceNames,
+    itemOwnerInfo
+  });
 
   const { model, providerOptions } = createAiSdkModel(cfg);
   const { text } = await generateText({
@@ -4470,7 +4681,7 @@ app.post("/api/books/:slug/inspiration/generate-preview", async (req, reply) => 
   const now = new Date().toISOString();
   const items: IdeaItem[] = [];
   for (const c of cards.slice(0, count)) {
-    const content = stringifyInspirationContent(kind === "place" ? "place" : "", c);
+    const content = stringifyInspirationContent(kind === "place" ? "place" : kind === "item" ? "item" : "", c);
     if (!content) continue;
     items.push({
       id: newId(),
@@ -4493,7 +4704,15 @@ app.post("/api/books/:slug/inspiration/generate-preview", async (req, reply) => 
       createdAt: now,
       updatedAt: now,
       source: { provider: cfg.provider, model: (cfg.model || "").trim(), prompt },
-      meta: { usedMemory: useMemory }
+      meta: {
+        usedMemory: useMemory,
+        ...(kind === "item"
+          ? {
+              itemOwnerMode: itemOwnerCharacterName ? ("bound" as const) : ("floating" as const),
+              ...(itemOwnerCharacterName ? { itemOwnerCharacterName } : {})
+            }
+          : {})
+      }
     });
   }
   if (!items.length) return reply.code(400).send({ message: "模型输出为空或不可用" });
