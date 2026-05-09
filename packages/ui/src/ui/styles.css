@@ -1582,6 +1582,124 @@ code {
   color: color-mix(in srgb, var(--muted) 88%, var(--text));
 }
 
+/* 灵感库 · 事件卡 */
+.inspirationEventCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--text) 92%, var(--muted));
+}
+
+.inspirationEventBlock {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  padding-bottom: 8px;
+}
+
+.inspirationEventBlock:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.inspirationEventLabel {
+  font-weight: 650;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--text) 88%, var(--muted));
+  margin-bottom: 4px;
+  letter-spacing: 0.02em;
+}
+
+.inspirationEventBody {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.inspirationEventHooks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inspirationEventHook {
+  padding-left: 8px;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 36%, var(--border));
+}
+
+.inspirationEventHookDesc {
+  margin-top: 4px;
+  color: color-mix(in srgb, var(--muted) 88%, var(--text));
+}
+
+/* 灵感库 · 秘闻卡 */
+.inspirationLoreCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--text) 92%, var(--muted));
+}
+
+.inspirationLoreBlock {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  padding-bottom: 8px;
+}
+
+.inspirationLoreBlock:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.inspirationLoreLabel {
+  font-weight: 650;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--text) 88%, var(--muted));
+  margin-bottom: 4px;
+  letter-spacing: 0.02em;
+}
+
+.inspirationLoreBody {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* 灵感库 · 功法卡 */
+.inspirationTechniqueCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--text) 92%, var(--muted));
+}
+
+.inspirationTechniqueBlock {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  padding-bottom: 8px;
+}
+
+.inspirationTechniqueBlock:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.inspirationTechniqueLabel {
+  font-weight: 650;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--text) 88%, var(--muted));
+  margin-bottom: 4px;
+  letter-spacing: 0.02em;
+}
+
+.inspirationTechniqueBody {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 /* 写作包希望更“直角/紧凑”，不要圆角卡片感 */
 .writingPackPanel.auditPanel {
   border-radius: 0;

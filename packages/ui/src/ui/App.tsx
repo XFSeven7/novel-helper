@@ -83,7 +83,7 @@ import {
 } from "./api";
 import type { BookSearchGroup, BookSearchHit } from "./api";
 
-type InspTypeKey = "character" | "place" | "org" | "item";
+type InspTypeKey = "character" | "place" | "org" | "item" | "event" | "lore" | "technique";
 
 type InspGenSlice = {
   previewItems: IdeaItem[];
@@ -318,6 +318,176 @@ function InspirationItemStructuredView({ data }: { data: InspirationItemContent 
           </div>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** 灵感库 · 事件卡 */
+type InspirationEventContent = {
+  trigger?: string;
+  description?: string;
+  impact?: string;
+  dilemma?: string;
+  karma_delta?: string;
+  relationship_hooks?: Array<{ target?: string; change?: string }>;
+};
+
+function parseInspirationEventContent(raw: string): InspirationEventContent | null {
+  const t = String(raw || "").trim();
+  if (!t.startsWith("{")) return null;
+  try {
+    const o = JSON.parse(t) as Record<string, unknown>;
+    if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+    const keys = ["trigger", "description", "impact", "dilemma", "karma_delta", "relationship_hooks"];
+    if (!keys.some((k) => Object.prototype.hasOwnProperty.call(o, k))) return null;
+    return o as InspirationEventContent;
+  } catch {
+    return null;
+  }
+}
+
+function inspirationEventCollapsedBlurb(data: InspirationEventContent, title: string): string {
+  const d = String(data.description || "").trim();
+  if (d) return d.length > 140 ? `${d.slice(0, 140)}…` : d;
+  const tr = String(data.trigger || "").trim();
+  if (tr) return tr.length > 140 ? `${tr.slice(0, 140)}…` : tr;
+  return title ? `「${title}」` : "事件卡";
+}
+
+function InspirationEventStructuredView({ data }: { data: InspirationEventContent }) {
+  const hooks = Array.isArray(data.relationship_hooks) ? data.relationship_hooks : [];
+  const row = (label: string, body: string) =>
+    body.trim() ? (
+      <div className="inspirationEventBlock">
+        <div className="inspirationEventLabel">{label}</div>
+        <div className="inspirationEventBody">{body.trim()}</div>
+      </div>
+    ) : null;
+  return (
+    <div className="inspirationEventCard">
+      {row("触发诱因", String(data.trigger || ""))}
+      {row("过程简述", String(data.description || ""))}
+      {row("即时冲击", String(data.impact || ""))}
+      {row("二难抉择", String(data.dilemma || ""))}
+      {row("业力变动", String(data.karma_delta || ""))}
+      {hooks.length ? (
+        <div className="inspirationEventBlock">
+          <div className="inspirationEventLabel">关系钩子</div>
+          <div className="inspirationEventBody inspirationEventHooks">
+            {hooks.map((h, i) => {
+              const tg = String(h?.target || "").trim();
+              const ch = String(h?.change || "").trim();
+              if (!tg && !ch) return null;
+              return (
+                <div key={i} className="inspirationEventHook">
+                  {tg}
+                  {ch ? <div className="inspirationEventHookDesc">{ch}</div> : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** 灵感库 · 秘闻卡 */
+type InspirationLoreContent = {
+  surface_rumor?: string;
+  hidden_truth?: string;
+  evidence_trace?: string;
+  danger_level?: string;
+  narrative_value?: string;
+};
+
+function parseInspirationLoreContent(raw: string): InspirationLoreContent | null {
+  const t = String(raw || "").trim();
+  if (!t.startsWith("{")) return null;
+  try {
+    const o = JSON.parse(t) as Record<string, unknown>;
+    if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+    const keys = ["surface_rumor", "hidden_truth", "evidence_trace", "danger_level", "narrative_value"];
+    if (!keys.some((k) => Object.prototype.hasOwnProperty.call(o, k))) return null;
+    return o as InspirationLoreContent;
+  } catch {
+    return null;
+  }
+}
+
+function inspirationLoreCollapsedBlurb(data: InspirationLoreContent, title: string): string {
+  const s = String(data.surface_rumor || "").trim();
+  if (s) return s.length > 140 ? `${s.slice(0, 140)}…` : s;
+  const h = String(data.hidden_truth || "").trim();
+  if (h) return h.length > 140 ? `${h.slice(0, 140)}…` : h;
+  return title ? `「${title}」` : "秘闻卡";
+}
+
+function InspirationLoreStructuredView({ data }: { data: InspirationLoreContent }) {
+  const row = (label: string, body: string) =>
+    body.trim() ? (
+      <div className="inspirationLoreBlock">
+        <div className="inspirationLoreLabel">{label}</div>
+        <div className="inspirationLoreBody">{body.trim()}</div>
+      </div>
+    ) : null;
+  return (
+    <div className="inspirationLoreCard">
+      {row("坊间传闻", String(data.surface_rumor || ""))}
+      {row("底层真相", String(data.hidden_truth || ""))}
+      {row("物证线索", String(data.evidence_trace || ""))}
+      {row("危险权重", String(data.danger_level || ""))}
+      {row("叙事价值", String(data.narrative_value || ""))}
+    </div>
+  );
+}
+
+/** 灵感库 · 功法卡 */
+type InspirationTechniqueContent = {
+  logic_flow?: string;
+  effect?: string;
+  backlash?: string;
+  requirement?: string;
+  lore_origin?: string;
+};
+
+function parseInspirationTechniqueContent(raw: string): InspirationTechniqueContent | null {
+  const t = String(raw || "").trim();
+  if (!t.startsWith("{")) return null;
+  try {
+    const o = JSON.parse(t) as Record<string, unknown>;
+    if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+    const keys = ["logic_flow", "effect", "backlash", "requirement", "lore_origin"];
+    if (!keys.some((k) => Object.prototype.hasOwnProperty.call(o, k))) return null;
+    return o as InspirationTechniqueContent;
+  } catch {
+    return null;
+  }
+}
+
+function inspirationTechniqueCollapsedBlurb(data: InspirationTechniqueContent, title: string): string {
+  const e = String(data.effect || "").trim();
+  if (e) return e.length > 140 ? `${e.slice(0, 140)}…` : e;
+  const l = String(data.logic_flow || "").trim();
+  if (l) return l.length > 140 ? `${l.slice(0, 140)}…` : l;
+  return title ? `「${title}」` : "功法卡";
+}
+
+function InspirationTechniqueStructuredView({ data }: { data: InspirationTechniqueContent }) {
+  const row = (label: string, body: string) =>
+    body.trim() ? (
+      <div className="inspirationTechniqueBlock">
+        <div className="inspirationTechniqueLabel">{label}</div>
+        <div className="inspirationTechniqueBody">{body.trim()}</div>
+      </div>
+    ) : null;
+  return (
+    <div className="inspirationTechniqueCard">
+      {row("运行逻辑", String(data.logic_flow || ""))}
+      {row("能力展现", String(data.effect || ""))}
+      {row("代价与反噬", String(data.backlash || ""))}
+      {row("入门门槛", String(data.requirement || ""))}
+      {row("来历与血痕", String(data.lore_origin || ""))}
     </div>
   );
 }
@@ -1017,7 +1187,10 @@ export function App() {
     character: "generate",
     place: "generate",
     org: "generate",
-    item: "generate"
+    item: "generate",
+    event: "generate",
+    lore: "generate",
+    technique: "generate"
   });
   const inspirationFuncTab = inspirationFuncByType[inspirationTypeTab];
   const [inspirationIndex, setInspirationIndex] = useState<InspirationIndex | null>(null);
@@ -1032,7 +1205,10 @@ export function App() {
     character: emptyInspGenSlice(),
     place: emptyInspGenSlice(),
     org: emptyInspGenSlice(),
-    item: emptyInspGenSlice()
+    item: emptyInspGenSlice(),
+    event: emptyInspGenSlice(),
+    lore: emptyInspGenSlice(),
+    technique: emptyInspGenSlice()
   }));
 
   /** 列表/回收站条目展开（与生成预览的 expanded 分离） */
@@ -1547,6 +1723,22 @@ export function App() {
   const [auditOrgsIndex, setAuditOrgsIndex] = useState<any | null>(null);
   const [auditForeshadowsIndex, setAuditForeshadowsIndex] = useState<any | null>(null);
   const [auditProgressIndex, setAuditProgressIndex] = useState<any | null>(null);
+  /** 进入灵感库时拉取审核角色索引，供道具/功法「持有人」下拉（不依赖是否已打开某一章） */
+  useEffect(() => {
+    if (!activeBook || leftTab !== "inspiration") return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { index } = await getAuditCharacters(activeBook);
+        if (!cancelled) setAuditCharactersIndex(index);
+      } catch {
+        // 保留已有数据
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBook, leftTab]);
   const [writingPack, setWritingPack] = useState<WritingPack | null>(null);
   const [writingPackBusy, setWritingPackBusy] = useState(false);
   const [writingPackErr, setWritingPackErr] = useState("");
@@ -3681,6 +3873,45 @@ export function App() {
                               >
                                 道具
                               </button>
+                              <button
+                                type="button"
+                                role="tab"
+                                className={`browserTab tabCompact ${inspirationTypeTab === "event" ? "active" : ""}`}
+                                aria-selected={inspirationTypeTab === "event"}
+                                onClick={() => {
+                                  setInspirationTypeTab("event");
+                                  setInspirationFuncByType((prev) => ({ ...prev, event: "generate" }));
+                                }}
+                                disabled={busy}
+                              >
+                                事件
+                              </button>
+                              <button
+                                type="button"
+                                role="tab"
+                                className={`browserTab tabCompact ${inspirationTypeTab === "lore" ? "active" : ""}`}
+                                aria-selected={inspirationTypeTab === "lore"}
+                                onClick={() => {
+                                  setInspirationTypeTab("lore");
+                                  setInspirationFuncByType((prev) => ({ ...prev, lore: "generate" }));
+                                }}
+                                disabled={busy}
+                              >
+                                秘闻
+                              </button>
+                              <button
+                                type="button"
+                                role="tab"
+                                className={`browserTab tabCompact ${inspirationTypeTab === "technique" ? "active" : ""}`}
+                                aria-selected={inspirationTypeTab === "technique"}
+                                onClick={() => {
+                                  setInspirationTypeTab("technique");
+                                  setInspirationFuncByType((prev) => ({ ...prev, technique: "generate" }));
+                                }}
+                                disabled={busy}
+                              >
+                                功法
+                              </button>
                             </div>
                           </div>
 
@@ -3753,6 +3984,9 @@ export function App() {
                               if (inspirationTypeTab === "place") return subtype === "place";
                               if (inspirationTypeTab === "org") return subtype === "organization";
                               if (inspirationTypeTab === "item") return subtype === "item";
+                              if (inspirationTypeTab === "event") return subtype === "event";
+                              if (inspirationTypeTab === "lore") return subtype === "lore";
+                              if (inspirationTypeTab === "technique") return subtype === "technique";
                               return true;
                             };
 
@@ -3780,7 +4014,13 @@ export function App() {
                                     ? ("org" as const)
                                     : inspirationTypeTab === "item"
                                       ? ("item" as const)
-                                      : ("character" as const);
+                                      : inspirationTypeTab === "event"
+                                        ? ("event" as const)
+                                        : inspirationTypeTab === "lore"
+                                          ? ("lore" as const)
+                                          : inspirationTypeTab === "technique"
+                                            ? ("technique" as const)
+                                            : ("character" as const);
 
                             const inspKey = inspirationTypeTab;
                             const genSlice = inspGenByType[inspKey];
@@ -3855,7 +4095,7 @@ export function App() {
                                               options: {},
                                               freeText: snap.freeText,
                                               itemOwnerCharacterName:
-                                                kindForUi === "item"
+                                                kindForUi === "item" || kindForUi === "technique"
                                                   ? snap.itemOwnerCharacterName.trim() || undefined
                                                   : undefined
                                             });
@@ -3923,7 +4163,7 @@ export function App() {
                                         background: "transparent"
                                       }}
                                     >
-                                      {kindForUi === "item" ? (
+                                      {kindForUi === "item" || kindForUi === "technique" ? (
                                         <div
                                           className="row"
                                           style={{
@@ -3935,7 +4175,7 @@ export function App() {
                                           }}
                                         >
                                           <span className="muted" style={{ whiteSpace: "nowrap" }}>
-                                            持有者
+                                            持有人
                                           </span>
                                           <select
                                             className="timelineInput"
@@ -3993,7 +4233,13 @@ export function App() {
                                               ? "自由输入（可选）：如：偏邪道、与某事件证物相关、代价偏重…"
                                               : inspirationTypeTab === "org"
                                                 ? "自由输入（可选）：如：偏谍报与渗透、与当权者对立、内部派系倾轧严重…"
-                                                : "自由输入（可选）：例如「更阴谋一点」「不要低俗」「与主角表面盟友、暗藏私心」…"
+                                                : inspirationTypeTab === "event"
+                                                  ? "自由输入（可选）：如：逼主角二选一、连锁因果、要改业力账本…"
+                                                  : inspirationTypeTab === "lore"
+                                                    ? "自由输入（可选）：如：宗门丑闻、被掩盖的历史、禁忌知识…"
+                                                    : inspirationTypeTab === "technique"
+                                                      ? "自由输入（可选）：如：高反噬邪功、需特殊心境、与某段血史相关…"
+                                                      : "自由输入（可选）：例如「更阴谋一点」「不要低俗」「与主角表面盟友、暗藏私心」…"
                                         }
                                         disabled={busy || inspirationBusy}
                                         style={{ marginTop: 0, minHeight: 70 }}
@@ -4015,6 +4261,14 @@ export function App() {
                                               kindForUi === "item" ? parseInspirationItemContent(content) : null;
                                             const orgParsed =
                                               kindForUi === "org" ? parseInspirationOrgContent(content) : null;
+                                            const eventParsed =
+                                              kindForUi === "event" ? parseInspirationEventContent(content) : null;
+                                            const loreParsed =
+                                              kindForUi === "lore" ? parseInspirationLoreContent(content) : null;
+                                            const techniqueParsed =
+                                              kindForUi === "technique"
+                                                ? parseInspirationTechniqueContent(content)
+                                                : null;
                                             const expanded = Boolean(genSlice.expanded[key]);
                                             const editing = genSlice.editingId === key;
                                             return (
@@ -4091,7 +4345,7 @@ export function App() {
                                                           (it as any).meta && typeof (it as any).meta === "object"
                                                             ? { ...(it as any).meta }
                                                             : {};
-                                                        if (inspirationTypeTab === "item") {
+                                                        if (inspirationTypeTab === "item" || inspirationTypeTab === "technique") {
                                                           const own = genSlice.itemOwnerCharacterName.trim();
                                                           baseMeta.itemOwnerMode = own ? "bound" : "floating";
                                                           if (own) baseMeta.itemOwnerCharacterName = own;
@@ -4108,7 +4362,13 @@ export function App() {
                                                                   ? "organization"
                                                                   : inspirationTypeTab === "item"
                                                                     ? "item"
-                                                                    : it.subtype,
+                                                                    : inspirationTypeTab === "event"
+                                                                      ? "event"
+                                                                      : inspirationTypeTab === "lore"
+                                                                        ? "lore"
+                                                                        : inspirationTypeTab === "technique"
+                                                                          ? "technique"
+                                                                          : it.subtype,
                                                           title: finalTitle || undefined,
                                                           content: finalContent,
                                                           tags: Array.isArray((it as any).tags) ? (it as any).tags : undefined,
@@ -4156,7 +4416,13 @@ export function App() {
                                                             ? "标题：道具名"
                                                             : kindForUi === "org"
                                                               ? "标题：组织或势力名"
-                                                              : "标题（角色名等）"
+                                                              : kindForUi === "event"
+                                                                ? "标题：事件名"
+                                                                : kindForUi === "lore"
+                                                                  ? "标题：秘闻标题"
+                                                                  : kindForUi === "technique"
+                                                                    ? "标题：功法名"
+                                                                    : "标题（角色名等）"
                                                       }
                                                       disabled={busy || inspirationBusy}
                                                     />
@@ -4172,7 +4438,10 @@ export function App() {
                                                       placeholder={
                                                         kindForUi === "place" ||
                                                         kindForUi === "item" ||
-                                                        kindForUi === "org"
+                                                        kindForUi === "org" ||
+                                                        kindForUi === "event" ||
+                                                        kindForUi === "lore" ||
+                                                        kindForUi === "technique"
                                                           ? "正文：结构化卡片为 JSON，编辑后请保持可解析"
                                                           : "正文内容"
                                                       }
@@ -4192,6 +4461,18 @@ export function App() {
                                                   ) : orgParsed ? (
                                                     <div className="timelineRangeSummary" style={{ marginTop: 6 }}>
                                                       <InspirationOrgStructuredView data={orgParsed} />
+                                                    </div>
+                                                  ) : eventParsed ? (
+                                                    <div className="timelineRangeSummary" style={{ marginTop: 6 }}>
+                                                      <InspirationEventStructuredView data={eventParsed} />
+                                                    </div>
+                                                  ) : loreParsed ? (
+                                                    <div className="timelineRangeSummary" style={{ marginTop: 6 }}>
+                                                      <InspirationLoreStructuredView data={loreParsed} />
+                                                    </div>
+                                                  ) : techniqueParsed ? (
+                                                    <div className="timelineRangeSummary" style={{ marginTop: 6 }}>
+                                                      <InspirationTechniqueStructuredView data={techniqueParsed} />
                                                     </div>
                                                   ) : (
                                                     <div className="timelineRangeSummary" style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
@@ -4258,7 +4539,7 @@ export function App() {
                                         const tags = Array.isArray(it.tags) ? it.tags : [];
                                         const content = String(it.content || "").trim();
                                         const itemOwnerSaved =
-                                          it.subtype === "item" &&
+                                          (it.subtype === "item" || it.subtype === "technique") &&
                                           (it as any).meta &&
                                           typeof (it as any).meta === "object"
                                             ? String((it as any).meta.itemOwnerCharacterName || "").trim()
@@ -4270,6 +4551,14 @@ export function App() {
                                         const orgParsed =
                                           it.subtype === "organization"
                                             ? parseInspirationOrgContent(content)
+                                            : null;
+                                        const eventParsed =
+                                          it.subtype === "event" ? parseInspirationEventContent(content) : null;
+                                        const loreParsed =
+                                          it.subtype === "lore" ? parseInspirationLoreContent(content) : null;
+                                        const techniqueParsed =
+                                          it.subtype === "technique"
+                                            ? parseInspirationTechniqueContent(content)
                                             : null;
                                         const expanded = Boolean(inspirationListExpanded[it.id]);
                                         return (
@@ -4367,6 +4656,18 @@ export function App() {
                                                 <div className="timelineRangeSummary" style={{ marginTop: 6 }}>
                                                   <InspirationOrgStructuredView data={orgParsed} />
                                                 </div>
+                                              ) : eventParsed ? (
+                                                <div className="timelineRangeSummary" style={{ marginTop: 6 }}>
+                                                  <InspirationEventStructuredView data={eventParsed} />
+                                                </div>
+                                              ) : loreParsed ? (
+                                                <div className="timelineRangeSummary" style={{ marginTop: 6 }}>
+                                                  <InspirationLoreStructuredView data={loreParsed} />
+                                                </div>
+                                              ) : techniqueParsed ? (
+                                                <div className="timelineRangeSummary" style={{ marginTop: 6 }}>
+                                                  <InspirationTechniqueStructuredView data={techniqueParsed} />
+                                                </div>
                                               ) : (
                                                 <div className="timelineRangeSummary" style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
                                                   {content}
@@ -4380,7 +4681,13 @@ export function App() {
                                                     ? inspirationItemCollapsedBlurb(itemParsed, title)
                                                     : orgParsed
                                                       ? inspirationOrgCollapsedBlurb(orgParsed, title)
-                                                      : content}
+                                                      : eventParsed
+                                                        ? inspirationEventCollapsedBlurb(eventParsed, title)
+                                                        : loreParsed
+                                                          ? inspirationLoreCollapsedBlurb(loreParsed, title)
+                                                          : techniqueParsed
+                                                            ? inspirationTechniqueCollapsedBlurb(techniqueParsed, title)
+                                                            : content}
                                               </div>
                                             )}
 

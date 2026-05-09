@@ -2831,7 +2831,7 @@ export async function registerRoutes(app: any, input: { dataDir: string }) {
     const paramsSchema = z.object({ slug: z.string().min(1) });
     const bodySchema = z.object({
       modelConfigId: z.string().nullable().optional(),
-      kind: z.enum(["character", "place", "org", "item", "other"]),
+      kind: z.enum(["character", "place", "org", "item", "event", "lore", "technique", "other"]),
       count: z.number().int().min(1).max(10).optional(),
       useMemory: z.boolean().optional(),
       options: z.any().optional(),

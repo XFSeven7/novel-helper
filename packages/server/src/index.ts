@@ -147,7 +147,12 @@ function stringifyInspirationContent(subtypeOrKind: string, card: any): string {
   const raw = card?.content;
   if (raw == null) return "";
   if (
-    (subtypeOrKind === "place" || subtypeOrKind === "item" || subtypeOrKind === "organization") &&
+    (subtypeOrKind === "place" ||
+      subtypeOrKind === "item" ||
+      subtypeOrKind === "organization" ||
+      subtypeOrKind === "event" ||
+      subtypeOrKind === "lore" ||
+      subtypeOrKind === "technique") &&
     typeof raw === "object" &&
     !Array.isArray(raw)
   ) {
@@ -304,7 +309,7 @@ function summarizeRelationalHooksForItemOwner(rh: any): string {
   return truncateForPrompt(lines.join("\n"), 1100);
 }
 
-/** 空名 → null（无主/待定语义由提示词侧说明）；找不到卡仍返回弱约束对象 */
+/** 空名 → null（无主/待定语义由提示词侧说明）；找不到卡仍返回弱约束对象。道具与功法生成共用。 */
 async function resolveItemOwnerInfo(dataDir: string, novelSlug: string, name?: string | null): Promise<object | null> {
   const n = String(name ?? "").trim();
   if (!n) return null;
@@ -390,7 +395,7 @@ async function resolveItemOwnerInfo(dataDir: string, novelSlug: string, name?: s
 }
 
 function buildInspirationPrompt(input: {
-  kind: "character" | "place" | "org" | "item" | "other";
+  kind: "character" | "place" | "org" | "item" | "event" | "lore" | "technique" | "other";
   count: number;
   opts: any;
   free: string;
@@ -398,6 +403,7 @@ function buildInspirationPrompt(input: {
   memoryText: string;
   knownCharacterNames: string[];
   knownPlaceNames?: string[];
+  /** 道具 / 功法：可选持有者精简信息 */
   itemOwnerInfo?: object | null;
 }): string {
   const { kind, count, opts, free, useMemory, memoryText, knownCharacterNames, knownPlaceNames, itemOwnerInfo } = input;
@@ -585,6 +591,148 @@ function buildInspirationPrompt(input: {
       "}",
       "",
       "relationship_hooks 必须输出数组（可为空数组 []）；不得省略 content 内任一字段；字段内容尽量具体，避免空字符串占位。"
+    ].join("\n");
+  }
+
+  if (kind === "event") {
+    const memorySnapshot =
+      useMemory && String(memoryText || "").trim()
+        ? String(memoryText).trim()
+        : "（未启用全书记忆或无可用快照。）";
+    const coreDirection = free || "设计一个能打破僵局、迫使关键角色做出抉择的转折事件。";
+    return [
+      "## Role",
+      "你是一位剧情冲突设计师。你负责基于当前剧情的‘业力状态’，生成能打破现有僵局、强制角色做出抉择的【突发/转折事件】。",
+      "",
+      "## Event Logic",
+      "1. 连锁反应：事件必须源于之前的因果（如：监视、突破、旧怨），并引发新的矛盾。",
+      "2. 迫选困境：事件应制造 A/B 择一的局面，每种选择都伴随明确的叙事代价。",
+      "3. 状态刷新：事件结束后，必须改变至少一个已知角色的‘业力账本’（Karma Ledger）状态。",
+      "",
+      "## Context Injection (上下文对齐)",
+      "【全书记忆快照】",
+      memorySnapshot,
+      "",
+      "## Task Requirements (任务定义)",
+      `- 生成数量：${count}`,
+      `- 核心方向：${coreDirection}`,
+      "",
+      "## Output Format (JSON Array)",
+      "请严格输出 JSON 数组（顶层为数组，长度等于生成数量），禁止任何解释说明、禁止 markdown、禁止代码块。每个对象必须包含：",
+      "{",
+      '  "title": "事件名称",',
+      '  "tags": ["爆发点/转折点/日常扰动", "影响范围"],',
+      '  "content": {',
+      '    "trigger": "事件触发的逻辑诱因(为何在此时发生)",',
+      '    "description": "过程简述(发生了什么具体的冲突/变故)",',
+      '    "impact": "对当前局势的即时冲击(谁受损/谁获利)",',
+      '    "dilemma": "主角面临的二难抉择(选A会如何，选B又如何)",',
+      '    "karma_delta": "对业力账本的修改建议(如：某伏笔激活、某关系转为敌对)",',
+      '    "relationship_hooks": [ { "target": "关联角色", "change": "关系演变倾向" } ]',
+      "  }",
+      "}",
+      "",
+      "relationship_hooks 必须输出数组（可为空数组 []）；不得省略 content 内任一字段；字段内容尽量具体，避免空字符串占位。"
+    ].join("\n");
+  }
+
+  if (kind === "lore") {
+    const memorySnapshot =
+      useMemory && String(memoryText || "").trim()
+        ? String(memoryText).trim()
+        : "（未启用全书记忆或无可用快照。）";
+    const coreDirection = free || "设计一条能深挖世界观、并与既有历史片段形成互补或颠覆的秘闻。";
+    return [
+      "## Role",
+      "你是一位世界观架构师。你负责生成带有‘碎片化叙事’质感的【秘闻/传说/丑闻】，用于深挖世界观背景并作为潜在的剧情钩子。",
+      "",
+      "## Lore Logic",
+      "1. 认知阶梯：秘闻应分为‘大众认知的误区’与‘极少数人掌握的真相’。",
+      "2. 逻辑埋线：秘闻必须与已知的历史片段产生互补或颠覆关系。",
+      "3. 危险权重：知道这个秘密本身就代表了危险。需定义获取该信息的代价。",
+      "",
+      "## Context Injection (上下文对齐)",
+      "【全书记忆快照】",
+      memorySnapshot,
+      "",
+      "## Task Requirements (任务定义)",
+      `- 生成数量：${count}`,
+      `- 核心方向：${coreDirection}`,
+      "",
+      "## Output Format (JSON Array)",
+      "请严格输出 JSON 数组（顶层为数组，长度等于生成数量），禁止任何解释说明、禁止 markdown、禁止代码块。每个对象必须包含：",
+      "{",
+      '  "title": "秘闻标题",',
+      '  "tags": ["历史碎片/宗门阴谋/禁忌知识"],',
+      '  "content": {',
+      '    "surface_rumor": "坊间流传的、被扭曲的版本",',
+      '    "hidden_truth": "隐藏在逻辑底层的真实情况(真相)",',
+      '    "evidence_trace": "主角可能发现该秘密的物理线索(如：残页、刻痕)",',
+      '    "danger_level": "知晓该秘密可能引发的杀意或诅咒",',
+      '    "narrative_value": "该信息如何转化为主角的逻辑武器或反转点"',
+      "  }",
+      "}",
+      "",
+      "不得省略 content 内任一字段；字段内容尽量具体，避免空字符串占位。"
+    ].join("\n");
+  }
+
+  if (kind === "technique") {
+    const memorySnapshot =
+      useMemory && String(memoryText || "").trim()
+        ? String(memoryText).trim()
+        : "（未启用全书记忆或无可用快照。）";
+    const coreDirection = free || "设计一门逻辑严密、高风险高回报的功法/术法/秘籍。";
+    const ownershipBlock =
+      itemOwnerInfo != null
+        ? [
+            "## Ownership Logic（有主 / 已绑定持有者）",
+            "下列 JSON 为【指定持有者】自审核角色卡组装的精简信息（可能已截断）。功法的修炼门槛、反噬表现与叙事钩子应优先与该持有者的动机、关系网与当前状态相容；禁止写成与持有者完全无关的孤立设定。",
+            JSON.stringify(itemOwnerInfo, null, 2),
+            ""
+          ].join("\n")
+        : [
+            "## Ownership Logic（无主 / 待定归属）",
+            "用户未指定持有者：功法可为「可先收灵感、后分配角色」的待定归属。",
+            "语义说明：这是「归属尚未在工具中绑定」，不是要求世界上绝对无人修炼；可在 content 中写清当前叙事上的传承/流落状态。",
+            ""
+          ].join("\n");
+
+    return [
+      "## Role",
+      "你是一位力量体系架构师。你负责设计逻辑严密、具备‘高风险高回报’特征的【功法/术法/秘籍】。",
+      "",
+      "## Technique Logic",
+      "1. 运行协议：功法不只是口诀，而是灵力/能量的‘逻辑算法’，需描述其运作路径。",
+      "2. 代价平衡：越强大的功能，其限制（Cost）和反噬（Backlash）越具体、越致命。",
+      "3. 叙事关联：功法往往带有创造者的性格烙印，甚至本身就是某种意图的延伸。",
+      "",
+      "## Context Injection (上下文对齐)",
+      "【全书记忆快照】",
+      memorySnapshot,
+      "",
+      "（本任务不注入全书角色名列表与地点名列表；若用户指定持有者，其信息仅见下方 Ownership 段。）",
+      "",
+      ownershipBlock,
+      "## Task Requirements (任务定义)",
+      `- 生成数量：${count}`,
+      `- 核心方向：${coreDirection}`,
+      "",
+      "## Output Format (JSON Array)",
+      "请严格输出 JSON 数组（顶层为数组，长度等于生成数量），禁止任何解释说明、禁止 markdown、禁止代码块。每个对象必须包含：",
+      "{",
+      '  "title": "功法名称",',
+      '  "tags": ["力量层级", "属性分类", "邪异度"],',
+      '  "content": {',
+      '    "logic_flow": "灵力/能量的运行逻辑简述(像代码一样定义过程)",',
+      '    "effect": "具体的能力展现(它能改变什么物理常数/逻辑)",',
+      '    "backlash": "使用后的代价(短期虚弱/永久损耗/神智污染)",',
+      '    "requirement": "极高的入门门槛(不仅是修为，还有特定的心境或媒介)",',
+      '    "lore_origin": "该功法的由来及其在历史中留下的血腥痕迹"',
+      "  }",
+      "}",
+      "",
+      "不得省略 content 内任一字段；字段内容尽量具体，避免空字符串占位。"
     ].join("\n");
   }
 
@@ -4566,7 +4714,7 @@ app.post("/api/books/:slug/inspiration/generate", async (req, reply) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const bodySchema = z.object({
     modelConfigId: z.string().nullable().optional(),
-    kind: z.enum(["character", "place", "org", "item", "other"]),
+    kind: z.enum(["character", "place", "org", "item", "event", "lore", "technique", "other"]),
     count: z.number().int().min(1).max(10).optional(),
     useMemory: z.boolean().optional(),
     options: z.any().optional(),
@@ -4594,9 +4742,12 @@ app.post("/api/books/:slug/inspiration/generate", async (req, reply) => {
   const knownPlaceNames = await listKnownPlaceNames(dataDir, params.slug);
   const opts = body.options ?? {};
   const free = String(body.freeText || "").trim();
-  const itemOwnerCharacterName = kind === "item" ? String(body.itemOwnerCharacterName || "").trim() : "";
+  const itemOwnerCharacterName =
+    kind === "item" || kind === "technique" ? String(body.itemOwnerCharacterName || "").trim() : "";
   const itemOwnerInfo =
-    kind === "item" ? await resolveItemOwnerInfo(dataDir, params.slug, itemOwnerCharacterName || undefined) : null;
+    kind === "item" || kind === "technique"
+      ? await resolveItemOwnerInfo(dataDir, params.slug, itemOwnerCharacterName || undefined)
+      : null;
 
   const prompt = buildInspirationPrompt({
     kind,
@@ -4628,7 +4779,19 @@ app.post("/api/books/:slug/inspiration/generate", async (req, reply) => {
   const now = new Date().toISOString();
   const items: IdeaItem[] = [];
   const stringifyInspKind =
-    kind === "place" ? "place" : kind === "item" ? "item" : kind === "org" ? "organization" : "";
+    kind === "place"
+      ? "place"
+      : kind === "item"
+        ? "item"
+        : kind === "org"
+          ? "organization"
+          : kind === "event"
+            ? "event"
+            : kind === "lore"
+              ? "lore"
+              : kind === "technique"
+                ? "technique"
+                : "";
   for (const c of cards.slice(0, count)) {
     const content = stringifyInspirationContent(stringifyInspKind, c);
     if (!content) continue;
@@ -4644,7 +4807,13 @@ app.post("/api/books/:slug/inspiration/generate", async (req, reply) => {
               ? "organization"
               : kind === "item"
                 ? "item"
-                : kind,
+                : kind === "event"
+                  ? "event"
+                  : kind === "lore"
+                    ? "lore"
+                    : kind === "technique"
+                      ? "technique"
+                      : kind,
       title: typeof c?.title === "string" ? c.title : undefined,
       content,
       tags: Array.isArray(c?.tags) ? c.tags.map((x: any) => String(x)).filter(Boolean) : undefined,
@@ -4655,7 +4824,7 @@ app.post("/api/books/:slug/inspiration/generate", async (req, reply) => {
       source: { provider: cfg.provider, model: (cfg.model || "").trim(), prompt },
       meta: {
         usedMemory: useMemory,
-        ...(kind === "item"
+        ...(kind === "item" || kind === "technique"
           ? {
               itemOwnerMode: itemOwnerCharacterName ? ("bound" as const) : ("floating" as const),
               ...(itemOwnerCharacterName ? { itemOwnerCharacterName } : {})
@@ -4676,7 +4845,7 @@ app.post("/api/books/:slug/inspiration/generate-preview", async (req, reply) => 
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const bodySchema = z.object({
     modelConfigId: z.string().nullable().optional(),
-    kind: z.enum(["character", "place", "org", "item", "other"]),
+    kind: z.enum(["character", "place", "org", "item", "event", "lore", "technique", "other"]),
     count: z.number().int().min(1).max(10).optional(),
     useMemory: z.boolean().optional(),
     options: z.any().optional(),
@@ -4705,9 +4874,12 @@ app.post("/api/books/:slug/inspiration/generate-preview", async (req, reply) => 
 
   const opts = body.options ?? {};
   const free = String(body.freeText || "").trim();
-  const itemOwnerCharacterName = kind === "item" ? String(body.itemOwnerCharacterName || "").trim() : "";
+  const itemOwnerCharacterName =
+    kind === "item" || kind === "technique" ? String(body.itemOwnerCharacterName || "").trim() : "";
   const itemOwnerInfo =
-    kind === "item" ? await resolveItemOwnerInfo(dataDir, params.slug, itemOwnerCharacterName || undefined) : null;
+    kind === "item" || kind === "technique"
+      ? await resolveItemOwnerInfo(dataDir, params.slug, itemOwnerCharacterName || undefined)
+      : null;
 
   const prompt = buildInspirationPrompt({
     kind,
@@ -4738,7 +4910,19 @@ app.post("/api/books/:slug/inspiration/generate-preview", async (req, reply) => 
   const now = new Date().toISOString();
   const items: IdeaItem[] = [];
   const stringifyInspKind =
-    kind === "place" ? "place" : kind === "item" ? "item" : kind === "org" ? "organization" : "";
+    kind === "place"
+      ? "place"
+      : kind === "item"
+        ? "item"
+        : kind === "org"
+          ? "organization"
+          : kind === "event"
+            ? "event"
+            : kind === "lore"
+              ? "lore"
+              : kind === "technique"
+                ? "technique"
+                : "";
   for (const c of cards.slice(0, count)) {
     const content = stringifyInspirationContent(stringifyInspKind, c);
     if (!content) continue;
@@ -4754,7 +4938,13 @@ app.post("/api/books/:slug/inspiration/generate-preview", async (req, reply) => 
               ? "organization"
               : kind === "item"
                 ? "item"
-                : kind,
+                : kind === "event"
+                  ? "event"
+                  : kind === "lore"
+                    ? "lore"
+                    : kind === "technique"
+                      ? "technique"
+                      : kind,
       title: typeof c?.title === "string" ? c.title : undefined,
       content,
       tags: Array.isArray(c?.tags) ? c.tags.map((x: any) => String(x)).filter(Boolean) : undefined,
@@ -4765,7 +4955,7 @@ app.post("/api/books/:slug/inspiration/generate-preview", async (req, reply) => 
       source: { provider: cfg.provider, model: (cfg.model || "").trim(), prompt },
       meta: {
         usedMemory: useMemory,
-        ...(kind === "item"
+        ...(kind === "item" || kind === "technique"
           ? {
               itemOwnerMode: itemOwnerCharacterName ? ("bound" as const) : ("floating" as const),
               ...(itemOwnerCharacterName ? { itemOwnerCharacterName } : {})
