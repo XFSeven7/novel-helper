@@ -1532,6 +1532,56 @@ code {
   color: color-mix(in srgb, var(--muted) 88%, var(--text));
 }
 
+/* 灵感库 · 组织/势力卡结构化展示 */
+.inspirationOrgCard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: color-mix(in srgb, var(--text) 92%, var(--muted));
+}
+
+.inspirationOrgBlock {
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  padding-bottom: 8px;
+}
+
+.inspirationOrgBlock:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.inspirationOrgLabel {
+  font-weight: 650;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--text) 88%, var(--muted));
+  margin-bottom: 4px;
+  letter-spacing: 0.02em;
+}
+
+.inspirationOrgBody {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.inspirationOrgHooks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.inspirationOrgHook {
+  padding-left: 8px;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+}
+
+.inspirationOrgHookDesc {
+  margin-top: 4px;
+  color: color-mix(in srgb, var(--muted) 88%, var(--text));
+}
+
 /* 写作包希望更“直角/紧凑”，不要圆角卡片感 */
 .writingPackPanel.auditPanel {
   border-radius: 0;

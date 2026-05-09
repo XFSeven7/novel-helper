@@ -2831,7 +2831,7 @@ export async function registerRoutes(app: any, input: { dataDir: string }) {
     const paramsSchema = z.object({ slug: z.string().min(1) });
     const bodySchema = z.object({
       modelConfigId: z.string().nullable().optional(),
-      kind: z.enum(["naming", "character", "place", "org", "item", "other"]),
+      kind: z.enum(["character", "place", "org", "item", "other"]),
       count: z.number().int().min(1).max(10).optional(),
       useMemory: z.boolean().optional(),
       options: z.any().optional(),
@@ -2895,7 +2895,7 @@ export async function registerRoutes(app: any, input: { dataDir: string }) {
       if (!content) continue;
       const it: IdeaItem = {
         id: newId(),
-        type: kind === "naming" ? "naming" : "generation",
+        type: "generation",
         subtype:
           kind === "character" ? "character" : kind === "place" ? "place" : kind === "org" ? "organization" : kind === "item" ? "item" : kind,
         title: typeof c?.title === "string" ? c.title : undefined,

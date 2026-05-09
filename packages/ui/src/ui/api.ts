@@ -571,7 +571,7 @@ export async function purgeInspirationDeleted(slug: string) {
 
 export async function generateInspiration(slug: string, input: {
   modelConfigId: string | null;
-  kind: "naming" | "character" | "place" | "org" | "item" | "other";
+  kind: "character" | "place" | "org" | "item" | "other";
   count?: number;
   useMemory?: boolean;
   options?: any;
@@ -589,7 +589,7 @@ export async function generateInspiration(slug: string, input: {
 
 export async function generateInspirationPreview(slug: string, input: {
   modelConfigId: string | null;
-  kind: "naming" | "character" | "place" | "org" | "item" | "other";
+  kind: "character" | "place" | "org" | "item" | "other";
   count?: number;
   useMemory?: boolean;
   options?: any;

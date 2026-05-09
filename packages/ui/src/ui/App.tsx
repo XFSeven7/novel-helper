@@ -83,7 +83,7 @@ import {
 } from "./api";
 import type { BookSearchGroup, BookSearchHit } from "./api";
 
-type InspTypeKey = "naming" | "character" | "place" | "org" | "item";
+type InspTypeKey = "character" | "place" | "org" | "item";
 
 type InspGenSlice = {
   previewItems: IdeaItem[];
@@ -95,7 +95,6 @@ type InspGenSlice = {
   freeText: string;
   useMemory: boolean;
   count: number;
-  optionsJson: string;
   /** 道具生成：持有者角色名；空字符串表示无主/待定 */
   itemOwnerCharacterName: string;
 };
@@ -111,7 +110,6 @@ function emptyInspGenSlice(): InspGenSlice {
     freeText: "",
     useMemory: true,
     count: 3,
-    optionsJson: "",
     itemOwnerCharacterName: ""
   };
 }
@@ -199,6 +197,89 @@ function inspirationItemCollapsedBlurb(data: InspirationItemContent, title: stri
   const f = String(data.functions || "").trim();
   if (f) return f.length > 140 ? `${f.slice(0, 140)}…` : f;
   return title ? `「${title}」` : "道具卡";
+}
+
+/** 灵感库 · 组织/势力卡落库的 JSON content 结构 */
+type InspirationOrgContent = {
+  doctrine?: string;
+  hidden_agenda?: string;
+  hierarchy?: string;
+  power_base?: string;
+  internal_factions?: string;
+  entry_exit_cost?: string;
+  relationship_hooks?: Array<{ target?: string; nature?: string; description?: string }>;
+};
+
+function parseInspirationOrgContent(raw: string): InspirationOrgContent | null {
+  const t = String(raw || "").trim();
+  if (!t.startsWith("{")) return null;
+  try {
+    const o = JSON.parse(t) as Record<string, unknown>;
+    if (!o || typeof o !== "object" || Array.isArray(o)) return null;
+    const keys = [
+      "doctrine",
+      "hidden_agenda",
+      "hierarchy",
+      "power_base",
+      "internal_factions",
+      "entry_exit_cost",
+      "relationship_hooks"
+    ];
+    if (!keys.some((k) => Object.prototype.hasOwnProperty.call(o, k))) return null;
+    return o as InspirationOrgContent;
+  } catch {
+    return null;
+  }
+}
+
+function inspirationOrgCollapsedBlurb(data: InspirationOrgContent, title: string): string {
+  const d = String(data.doctrine || "").trim();
+  if (d) return d.length > 140 ? `${d.slice(0, 140)}…` : d;
+  const h = String(data.hidden_agenda || "").trim();
+  if (h) return h.length > 140 ? `${h.slice(0, 140)}…` : h;
+  const p = String(data.power_base || "").trim();
+  if (p) return p.length > 140 ? `${p.slice(0, 140)}…` : p;
+  return title ? `「${title}」` : "组织卡";
+}
+
+function InspirationOrgStructuredView({ data }: { data: InspirationOrgContent }) {
+  const hooks = Array.isArray(data.relationship_hooks) ? data.relationship_hooks : [];
+  const row = (label: string, body: string) =>
+    body.trim() ? (
+      <div className="inspirationOrgBlock">
+        <div className="inspirationOrgLabel">{label}</div>
+        <div className="inspirationOrgBody">{body.trim()}</div>
+      </div>
+    ) : null;
+  return (
+    <div className="inspirationOrgCard">
+      {row("门面 / 对外宗旨", String(data.doctrine || ""))}
+      {row("真实图谋 / 潜规则", String(data.hidden_agenda || ""))}
+      {row("权力结构", String(data.hierarchy || ""))}
+      {row("权力根基 / 核心资源", String(data.power_base || ""))}
+      {row("内部派系与矛盾", String(data.internal_factions || ""))}
+      {row("进退代价", String(data.entry_exit_cost || ""))}
+      {hooks.length ? (
+        <div className="inspirationOrgBlock">
+          <div className="inspirationOrgLabel">关系钩子</div>
+          <div className="inspirationOrgBody inspirationOrgHooks">
+            {hooks.map((h, i) => {
+              const t = String(h?.target || "").trim();
+              const n = String(h?.nature || "").trim();
+              const d = String(h?.description || "").trim();
+              if (!t && !n && !d) return null;
+              return (
+                <div key={i} className="inspirationOrgHook">
+                  {[t, n].filter(Boolean).join(" · ")}
+                  {d ? <div className="inspirationOrgHookDesc">{d}</div> : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function InspirationItemStructuredView({ data }: { data: InspirationItemContent }) {
@@ -933,7 +1014,6 @@ export function App() {
   const [inspirationFuncByType, setInspirationFuncByType] = useState<
     Record<InspTypeKey, "generate" | "list" | "recycle">
   >({
-    naming: "generate",
     character: "generate",
     place: "generate",
     org: "generate",
@@ -947,9 +1027,8 @@ export function App() {
   // 搜索框已按需求移除（减少占用空间）
   // const [inspirationSearch, setInspirationSearch] = useState("");
 
-  /** 按「取名/角色/地点…」分桶：生成预览、表单与编辑状态互不串台 */
+  /** 按「角色/地点/组织/道具」分桶：生成预览、表单与编辑状态互不串台 */
   const [inspGenByType, setInspGenByType] = useState<Record<InspTypeKey, InspGenSlice>>(() => ({
-    naming: emptyInspGenSlice(),
     character: emptyInspGenSlice(),
     place: emptyInspGenSlice(),
     org: emptyInspGenSlice(),
@@ -3473,7 +3552,7 @@ export function App() {
                         if (activeBook) void loadInspiration(activeBook);
                       }}
                       disabled={busy}
-                      title="灵感库：AI取名 / 灵感生成 / 灵感记录"
+                      title="灵感库：灵感生成与记录"
                     >
                       灵感库
                     </button>
@@ -3550,19 +3629,6 @@ export function App() {
 
                           <div className="browserTabsBar" role="tablist" aria-label="灵感库分类" style={{ marginTop: 0 }}>
                             <div className="browserTabsStrip tabsWrap">
-                              <button
-                                type="button"
-                                role="tab"
-                                className={`browserTab tabCompact ${inspirationTypeTab === "naming" ? "active" : ""}`}
-                                aria-selected={inspirationTypeTab === "naming"}
-                                onClick={() => {
-                                  setInspirationTypeTab("naming");
-                                  setInspirationFuncByType((prev) => ({ ...prev, naming: "generate" }));
-                                }}
-                                disabled={busy}
-                              >
-                                取名
-                              </button>
                               <button
                                 type="button"
                                 role="tab"
@@ -3682,8 +3748,8 @@ export function App() {
 
                             const typeMatch = (it: IdeaItem) => {
                               const subtype = String((it as any)?.subtype || "").trim();
-                              if (inspirationTypeTab === "naming") return it.type === "naming";
-                              if (inspirationTypeTab === "character") return subtype === "character";
+                              if (inspirationTypeTab === "character")
+                                return subtype === "character" || it.type === "naming";
                               if (inspirationTypeTab === "place") return subtype === "place";
                               if (inspirationTypeTab === "org") return subtype === "organization";
                               if (inspirationTypeTab === "item") return subtype === "item";
@@ -3706,17 +3772,15 @@ export function App() {
                             const filtered = all.filter(typeMatch).filter(statusMatch).filter(searchMatch);
 
                             const kindForUi =
-                              inspirationTypeTab === "naming"
-                                ? ("naming" as const)
-                                : inspirationTypeTab === "character"
-                                  ? ("character" as const)
-                                  : inspirationTypeTab === "place"
-                                    ? ("place" as const)
-                                    : inspirationTypeTab === "org"
-                                      ? ("org" as const)
-                                      : inspirationTypeTab === "item"
-                                        ? ("item" as const)
-                                        : ("character" as const);
+                              inspirationTypeTab === "character"
+                                ? ("character" as const)
+                                : inspirationTypeTab === "place"
+                                  ? ("place" as const)
+                                  : inspirationTypeTab === "org"
+                                    ? ("org" as const)
+                                    : inspirationTypeTab === "item"
+                                      ? ("item" as const)
+                                      : ("character" as const);
 
                             const inspKey = inspirationTypeTab;
                             const genSlice = inspGenByType[inspKey];
@@ -3725,9 +3789,7 @@ export function App() {
                               <>
                                 {inspirationFuncTab === "generate" ? (
                                   <div className="timelineSection" style={{ marginTop: 12 }}>
-                                    <div className="auditPanelTitle">
-                                      {inspirationTypeTab === "naming" ? "AI取名" : "生成"}
-                                    </div>
+                                    <div className="auditPanelTitle">生成</div>
                                     <div
                                       className="row"
                                       style={{
@@ -3785,24 +3847,12 @@ export function App() {
                                           setInspirationBusy(true);
                                           setInspirationErr("");
                                           try {
-                                            let options: any = {};
-                                            if (kindForUi !== "character" && kindForUi !== "place") {
-                                              const t = snap.optionsJson.trim();
-                                              if (t) {
-                                                try {
-                                                  options = JSON.parse(t);
-                                                } catch {
-                                                  setInspirationErr("可选项 JSON 解析失败：请填写合法 JSON（或留空）。");
-                                                  return;
-                                                }
-                                              }
-                                            }
                                             const { items, debug } = await generateInspirationPreview(activeBook, {
                                               modelConfigId: activeModelId,
                                               kind: kindForUi as any,
                                               count: clamp(snap.count, 1, 10),
                                               useMemory: snap.useMemory,
-                                              options,
+                                              options: {},
                                               freeText: snap.freeText,
                                               itemOwnerCharacterName:
                                                 kindForUi === "item"
@@ -3941,7 +3991,9 @@ export function App() {
                                             ? "自由输入（可选）：如：一个适合藏匿赃物、充满霉味的废弃杂役仓"
                                             : inspirationTypeTab === "item"
                                               ? "自由输入（可选）：如：偏邪道、与某事件证物相关、代价偏重…"
-                                              : "自由输入（可选）：例如“更阴谋一点”“不要低俗”“与主角是盟友但暗藏私心”…"
+                                              : inspirationTypeTab === "org"
+                                                ? "自由输入（可选）：如：偏谍报与渗透、与当权者对立、内部派系倾轧严重…"
+                                                : "自由输入（可选）：例如「更阴谋一点」「不要低俗」「与主角表面盟友、暗藏私心」…"
                                         }
                                         disabled={busy || inspirationBusy}
                                         style={{ marginTop: 0, minHeight: 70 }}
@@ -3961,6 +4013,8 @@ export function App() {
                                               kindForUi === "place" ? parseInspirationPlaceContent(content) : null;
                                             const itemParsed =
                                               kindForUi === "item" ? parseInspirationItemContent(content) : null;
+                                            const orgParsed =
+                                              kindForUi === "org" ? parseInspirationOrgContent(content) : null;
                                             const expanded = Boolean(genSlice.expanded[key]);
                                             const editing = genSlice.editingId === key;
                                             return (
@@ -4044,7 +4098,7 @@ export function App() {
                                                           else delete baseMeta.itemOwnerCharacterName;
                                                         }
                                                         const { index } = await upsertInspirationItem(activeBook, {
-                                                          type: inspirationTypeTab === "naming" ? "naming" : "generation",
+                                                          type: "generation",
                                                           subtype:
                                                             inspirationTypeTab === "character"
                                                               ? "character"
@@ -4095,7 +4149,15 @@ export function App() {
                                                           [inspKey]: { ...prev[inspKey], editTitle: e.target.value }
                                                         }))
                                                       }
-                                                      placeholder="标题（角色名/地点名…）"
+                                                      placeholder={
+                                                        kindForUi === "place"
+                                                          ? "标题：地点名"
+                                                          : kindForUi === "item"
+                                                            ? "标题：道具名"
+                                                            : kindForUi === "org"
+                                                              ? "标题：组织或势力名"
+                                                              : "标题（角色名等）"
+                                                      }
                                                       disabled={busy || inspirationBusy}
                                                     />
                                                     <textarea
@@ -4107,7 +4169,13 @@ export function App() {
                                                           [inspKey]: { ...prev[inspKey], editContent: e.target.value }
                                                         }))
                                                       }
-                                                      placeholder="内容"
+                                                      placeholder={
+                                                        kindForUi === "place" ||
+                                                        kindForUi === "item" ||
+                                                        kindForUi === "org"
+                                                          ? "正文：结构化卡片为 JSON，编辑后请保持可解析"
+                                                          : "正文内容"
+                                                      }
                                                       disabled={busy || inspirationBusy}
                                                       style={{ marginTop: 8, minHeight: 140 }}
                                                     />
@@ -4121,6 +4189,10 @@ export function App() {
                                                     <div className="timelineRangeSummary" style={{ marginTop: 6 }}>
                                                       <InspirationItemStructuredView data={itemParsed} />
                                                     </div>
+                                                  ) : orgParsed ? (
+                                                    <div className="timelineRangeSummary" style={{ marginTop: 6 }}>
+                                                      <InspirationOrgStructuredView data={orgParsed} />
+                                                    </div>
                                                   ) : (
                                                     <div className="timelineRangeSummary" style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
                                                       {content}
@@ -4132,21 +4204,6 @@ export function App() {
                                           })}
                                         </div>
                                       </div>
-                                    ) : null}
-                                    {kindForUi !== "character" && kindForUi !== "place" ? (
-                                      <textarea
-                                        className="auditTextarea"
-                                        value={genSlice.optionsJson}
-                                        onChange={(e) =>
-                                          setInspGenByType((prev) => ({
-                                            ...prev,
-                                            [inspKey]: { ...prev[inspKey], optionsJson: e.target.value }
-                                          }))
-                                        }
-                                        placeholder='可选项 options（可选，JSON）：例如 {"风格":["古风"],"道具类型":"法器"}'
-                                        disabled={busy || inspirationBusy}
-                                        style={{ marginTop: 8, minHeight: 70 }}
-                                      />
                                     ) : null}
                                   </div>
                                 ) : null}
@@ -4210,6 +4267,10 @@ export function App() {
                                           it.subtype === "place" ? parseInspirationPlaceContent(content) : null;
                                         const itemParsed =
                                           it.subtype === "item" ? parseInspirationItemContent(content) : null;
+                                        const orgParsed =
+                                          it.subtype === "organization"
+                                            ? parseInspirationOrgContent(content)
+                                            : null;
                                         const expanded = Boolean(inspirationListExpanded[it.id]);
                                         return (
                                           <div key={it.id} className="timelineRangeItem">
@@ -4302,6 +4363,10 @@ export function App() {
                                                 <div className="timelineRangeSummary" style={{ marginTop: 6 }}>
                                                   <InspirationItemStructuredView data={itemParsed} />
                                                 </div>
+                                              ) : orgParsed ? (
+                                                <div className="timelineRangeSummary" style={{ marginTop: 6 }}>
+                                                  <InspirationOrgStructuredView data={orgParsed} />
+                                                </div>
                                               ) : (
                                                 <div className="timelineRangeSummary" style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>
                                                   {content}
@@ -4313,7 +4378,9 @@ export function App() {
                                                   ? inspirationPlaceCollapsedBlurb(placeParsed, title)
                                                   : itemParsed
                                                     ? inspirationItemCollapsedBlurb(itemParsed, title)
-                                                    : content}
+                                                    : orgParsed
+                                                      ? inspirationOrgCollapsedBlurb(orgParsed, title)
+                                                      : content}
                                               </div>
                                             )}
 

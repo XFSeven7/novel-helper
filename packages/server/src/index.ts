@@ -142,12 +142,12 @@ function safeJsonParse<T = any>(raw: string): T | null {
   }
 }
 
-/** 地点卡 / 道具卡等允许 content 为结构化对象；落库与 UI 统一为字符串 */
+/** 地点卡 / 道具卡 / 组织卡等允许 content 为结构化对象；落库与 UI 统一为字符串 */
 function stringifyInspirationContent(subtypeOrKind: string, card: any): string {
   const raw = card?.content;
   if (raw == null) return "";
   if (
-    (subtypeOrKind === "place" || subtypeOrKind === "item") &&
+    (subtypeOrKind === "place" || subtypeOrKind === "item" || subtypeOrKind === "organization") &&
     typeof raw === "object" &&
     !Array.isArray(raw)
   ) {
@@ -230,6 +230,20 @@ function buildMemoryContextFromTimeline(tl: TimelineIndex): string {
   if (lastChapters.length) parts.push("【最近章节摘要】", ...lastChapters, "");
   const txt = parts.join("\n").trim();
   return txt ? txt : "（全书记忆为空：暂无时间线摘要/事件）";
+}
+
+/** 组织生成等：仅注入多章压缩段，不含关键事件/近章摘要/角色地点名单 */
+function buildMultiChapterCompressedMemoryOnly(tl: TimelineIndex): string {
+  const ranges = Array.isArray(tl?.compressedRanges) ? tl.compressedRanges : [];
+  const topRanges = [...ranges]
+    .sort((a: any, b: any) => (b?.endChapter ?? 0) - (a?.endChapter ?? 0))
+    .slice(0, 8)
+    .map((r: any) => `- 第${r.startChapter}-${r.endChapter}章：${String(r.summary || "").trim()}`)
+    .filter(Boolean);
+  if (!topRanges.length) {
+    return "（暂无多章压缩摘要：可在时间线中维护卷/段摘要后再生成。）";
+  }
+  return ["【全书剧情/世界观记忆 · 多章压缩摘要】", ...topRanges].join("\n");
 }
 
 async function listKnownCharacterNames(dataDir: string, novelSlug: string): Promise<string[]> {
@@ -376,7 +390,7 @@ async function resolveItemOwnerInfo(dataDir: string, novelSlug: string, name?: s
 }
 
 function buildInspirationPrompt(input: {
-  kind: "naming" | "character" | "place" | "org" | "item" | "other";
+  kind: "character" | "place" | "org" | "item" | "other";
   count: number;
   opts: any;
   free: string;
@@ -436,9 +450,7 @@ function buildInspirationPrompt(input: {
       ? ["", characterLine, ""]
       : kind === "place"
         ? ["", placeLine, ""]
-        : kind === "naming"
-          ? ["", characterLine, ""]
-          : ["", characterLine, placeLine, ""];
+        : ["", characterLine, placeLine, ""];
 
   const common = [...commonBase, ...contextLines];
 
@@ -523,12 +535,56 @@ function buildInspirationPrompt(input: {
   }
 
   if (kind === "org") {
+    const memorySnapshot =
+      useMemory && String(memoryText || "").trim()
+        ? String(memoryText).trim()
+        : "（未启用全书记忆或无多章压缩摘要。）";
+    const coreDirection = free || "设计一个能介入当前矛盾、对已知角色产生阶级压制的势力。";
+    const optsBlock =
+      opts && typeof opts === "object" && Object.keys(opts).length
+        ? ["【结构化可选项（来自用户 JSON）】", JSON.stringify(opts, null, 2), ""].join("\n")
+        : "";
+
     return [
-      ...common,
-      "【任务】只生成【组织卡】，不要生成角色/道具为主体。",
-      ...taskMetaLines,
-      "要求：title=组织名；content需包含：理念/结构/手段资源/当前矛盾/与主角线切入点(至少2条)。",
-      "现在输出 JSON 数组："
+      "## Role",
+      "你是一位精通权谋逻辑与社会构建的叙事导演。你负责策划具备强生存逻辑、内部冲突张力且对个体角色产生压制力的【组织/势力灵感卡片】。",
+      "",
+      "## Organization Design Logic (组织设计逻辑)",
+      "1. 生态位原则：组织必须在世界观中占有一个明确的位置（如：资源垄断者、暴力执行者、信息交易站）。它存在的理由必须合乎逻辑。",
+      "2. 门面与真相：组织通常有对外宣称的‘信条/教义’，以及对内运行的‘潜规则/真实目的’。这种反差是产生冲突的源泉。",
+      "3. 权力层级：明确权力如何流动。是绝对集权、长老合议，还是松散的利益联盟？层级之间的晋升代价是什么？",
+      "4. 组织张力：一个活的组织内部必然存在派系（Factions）。生成时应包含内部的不稳定因素。",
+      "",
+      "## Context Injection (上下文对齐)",
+      "【全书剧情/世界观记忆】：",
+      memorySnapshot,
+      "",
+      optsBlock ? optsBlock : "",
+      "## Task Requirements (任务定义)",
+      `- 生成数量：${count}`,
+      `- 核心方向：${coreDirection}`,
+      "",
+      "只生成【组织/势力卡】；不要以单个角色或道具作为卡片主体。本任务不注入全书角色名列表与地点名列表。",
+      "",
+      "## Output Format (JSON Array)",
+      "请严格输出 JSON 数组（顶层为数组，长度等于生成数量），禁止任何解释说明、禁止 markdown、禁止代码块。每个对象必须包含：",
+      "{",
+      '  "title": "组织/势力名称",',
+      '  "tags": ["规模等级", "性质分类", "影响力范围"],',
+      '  "content": {',
+      '    "doctrine": "对外宣称的宗旨、门面或核心价值观",',
+      '    "hidden_agenda": "对内运行的潜规则、真实图谋或不可告人的秘密",',
+      '    "hierarchy": "权力结构简述(核心领袖、中间阶层、底层外围)",',
+      '    "power_base": "核心资源或优势(如：垄断了某种药物、掌握了某段航线、拥有极强的武力)",',
+      '    "internal_factions": "组织内部的主要派系及其矛盾焦点",',
+      '    "entry_exit_cost": "进入该组织或脱离该组织需要付出的代价(逻辑约束)",',
+      '    "relationship_hooks": [',
+      '      { "target": "已知角色/地点", "nature": "关联性质(如：控制、渗透、敌对)", "description": "具体的利益纠葛或业力锁定" }',
+      "    ]",
+      "  }",
+      "}",
+      "",
+      "relationship_hooks 必须输出数组（可为空数组 []）；不得省略 content 内任一字段；字段内容尽量具体，避免空字符串占位。"
     ].join("\n");
   }
 
@@ -600,16 +656,6 @@ function buildInspirationPrompt(input: {
       "}",
       "",
       "relationship_hooks 必须输出数组（可为空数组 []）；不得省略 content 内任一字段；字段内容尽量具体，避免空字符串占位。"
-    ].join("\n");
-  }
-
-  if (kind === "naming") {
-    return [
-      ...common,
-      "【任务】只生成【名字候选】。",
-      ...taskMetaLines,
-      "要求：title=名字；content=一句话理由或适用对象（可短）。tags可包含：风格/类型（可选）。",
-      "现在输出 JSON 数组："
     ].join("\n");
   }
 
@@ -4520,7 +4566,7 @@ app.post("/api/books/:slug/inspiration/generate", async (req, reply) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const bodySchema = z.object({
     modelConfigId: z.string().nullable().optional(),
-    kind: z.enum(["naming", "character", "place", "org", "item", "other"]),
+    kind: z.enum(["character", "place", "org", "item", "other"]),
     count: z.number().int().min(1).max(10).optional(),
     useMemory: z.boolean().optional(),
     options: z.any().optional(),
@@ -4537,11 +4583,15 @@ app.post("/api/books/:slug/inspiration/generate", async (req, reply) => {
 
   const count = body.count ?? 3;
   const useMemory = Boolean(body.useMemory);
-  const memoryText = useMemory ? buildMemoryContextFromTimeline(await readTimelineIndex(dataDir, params.slug)) : "";
+  const kind = body.kind;
+  const timelineIndex = await readTimelineIndex(dataDir, params.slug);
+  const memoryText = useMemory
+    ? kind === "org"
+      ? buildMultiChapterCompressedMemoryOnly(timelineIndex)
+      : buildMemoryContextFromTimeline(timelineIndex)
+    : "";
   const knownCharacterNames = await listKnownCharacterNames(dataDir, params.slug);
   const knownPlaceNames = await listKnownPlaceNames(dataDir, params.slug);
-
-  const kind = body.kind;
   const opts = body.options ?? {};
   const free = String(body.freeText || "").trim();
   const itemOwnerCharacterName = kind === "item" ? String(body.itemOwnerCharacterName || "").trim() : "";
@@ -4577,12 +4627,14 @@ app.post("/api/books/:slug/inspiration/generate", async (req, reply) => {
   const idx = normalizeInspirationIndex(await readInspirationIndex(dataDir, params.slug));
   const now = new Date().toISOString();
   const items: IdeaItem[] = [];
+  const stringifyInspKind =
+    kind === "place" ? "place" : kind === "item" ? "item" : kind === "org" ? "organization" : "";
   for (const c of cards.slice(0, count)) {
-    const content = stringifyInspirationContent(kind === "place" ? "place" : kind === "item" ? "item" : "", c);
+    const content = stringifyInspirationContent(stringifyInspKind, c);
     if (!content) continue;
     const it: IdeaItem = {
       id: newId(),
-      type: kind === "naming" ? "naming" : "generation",
+      type: "generation",
       subtype:
         kind === "character"
           ? "character"
@@ -4624,7 +4676,7 @@ app.post("/api/books/:slug/inspiration/generate-preview", async (req, reply) => 
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const bodySchema = z.object({
     modelConfigId: z.string().nullable().optional(),
-    kind: z.enum(["naming", "character", "place", "org", "item", "other"]),
+    kind: z.enum(["character", "place", "org", "item", "other"]),
     count: z.number().int().min(1).max(10).optional(),
     useMemory: z.boolean().optional(),
     options: z.any().optional(),
@@ -4641,11 +4693,16 @@ app.post("/api/books/:slug/inspiration/generate-preview", async (req, reply) => 
 
   const count = body.count ?? 3;
   const useMemory = Boolean(body.useMemory);
-  const memoryText = useMemory ? buildMemoryContextFromTimeline(await readTimelineIndex(dataDir, params.slug)) : "";
+  const kind = body.kind;
+  const timelineIndex = await readTimelineIndex(dataDir, params.slug);
+  const memoryText = useMemory
+    ? kind === "org"
+      ? buildMultiChapterCompressedMemoryOnly(timelineIndex)
+      : buildMemoryContextFromTimeline(timelineIndex)
+    : "";
   const knownCharacterNames = await listKnownCharacterNames(dataDir, params.slug);
   const knownPlaceNames = await listKnownPlaceNames(dataDir, params.slug);
 
-  const kind = body.kind;
   const opts = body.options ?? {};
   const free = String(body.freeText || "").trim();
   const itemOwnerCharacterName = kind === "item" ? String(body.itemOwnerCharacterName || "").trim() : "";
@@ -4680,12 +4737,14 @@ app.post("/api/books/:slug/inspiration/generate-preview", async (req, reply) => 
 
   const now = new Date().toISOString();
   const items: IdeaItem[] = [];
+  const stringifyInspKind =
+    kind === "place" ? "place" : kind === "item" ? "item" : kind === "org" ? "organization" : "";
   for (const c of cards.slice(0, count)) {
-    const content = stringifyInspirationContent(kind === "place" ? "place" : kind === "item" ? "item" : "", c);
+    const content = stringifyInspirationContent(stringifyInspKind, c);
     if (!content) continue;
     items.push({
       id: newId(),
-      type: kind === "naming" ? "naming" : "generation",
+      type: "generation",
       subtype:
         kind === "character"
           ? "character"
