@@ -95,7 +95,7 @@ type AuditLinkTarget = {
   id: string;
   display: string;
   summaryLines: string[];
-  jump: { tab: "chapterSummary" | "auditCharacters" | "places" | "orgs" | "timeline" | "story"; key: string };
+  jump: { tab: "chapterAnalysis" | "auditCharacters" | "places" | "orgs" | "timeline" | "story"; key: string };
 };
 
 function splitParagraphs(raw: string): string[] {
@@ -685,7 +685,7 @@ export function App() {
   const [modalCharacterTagDraft, setModalCharacterTagDraft] = useState("");
   const [chapterContent, setChapterContent] = useState("");
   const [cardContent, setCardContent] = useState("");
-  const [rightTab, setRightTab] = useState<"chapterAnalysis" | "chapterSummary" | "chapterEntities">("chapterAnalysis");
+  const [rightTab, setRightTab] = useState<"chapterAnalysis" | "chapterEntities">("chapterAnalysis");
   const [expandedAuditCharIds, setExpandedAuditCharIds] = useState<Record<string, boolean>>({});
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
@@ -1956,7 +1956,7 @@ export function App() {
   const jumpToOrganize = useCallback(
     (
       tab:
-        | "chapterSummary"
+        | "chapterAnalysis"
         | "chapterEntities"
         | "auditCharacters"
         | "places"
@@ -1976,7 +1976,7 @@ export function App() {
         if (group) setPlaceGroupCollapsed((prev) => ({ ...prev, [group]: false }));
       }
 
-      if (tab === "chapterSummary" || tab === "chapterEntities") {
+      if (tab === "chapterAnalysis" || tab === "chapterEntities") {
         setRightTab(tab);
       } else if (tab === "auditCharacters" || tab === "places" || tab === "timeline" || tab === "foreshadows") {
         setLeftTab("global");
@@ -1988,7 +1988,7 @@ export function App() {
 
       requestAnimationFrame(() => {
         const root =
-          tab === "chapterSummary" || tab === "chapterEntities"
+          tab === "chapterAnalysis" || tab === "chapterEntities"
             ? (document.querySelector(".organizeTabScroll") as HTMLElement | null)
             : (document.querySelector(".navGlobalScroll") as HTMLElement | null);
         if (!root) return;
@@ -2036,6 +2036,7 @@ export function App() {
     setAuditRunningChapter({ bookSlug: runningBookSlug, filename: runningChapterFilename });
     resetAuditThinkingReveal();
     try {
+      const debugKey = `${runningBookSlug}/${runningChapterFilename}/${Date.now()}`;
       await putModelConfigs({ configs: modelConfigs as any, activeId: activeModelId ?? null }).catch(() => {});
 
       const res = await fetch(
@@ -2072,8 +2073,16 @@ export function App() {
           const payloadText = line.replace(/^data:\s?/, "");
           try {
             const payload = JSON.parse(payloadText) as any;
-            if (payload.type === "reasoning") {
-              appendAuditThinkingDelta(payload.textDelta ?? "");
+            if (payload.type === "modelPrompt") {
+              const stage = String(payload.stage || "");
+              const prompt = String(payload.prompt ?? "");
+              const title = `[audit] 提问${stage ? `(${stage})` : ""} ${debugKey} len=${prompt.length}`;
+              const preview = prompt.slice(0, 220);
+              console.groupCollapsed(title);
+              console.log("preview:", preview + (prompt.length > preview.length ? " …" : ""));
+              console.log("prompt:");
+              console.log(prompt);
+              console.groupEnd();
             }
             if (payload.type === "phase") {
               const step = Math.max(1, Math.floor(Number(payload.step || 1)));
@@ -2083,13 +2092,20 @@ export function App() {
             }
             if (payload.type === "done") {
               if (payload.run) setAuditRun(payload.run);
-              await loadAuditArtifacts(runningBookSlug, runningChapterFilename);
-              await refreshTimelineIndex(runningBookSlug);
+              const reportText = String(payload?.run?.humanAuditReport ?? "");
+              if (reportText.trim()) {
+                resetAuditThinkingReveal();
+                auditThinkingBufferRef.current = reportText;
+                auditDisplayedLenRef.current = reportText.length;
+                setAuditStreamText(reportText);
+              }
               setAuditStreamPhase("done");
               await saveAuditAnalysis(runningBookSlug, {
                 chapterFilename: runningChapterFilename,
-                text: auditThinkingBufferRef.current || ""
+                text: reportText
               }).catch(() => {});
+              await loadAuditArtifacts(runningBookSlug, runningChapterFilename);
+              await refreshTimelineIndex(runningBookSlug);
               setAuditRunningChapter(null);
               setAuditProgress(null);
             }
@@ -3834,16 +3850,6 @@ export function App() {
                     <button
                       type="button"
                       role="tab"
-                      className={`browserTab ${rightTab === "chapterSummary" ? "active" : ""}`}
-                      aria-selected={rightTab === "chapterSummary"}
-                      onClick={() => setRightTab("chapterSummary")}
-                      disabled={busy}
-                    >
-                      本章摘要
-                    </button>
-                    <button
-                      type="button"
-                      role="tab"
                       className={`browserTab ${rightTab === "chapterEntities" ? "active" : ""}`}
                       aria-selected={rightTab === "chapterEntities"}
                       onClick={() => setRightTab("chapterEntities")}
@@ -3902,6 +3908,25 @@ export function App() {
                             </button>
                           ) : null}
                         </div>
+
+                        {auditRun ? (
+                          <div style={{ marginTop: 10 }}>
+                            {typeof auditRun?.gistL1 === "string" && auditRun.gistL1.trim() ? (
+                              <div className="auditGist">{auditRun.gistL1}</div>
+                            ) : null}
+                            {Array.isArray(auditRun?.consistencyChecks) && auditRun.consistencyChecks.length ? (
+                              <div className="auditChecks">
+                                <div className="auditPanelTitle">一致性问题</div>
+                                {(auditRun.consistencyChecks as any[]).slice(0, 12).map((c, idx) => (
+                                  <div key={idx} className="auditCheckItem">
+                                    <div className="auditCheckIssue">{c?.issue ?? ""}</div>
+                                    {c?.suggestion ? <div className="muted auditCheckSug">{c.suggestion}</div> : null}
+                                  </div>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
                         {auditRunningChapter &&
                         activeBook &&
                         selectedChapter &&
@@ -3982,67 +4007,6 @@ export function App() {
                           )}
                         </div>
                       </div>
-                    </div>
-                  ) : rightTab === "chapterSummary" ? (
-                    <div className="auditPanel">
-                      {auditRun ? (
-                        <div className="auditPanelBody">
-                          {auditDirty ? (
-                            <div className="auditDirtyBar" role="status" aria-label="分析可能过期提示">
-                              <div className="auditDirtyText">
-                                正文已修改，分析可能过期
-                                {auditDirtyDelta ? (
-                                  <span className="auditDirtyMeta muted">
-                                    （约 {auditDirtyDelta.abs} 字变动 · {(auditDirtyDelta.ratio * 100).toFixed(0)}%）
-                                  </span>
-                                ) : null}
-                              </div>
-                              <button
-                                type="button"
-                                className="btnSquare"
-                                disabled={busy || auditBusy || !okModelConfigs.length}
-                                onClick={() => void onAuditSelectedChapter()}
-                                title={!okModelConfigs.length ? "请先在「模型配置」里测试连接" : "重新分析本章以同步内容整理"}
-                              >
-                                重新分析
-                              </button>
-                            </div>
-                          ) : null}
-                          <div className="auditPanelTitle">本章摘要</div>
-                          <div className="auditPanelMuted muted">
-                            {auditRun?.chapter?.filename ? `来源：${auditRun.chapter.filename}` : "未选择章节"}
-                          </div>
-                          {typeof auditRun?.gistL1 === "string" && auditRun.gistL1.trim() ? (
-                            <div className="auditGist">{auditRun.gistL1}</div>
-                          ) : null}
-                          {Array.isArray(auditRun?.impactAnalysis) && auditRun.impactAnalysis.length ? (
-                            <div className="auditImpacts">
-                              {(auditRun.impactAnalysis as any[]).slice(0, 12).map((it, idx) => (
-                                <div key={idx} className="auditImpactItem">
-                                  <div className="auditImpactTop">
-                                    <span className="auditImpactScore">{it?.impactScore ?? 0}</span>
-                                    <span className="auditImpactText">{it?.item ?? ""}</span>
-                                  </div>
-                                  {it?.why ? <div className="muted auditImpactWhy">{it.why}</div> : null}
-                                </div>
-                              ))}
-                            </div>
-                          ) : null}
-                          {Array.isArray(auditRun?.consistencyChecks) && auditRun.consistencyChecks.length ? (
-                            <div className="auditChecks">
-                              <div className="auditPanelTitle">一致性问题</div>
-                              {(auditRun.consistencyChecks as any[]).slice(0, 12).map((c, idx) => (
-                                <div key={idx} className="auditCheckItem">
-                                  <div className="auditCheckIssue">{c?.issue ?? ""}</div>
-                                  {c?.suggestion ? <div className="muted auditCheckSug">{c.suggestion}</div> : null}
-                                </div>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : (
-                        <div className="muted auditPanelEmpty">暂无分析结果。选中章节后点击「分析」。</div>
-                      )}
                     </div>
                   ) : rightTab === "chapterEntities" ? (
                     <>

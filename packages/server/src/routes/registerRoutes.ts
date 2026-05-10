@@ -177,6 +177,45 @@ export async function registerRoutes(app: any, input: { dataDir: string }) {
     return txt ? txt : "（全书记忆为空：暂无时间线摘要/事件）";
   }
 
+  function buildMemoryContextFromTimelineBeforeChapter(tl: TimelineIndex, beforeChapterNo: number | null): string {
+    const n = Number.isFinite(Number(beforeChapterNo)) ? Math.floor(Number(beforeChapterNo)) : NaN;
+    if (!Number.isFinite(n) || n <= 1) {
+      return "（当前为前几章：无可用“近章概要”。）";
+    }
+    const ranges = Array.isArray(tl?.compressedRanges) ? tl.compressedRanges : [];
+    const events = Array.isArray(tl?.events) ? tl.events : [];
+    const chapters = Array.isArray(tl?.chapters) ? tl.chapters : [];
+
+    const topRanges = [...ranges]
+      .filter((r: any) => Number(r?.endChapter ?? 0) < n)
+      .sort((a: any, b: any) => (b?.endChapter ?? 0) - (a?.endChapter ?? 0))
+      .slice(0, 8)
+      .map((r: any) => `- 第${r.startChapter}-${r.endChapter}章：${String(r.summary || "").trim()}`)
+      .filter(Boolean);
+
+    const topEvents = [...events]
+      .filter((e: any) => String(e?.status ?? "open") !== "done")
+      .filter((e: any) => Number(e?.endChapter ?? 0) < n)
+      .sort((a: any, b: any) => (b?.endChapter ?? 0) - (a?.endChapter ?? 0))
+      .slice(0, 15)
+      .map((e: any) => `- 第${e.startChapter}-${e.endChapter}章·${String(e.title || "").trim() || "事件"}：${String(e.summary || "").trim()}`)
+      .filter(Boolean);
+
+    const lastChapters = [...chapters]
+      .filter((c: any) => Number(c?.chapter ?? 0) > 0 && Number(c?.chapter ?? 0) < n)
+      .sort((a: any, b: any) => (b?.chapter ?? 0) - (a?.chapter ?? 0))
+      .slice(0, 10)
+      .map((c: any) => `- 第${c.chapter}章·${String(c.title || "").trim() || c.filename}：${String(c.gistL1 || "").trim()}`)
+      .filter(Boolean);
+
+    const parts: string[] = [];
+    if (topRanges.length) parts.push("【多章压缩摘要（最近）】", ...topRanges, "");
+    if (topEvents.length) parts.push("【关键事件（未完成/进行中）】", ...topEvents, "");
+    if (lastChapters.length) parts.push("【最近章节摘要】", ...lastChapters, "");
+    const txt = parts.join("\n").trim();
+    return txt ? txt : "（全书记忆为空：暂无时间线摘要/事件）";
+  }
+
   function buildCharacterCardMergePrompt(input: {
     primaryTitle: string;
     primaryContent: string;
@@ -323,6 +362,82 @@ export async function registerRoutes(app: any, input: { dataDir: string }) {
     ].join("\n");
   }
 
+  function buildUnifiedAuditPrompt(input: {
+    chapterTitle: string;
+    chapterFilename: string;
+    content: string;
+    memoryContext: string;
+    existingEntities: { characters: string[]; places: string[] };
+  }) {
+    const chapterId = input.chapterFilename.replace(/\.md$/, "");
+    const schema = {
+      chapter: { filename: input.chapterFilename, id: chapterId, title: input.chapterTitle, wordCount: 0, auditedAt: new Date().toISOString() },
+      gistL1: "本章极简逻辑链条总结（<=300字）",
+      humanAuditReport:
+        "最终给作者看的合并报告（markdown 纯文本，不要代码块）：包含评分雷达图文字版、历史因果对齐、角色指纹审计、导演行动清单（<=10条精准建议）",
+      scores: {
+        literary_style: { score: 0, comment: "" },
+        narrative_tension: { score: 0, comment: "" },
+        logic_consistency: { score: 0, comment: "" },
+        character_vitality: { score: 0, comment: "" },
+        hook_intensity: { score: 0, comment: "" }
+      },
+      entities: { characters: [], events: [] },
+      consistencyChecks: [{ rule: "", issue: "", severity: "low/medium/high", suggestion: "" }],
+      causalAnchors: { setups: [], payoffs: [] },
+      impactAnalysis: [{ item: "", impactScore: 0, why: "", futureImplications: ["对后续剧情的影响与建议"] }],
+      compression: { l2Pruning: null, mergeCandidates: null },
+      ledgerUpdates: { openLoops: [], closedLoops: [] },
+      uiInjection: { spotlightCharacters: [], spotlightTags: [] }
+    };
+
+    const memory = truncateForPrompt(String(input.memoryContext || "").trim() || "（全书记忆为空：暂无时间线摘要/事件）", 12_000);
+    const charNames = Array.from(new Set((input.existingEntities.characters || []).map((x) => String(x).trim()).filter(Boolean))).slice(0, 300);
+    const placeNames = Array.from(new Set((input.existingEntities.places || []).map((x) => String(x).trim()).filter(Boolean))).slice(0, 300);
+
+    return [
+      "## Role",
+      "你是一位拥有“全知视角”的叙事导演与首席审计官。你负责结合【历史剧情背景】对【当前章节】进行深度逻辑审计、质量评分及元数据提取。",
+      "",
+      "## Input Context",
+      "1) 【历史概要 (Memory Context)】：此处包含前序章节的压缩摘要/关键事件，用于维持因果一致性。",
+      memory,
+      "",
+      "2) 【已知实体名单】：当前世界已存在的实体名单（仅供参考，可能不全）。",
+      charNames.length ? `- 角色：${charNames.join("、")}` : "- 角色：（空）",
+      placeNames.length ? `- 地点：${placeNames.join("、")}` : "- 地点：（空）",
+      "",
+      "3) 【当前章节正文】：",
+      truncateForPrompt(input.content, 35_000),
+      "",
+      "## Audit Logic & Continuity Rules (审计逻辑)",
+      "1) 因果闭环：基于【历史概要】，检查本章是否响应之前伏笔（Payoff），或埋下逻辑自洽的新坑（Setup）。",
+      "2) 业力追踪：识别本章产生的“业力债务”（谎言、底牌暴露、人情债、承诺、代价），并与历史债务对齐。",
+      "3) 指纹校验：对比历史表现，审计角色的口癖、动作习惯及核心动机是否发生 OOC（人设崩坏）。",
+      "4) 数值审计：严格校验金钱、消耗品、伤势状态在历史长线中的增减逻辑（若文本可推断）。",
+      "",
+      "## Scoring Dimensions (1-10分制)",
+      "- 文笔表现：感官描写具象度，叙事流顺滑度。",
+      "- 叙事张力：冲突压力，地位/信息位的实质位移。",
+      "- 逻辑严密：历史一致性，无穿帮，无逻辑硬伤。",
+      "- 角色生命力：动机自洽性，非剧情工具人程度。",
+      "- 期待感构建：末尾钩子（Hook）对后续的拉动力。",
+      "",
+      "## Output Format (Strict JSON Only)",
+      "严格输出 JSON：不要解释、不要 markdown、不要代码块。字段需符合下面 schema（可以增加字段，但不要删除/重命名既有字段）。",
+      JSON.stringify(schema, null, 2),
+      "",
+      "生成要求：",
+      "- humanAuditReport 使用中文 markdown 纯文本（不要代码块），结构建议：综合评分与综述 / 历史因果对齐 / 角色指纹审计 / 导演行动清单。",
+      "- scores 的 5 个 score 必须是 1-10 的整数；comment 简短但有信息量。",
+      "- gistL1 必须是 300 字内的逻辑链条摘要（尽量可复用到时间线）。",
+      "- consistencyChecks 只列真实问题，控制在 0-12 条。",
+      "- ledgerUpdates: openLoops/closedLoops 用于“伏笔/欠账”跟踪；标题要稳定、可复用（避免同一件事每次换说法）。",
+      "",
+      "现在输出 JSON："
+    ].join("\n");
+  }
+
   function buildThinkingPrompt(input: { chapterTitle: string; chapterFilename: string; content: string; knownCharacters: string[] }) {
     return [
       "你是小说写作助手，正在进行「章节审计」的内部思考（给用户看的）。",
@@ -425,6 +540,8 @@ export async function registerRoutes(app: any, input: { dataDir: string }) {
   type ReasoningStreamEvent =
     | { type: "reasoning"; textDelta: string }
     | { type: "log"; text: string }
+    | { type: "phase"; step: number; total: number; label: string }
+    | { type: "modelPrompt"; stage: "thinking" | "audit"; prompt: string }
     | { type: "done"; run: any }
     | { type: "error"; message: string };
 
@@ -479,6 +596,12 @@ export async function registerRoutes(app: any, input: { dataDir: string }) {
     }
 
     return { model, providerOptions };
+  }
+
+  function truncateForPrompt(s: string, max: number): string {
+    const t = String(s || "").trim();
+    if (t.length <= max) return t;
+    return t.slice(0, Math.max(0, max - 8)) + "…（截断）";
   }
 
   async function streamThinkingTraceWithAiSdk(input: {
@@ -552,13 +675,29 @@ export async function registerRoutes(app: any, input: { dataDir: string }) {
     const { cfg, prompt } = input;
     const { model, providerOptions } = createAiSdkModel(cfg);
 
-    const { text } = await generateText({
-      model,
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0.2,
-      ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
-      providerOptions
-    } as any);
+    const controller = new AbortController();
+    const timeoutMs = 180_000;
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let text: any = "";
+    try {
+      const r = await generateText({
+        model,
+        messages: [{ role: "user", content: prompt }],
+        temperature: 0.2,
+        ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
+        providerOptions,
+        abortSignal: controller.signal
+      } as any);
+      text = (r as any)?.text;
+    } catch (e: any) {
+      const isAbort = String(e?.name || "") === "AbortError";
+      const msg = isAbort
+        ? `章节分析超时（>${Math.floor(timeoutMs / 1000)}s），已中断。建议：减少全书记忆长度/缩短章节正文、或换更快的模型/提高模型服务性能。`
+        : `章节分析失败：${e?.message || String(e)}`;
+      throw new Error(msg);
+    } finally {
+      clearTimeout(timer);
+    }
 
     if (!text?.trim()) throw new Error("模型未返回审计 JSON");
     return text;
@@ -1086,40 +1225,69 @@ export async function registerRoutes(app: any, input: { dataDir: string }) {
 
   async function performAuditWithAiSdk(input: { slug: string; filename: string; modelConfigId: string | null | undefined; onEvent?: (e: ReasoningStreamEvent) => void }) {
     const { slug, filename, modelConfigId, onEvent } = input;
+    const emitPhase = (step: number, label: string) => {
+      try {
+        onEvent?.({ type: "phase", step, total: 5, label });
+      } catch {
+        // ignore
+      }
+    };
     const settings = await readModelSettings();
     const activeId = modelConfigId || settings.activeId;
     const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
     if (!cfg) throw new Error("未配置模型");
 
+    emitPhase(1, "准备输入（读取章节/角色/索引）");
     const chapter = await readChapter(dataDir, slug, filename);
-    const { charFiles } = await listStoryFiles(dataDir, slug);
-    const knownCharacters = charFiles.map((c) => c.title);
+    const tl = normalizeTimelineIndex(await readTimelineIndex(dataDir, slug).catch(() => ({}) as any));
+    const chapNo = parseChapterNumberFromFilename(filename);
+    const memoryContext = buildMemoryContextFromTimelineBeforeChapter(tl, Number.isFinite(chapNo) ? chapNo : null);
+    const charIdx: any = await readAuditCharactersIndex(dataDir, slug).catch(() => null);
+    const placeIdx: any = await readAuditPlacesIndex(dataDir, slug).catch(() => null);
+    const hiddenChars = new Set(
+      Array.isArray(charIdx?.hiddenNames) ? (charIdx.hiddenNames as any[]).map((x: any) => String(x).trim()).filter(Boolean) : []
+    );
+    const hiddenPlaces = new Set(
+      Array.isArray(placeIdx?.hiddenNames) ? (placeIdx.hiddenNames as any[]).map((x: any) => String(x).trim()).filter(Boolean) : []
+    );
+    const knownCharacters = Array.from(
+      new Set(
+        (Array.isArray(charIdx?.characters) ? (charIdx.characters as any[]) : [])
+          .map((c: any) => String(c?.name || "").trim())
+          .filter((n: string) => n && !hiddenChars.has(n))
+      )
+    );
+    const knownPlaces = Array.from(
+      new Set(
+        (Array.isArray(placeIdx?.places) ? (placeIdx.places as any[]) : [])
+          .map((p: any) => String(p?.name || "").trim())
+          .filter((n: string) => n && !hiddenPlaces.has(n))
+      )
+    );
 
-    const thinkingPrompt = buildThinkingPrompt({
+    const unifiedPrompt = buildUnifiedAuditPrompt({
       chapterTitle: filename.replace(/\.md$/, ""),
       chapterFilename: filename,
       content: chapter,
-      knownCharacters
+      memoryContext,
+      existingEntities: { characters: knownCharacters, places: knownPlaces }
     });
 
-    const auditPrompt = buildAuditPrompt({
-      chapterTitle: filename.replace(/\.md$/, ""),
-      chapterFilename: filename,
-      content: chapter,
-      knownCharacters
-    });
+    try {
+      onEvent?.({ type: "modelPrompt", stage: "audit", prompt: unifiedPrompt });
+    } catch {
+      // ignore
+    }
 
-    await streamThinkingTraceWithAiSdk({
-      cfg,
-      prompt: thinkingPrompt,
-      onEvent: onEvent ?? (() => {})
-    });
-
-    const rawJson = await generateAuditJsonWithAiSdk({ cfg, prompt: auditPrompt });
+    emitPhase(2, "生成最终审计结果（JSON）");
+    const rawJson = await generateAuditJsonWithAiSdk({ cfg, prompt: unifiedPrompt });
     const jsonText = stripJsonFence(rawJson);
+    emitPhase(3, "解析并保存审计结果");
     const run = await finalizeAuditFromJsonText(slug, filename, jsonText);
     const ledger = await readAuditLedger(dataDir, slug);
+    emitPhase(4, "更新全书记忆（时间线/推荐压缩）");
     await updateTimelineIndexAfterAudit({ cfg, slug, filename, run, ledger }).catch(() => {});
+    emitPhase(5, "完成");
     return run;
   }
 
@@ -1587,8 +1755,9 @@ export async function registerRoutes(app: any, input: { dataDir: string }) {
         filename: params.filename,
         modelConfigId: body.modelConfigId,
         onEvent: (e) => {
-          if (e.type === "reasoning") sseWrite(reply.raw, e);
-          if (e.type === "log") sseWrite(reply.raw, e);
+          // 章节分析改为单次生成 JSON：不再透传 reasoning/log，减少无关日志
+          if (e.type === "phase") sseWrite(reply.raw, e);
+          if (e.type === "modelPrompt") sseWrite(reply.raw, e);
         }
       });
       sseWrite(reply.raw, { type: "done", run });

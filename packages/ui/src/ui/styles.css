@@ -1411,11 +1411,11 @@ code {
 
 .auditPanel {
   min-width: 0;
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  background: color-mix(in srgb, var(--panel2) 82%, transparent);
-  border-radius: 12px;
-  padding: 10px;
-  margin-bottom: 6px;
+  border: none;
+  background: transparent;
+  border-radius: 0;
+  padding: 0;
+  margin-bottom: 0;
 }
 
 .inspirationPanelFlat.auditPanel {
@@ -2588,16 +2588,22 @@ code {
 
 .auditImpactItem {
   min-width: 0;
-  padding: 8px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-  background: color-mix(in srgb, var(--panel) 84%, transparent);
+  padding: 8px 0;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
 }
 
 .auditImpactTop {
   display: flex;
   align-items: flex-start;
   gap: 8px;
+}
+
+.auditImpactItem:first-child {
+  border-top: none;
+  padding-top: 0;
 }
 
 .auditImpactScore {
@@ -2635,10 +2641,16 @@ code {
 
 .auditCheckItem {
   min-width: 0;
-  padding: 8px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
-  background: color-mix(in srgb, var(--panel) 84%, transparent);
+  padding: 8px 0;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.auditCheckItem:first-child {
+  border-top: none;
+  padding-top: 0;
 }
 
 .auditCheckIssue {
