@@ -3916,3 +3916,115 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis) {
   margin-top: auto;
 }
 
+/* 写作统计看板 */
+.statsPanel {
+  padding: 10px;
+}
+
+.statsLoading {
+  padding: 20px;
+}
+
+.statsAlert {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.statsCard {
+  background: var(--panel);
+  border-radius: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+}
+
+.statsCardLabel {
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+
+.statsCardValue {
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.statsCardSub {
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.statsSection {
+  margin-bottom: 16px;
+}
+
+.statsFreqSummary {
+  font-size: 12px;
+  margin: 4px 0 8px;
+  line-height: 1.4;
+}
+
+.statsHeatmap {
+  display: flex;
+  gap: 3px;
+  flex-wrap: nowrap;
+}
+
+.statsHeatmapCell {
+  flex: 1;
+  min-width: 6px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--border);
+}
+
+.statsHeatmapCell.active {
+  background: var(--accent);
+}
+
+.statsHeatmapLegend {
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.statsBarChart {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 100px;
+  padding: 4px 0;
+}
+
+.statsBarChart--short {
+  height: 80px;
+}
+
+.statsBar {
+  flex: 1;
+  min-width: 3px;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+}
+
+.statsBarLabels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.statsTotalHint {
+  font-size: 11px;
+  margin-top: 4px;
+}
+

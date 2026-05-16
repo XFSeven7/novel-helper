@@ -935,10 +935,151 @@ async function allocateChapterFilename(chaptersDir: string, index: number, stem:
   return allocateChapterFilenameExcept(chaptersDir, index, stem, null);
 }
 
-function approximateWordCount(s: string): number {
+export function approximateWordCount(s: string): number {
   const zh = (s.match(/[\u4e00-\u9fa5]/g) || []).length;
   const en = (s.replace(/[\u4e00-\u9fa5]/g, " ").match(/[A-Za-z0-9]+/g) || []).length;
   return zh + en;
+}
+
+export type WritingLogDaily = { netWords: number; saveCount: number };
+
+export type WritingLog = {
+  version: 1;
+  updatedAt: string;
+  initialized?: boolean;
+  chapterWordCount: Record<string, number>;
+  daily: Record<string, WritingLogDaily>;
+};
+
+function emptyWritingLog(): WritingLog {
+  return {
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    initialized: false,
+    chapterWordCount: {},
+    daily: {}
+  };
+}
+
+function writingLogPath(dataDir: string, novelSlug: string): string {
+  return path.join(dataDir, novelSlug, "meta", "writing-log.json");
+}
+
+export async function readWritingLog(dataDir: string, novelSlug: string): Promise<WritingLog> {
+  const p = writingLogPath(dataDir, novelSlug);
+  try {
+    const raw = await fs.readFile(p, "utf8");
+    const parsed = JSON.parse(raw) as WritingLog;
+    return {
+      version: 1,
+      updatedAt: typeof parsed.updatedAt === "string" ? parsed.updatedAt : new Date().toISOString(),
+      initialized: Boolean(parsed.initialized),
+      chapterWordCount:
+        parsed.chapterWordCount && typeof parsed.chapterWordCount === "object" ? parsed.chapterWordCount : {},
+      daily: parsed.daily && typeof parsed.daily === "object" ? parsed.daily : {}
+    };
+  } catch {
+    return emptyWritingLog();
+  }
+}
+
+export async function writeWritingLog(dataDir: string, novelSlug: string, log: WritingLog): Promise<void> {
+  const p = writingLogPath(dataDir, novelSlug);
+  await ensureDir(path.dirname(p));
+  const next: WritingLog = { ...log, version: 1, updatedAt: new Date().toISOString() };
+  await fs.writeFile(p, JSON.stringify(next, null, 2), "utf8");
+}
+
+/** 将当前各章字数写入基线，不写入 daily（避免历史字数误计入日更） */
+export async function ensureWritingLogBaseline(dataDir: string, novelSlug: string): Promise<WritingLog> {
+  const log = await readWritingLog(dataDir, novelSlug);
+  if (log.initialized) return log;
+
+  const chapters = await listChapters(dataDir, novelSlug);
+  const chapterWordCount: Record<string, number> = { ...log.chapterWordCount };
+  for (const ch of chapters) {
+    if (chapterWordCount[ch.filename] === undefined) {
+      chapterWordCount[ch.filename] = ch.wordCount;
+    }
+  }
+  const next: WritingLog = { ...log, chapterWordCount, initialized: true };
+  await writeWritingLog(dataDir, novelSlug, next);
+  return next;
+}
+
+function todayDateStr(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export async function recordChapterWordDelta(
+  dataDir: string,
+  novelSlug: string,
+  filename: string,
+  newContent: string,
+  options?: { treatAsNew?: boolean }
+): Promise<void> {
+  await ensureWritingLogBaseline(dataDir, novelSlug);
+  const log = await readWritingLog(dataDir, novelSlug);
+  const newCount = approximateWordCount(newContent);
+  const chapterWordCount = { ...log.chapterWordCount };
+  const daily = { ...log.daily };
+
+  let delta = 0;
+  if (options?.treatAsNew) {
+    delta = newCount;
+  } else if (chapterWordCount[filename] === undefined) {
+    chapterWordCount[filename] = newCount;
+    await writeWritingLog(dataDir, novelSlug, { ...log, chapterWordCount, daily });
+    return;
+  } else {
+    const oldCount = chapterWordCount[filename] ?? 0;
+    delta = Math.max(0, newCount - oldCount);
+  }
+
+  chapterWordCount[filename] = newCount;
+
+  if (delta > 0) {
+    const day = todayDateStr();
+    const prev = daily[day] ?? { netWords: 0, saveCount: 0 };
+    daily[day] = { netWords: prev.netWords + delta, saveCount: prev.saveCount + 1 };
+  } else {
+    const day = todayDateStr();
+    const prev = daily[day];
+    if (prev) {
+      daily[day] = { ...prev, saveCount: prev.saveCount + 1 };
+    }
+  }
+
+  await writeWritingLog(dataDir, novelSlug, { ...log, chapterWordCount, daily });
+}
+
+export async function removeChapterFromWritingLog(
+  dataDir: string,
+  novelSlug: string,
+  filename: string
+): Promise<void> {
+  const log = await readWritingLog(dataDir, novelSlug);
+  if (!log.chapterWordCount[filename]) return;
+  const chapterWordCount = { ...log.chapterWordCount };
+  delete chapterWordCount[filename];
+  await writeWritingLog(dataDir, novelSlug, { ...log, chapterWordCount });
+}
+
+export async function renameChapterInWritingLog(
+  dataDir: string,
+  novelSlug: string,
+  oldFilename: string,
+  newFilename: string,
+  newContent: string
+): Promise<void> {
+  const log = await readWritingLog(dataDir, novelSlug);
+  const chapterWordCount = { ...log.chapterWordCount };
+  if (oldFilename !== newFilename && chapterWordCount[oldFilename] !== undefined) {
+    chapterWordCount[newFilename] = chapterWordCount[oldFilename];
+    delete chapterWordCount[oldFilename];
+  }
+  await writeWritingLog(dataDir, novelSlug, { ...log, chapterWordCount });
+  await recordChapterWordDelta(dataDir, novelSlug, newFilename, newContent);
 }
 
 function applyChapterHeadingTitle(raw: string, title: string): string {
@@ -1143,6 +1284,7 @@ export async function createChapter(
     (content?.trim() ? `${content.trim()}\n` : "");
 
   await fs.writeFile(filePath, body, "utf8");
+  await recordChapterWordDelta(dataDir, novelSlug, filename, body, { treatAsNew: true });
   const meta: ChapterMeta = {
     id,
     title,
@@ -1167,6 +1309,7 @@ export async function updateChapter(
 ) {
   const filePath = path.join(dataDir, novelSlug, "chapters", filename);
   await fs.writeFile(filePath, newContent, "utf8");
+  await recordChapterWordDelta(dataDir, novelSlug, filename, newContent);
 }
 
 export async function deleteChapter(dataDir: string, novelSlug: string, filename: string) {
@@ -1182,6 +1325,7 @@ export async function deleteChapter(dataDir: string, novelSlug: string, filename
   }
   if (!(await exists(filePath))) throw new Error("章节不存在");
   await fs.unlink(filePath);
+  await removeChapterFromWritingLog(dataDir, novelSlug, safeName);
 }
 
 /** 保留序号，仅改「下划线后的标题」并重命名文件；同步正文首行 `# 标题`。 */
@@ -1215,6 +1359,7 @@ export async function renameChapterTitle(
 
   if (newFilename === oldFilename) {
     await fs.writeFile(oldPath, nextBody, "utf8");
+    await recordChapterWordDelta(dataDir, novelSlug, oldFilename, nextBody);
     return metaWithCount(oldFilename);
   }
 
@@ -1223,6 +1368,7 @@ export async function renameChapterTitle(
 
   await fs.writeFile(newPath, nextBody, "utf8");
   await fs.unlink(oldPath);
+  await renameChapterInWritingLog(dataDir, novelSlug, oldFilename, newFilename, nextBody);
 
   return metaWithCount(newFilename);
 }

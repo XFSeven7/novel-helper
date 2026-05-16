@@ -1155,6 +1155,7 @@ export function App() {
   const [bookShelfSortDesc, setBookShelfSortDesc] = useState(false);
   const [chapterSortDesc, setChapterSortDesc] = useState(false);
   const [chapters, setChapters] = useState<ChapterMeta[]>([]);
+  const [statsRefreshKey, setStatsRefreshKey] = useState(0);
   const [selectedChapter, setSelectedChapter] = useState<SelectedChapter>(null);
   const [selectedCard, setSelectedCard] = useState<SelectedCard>(null);
 
@@ -1482,6 +1483,7 @@ export function App() {
       chapterBaselineRef.current = content;
       const w = approximateWordCount(content);
       setChapters((prev) => prev.map((c) => (c.filename === sel.filename ? { ...c, wordCount: w } : c)));
+      setStatsRefreshKey((k) => k + 1);
       setChapterAutosaveHint("已保存");
       window.setTimeout(() => {
         setChapterAutosaveHint((s) => (s === "已保存" ? "" : s));
@@ -2254,6 +2256,7 @@ export function App() {
       const body: { title: string; chapterIndex?: number } = { title: t };
       if (chapterIndex !== undefined) body.chapterIndex = chapterIndex;
       const { chapter } = await createChapter(bookSlug, body);
+      setStatsRefreshKey((k) => k + 1);
 
       if (bookSlug === activeBook) setChapterTitle("");
 
@@ -5519,6 +5522,7 @@ export function App() {
                             busy={busy}
                             activeBook={activeBook}
                             chapters={chapters}
+                            statsRefreshKey={statsRefreshKey}
                             onSetStatus={setStatus}
                           />
                         ) : (

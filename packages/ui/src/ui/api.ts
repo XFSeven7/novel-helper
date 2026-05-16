@@ -704,6 +704,10 @@ export type BookStats = {
   dailyBreakdown: { date: string; words: number; chapters: number }[];
   chapterWordCounts: { index: number; title: string; wordCount: number; filename: string }[];
   cumulativeWords: { index: number; title: string; words: number }[];
+  activeDaysLast7: number;
+  activeDaysLast30: number;
+  avgNetWordsPerActiveDay30: number;
+  weeklyActivity: { weekStart: string; activeDays: number; netWords: number }[];
 };
 
 export async function getBookStats(slug: string) {

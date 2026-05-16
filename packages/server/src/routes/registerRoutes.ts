@@ -3276,7 +3276,7 @@ export async function registerRoutes(app: any, input: { dataDir: string }) {
     }
   });
 
-  // ---- writing stats ----
+  // ---- writing stats (legacy; live route in index.ts + bookStats.ts) ----
 
   app.get("/api/books/:slug/stats", async (req: any) => {
     const paramsSchema = z.object({ slug: z.string().min(1) });

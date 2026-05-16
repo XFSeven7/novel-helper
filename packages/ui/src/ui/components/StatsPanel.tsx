@@ -1,14 +1,15 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { getBookStats, type BookStats } from "../api";
 
 type Props = {
   busy: boolean;
   activeBook: string | null;
   chapters: { id: string; title: string; wordCount: number }[];
+  statsRefreshKey?: number;
   onSetStatus: (msg: string) => void;
 };
 
-export function StatsPanel({ busy, activeBook, chapters, onSetStatus }: Props) {
+export function StatsPanel({ busy, activeBook, statsRefreshKey = 0, onSetStatus }: Props) {
   const [stats, setStats] = useState<BookStats | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -29,28 +30,54 @@ export function StatsPanel({ busy, activeBook, chapters, onSetStatus }: Props) {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => { cancelled = true; };
-  }, [activeBook]);
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBook, statsRefreshKey, onSetStatus]);
+
+  const dailyLast30 = useMemo(() => {
+    if (!stats) return [];
+    return stats.dailyBreakdown.slice(-30);
+  }, [stats]);
+
+  const maxHeatmapWords = useMemo(
+    () => Math.max(...dailyLast30.map((d) => d.words), 1),
+    [dailyLast30]
+  );
 
   if (!activeBook) {
     return <div className="muted auditPanelEmpty">请先选择一本书。</div>;
   }
 
   if (loading) {
-    return <div className="muted auditPanelEmpty" style={{ padding: 20 }}>加载统计中...</div>;
+    return <div className="muted auditPanelEmpty statsLoading">加载统计中...</div>;
   }
 
   if (!stats) {
     return <div className="muted auditPanelEmpty">暂无统计数据。</div>;
   }
 
-  const maxDailyWords = Math.max(...stats.dailyBreakdown.map((d) => d.words), 1);
+  const maxDailyWords = Math.max(...dailyLast30.map((d) => d.words), 1);
   const maxChapterWords = Math.max(...stats.chapterWordCounts.map((c) => c.wordCount), 1);
+  const showHiatusAlert = stats.daysSinceLastWrite >= 3;
 
   return (
-    <div style={{ padding: "10px" }}>
-      {/* 概览卡片 */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8, marginBottom: 16 }}>
+    <div className="statsPanel">
+      {showHiatusAlert ? (
+        <div className="statsAlert" role="status">
+          <strong>已停更 {stats.daysSinceLastWrite} 天</strong>
+          {stats.lastWriteDate ? (
+            <span className="muted"> · 最近写作：{stats.lastWriteDate}</span>
+          ) : (
+            <span className="muted"> · 尚无写作记录</span>
+          )}
+          {stats.streak > 0 ? (
+            <span className="muted"> · 此前连续 {stats.streak} 天</span>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div className="statsGrid">
         <StatCard label="总字数" value={formatNum(stats.totalWords)} />
         <StatCard label="章节数" value={String(stats.totalChapters)} />
         <StatCard label="平均每章" value={formatNum(stats.avgChapterLength)} />
@@ -66,97 +93,106 @@ export function StatsPanel({ busy, activeBook, chapters, onSetStatus }: Props) {
         />
         <StatCard
           label={stats.streak > 0 ? `连续写作 ${stats.streak} 天` : "未连续"}
-          value={stats.daysSinceLastWrite > 0 ? `停更 ${stats.daysSinceLastWrite} 天` : "今日已更新"}
-          sub={stats.lastWriteDate ? `最近更新: ${stats.lastWriteDate}` : ""}
+          value={
+            stats.daysSinceLastWrite === 0
+              ? "今日已更新"
+              : stats.daysSinceLastWrite === 1
+                ? "昨日有写作"
+                : `停更 ${stats.daysSinceLastWrite} 天`
+          }
+          sub={stats.lastWriteDate ? `最近：${stats.lastWriteDate}` : ""}
         />
       </div>
 
-      {/* 每日写作量趋势 */}
-      <div style={{ marginBottom: 16 }}>
-        <div className="auditCharDetailLabel" style={{ marginBottom: 6 }}>每日写作量</div>
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 100, padding: "4px 0" }}>
-          {stats.dailyBreakdown.slice(-30).map((d) => (
+      <section className="statsSection">
+        <div className="auditCharDetailLabel">写作频率</div>
+        <p className="statsFreqSummary muted">
+          近 7 天写作 {stats.activeDaysLast7} 天 · 近 30 天写作 {stats.activeDaysLast30} 天
+          {stats.avgNetWordsPerActiveDay30 > 0
+            ? ` · 活跃日日均 ${formatNum(stats.avgNetWordsPerActiveDay30)} 字`
+            : ""}
+        </p>
+        <div className="statsHeatmap" aria-label="近30日写作热力">
+          {dailyLast30.map((d) => {
+            const intensity = d.words > 0 ? 0.35 + 0.65 * (d.words / maxHeatmapWords) : 0.2;
+            return (
+              <div
+                key={d.date}
+                className={`statsHeatmapCell ${d.words > 0 ? "active" : ""}`}
+                title={`${d.date}: ${d.words} 字`}
+                style={d.words > 0 ? { opacity: intensity } : undefined}
+              />
+            );
+          })}
+        </div>
+        <div className="statsHeatmapLegend muted">左旧右新 · 越深表示当日新增越多</div>
+      </section>
+
+      <section className="statsSection">
+        <div className="auditCharDetailLabel">每日新增字数</div>
+        <div className="statsBarChart">
+          {dailyLast30.map((d) => (
             <div
               key={d.date}
-              title={`${d.date}: ${d.words} 字 (${d.chapters} 章)`}
+              className="statsBar"
+              title={`${d.date}: ${d.words} 字`}
               style={{
-                flex: 1,
-                background: d.words > 0 ? "var(--accent)" : "var(--border)",
-                height: `${Math.max(2, (d.words / maxDailyWords) * 100)}px`,
-                minWidth: 4,
-                borderRadius: "2px 2px 0 0",
-                opacity: d.words > 0 ? 0.8 : 0.3
+                height: `${Math.max(2, (d.words / maxDailyWords) * 100)}%`,
+                opacity: d.words > 0 ? 0.85 : 0.35
               }}
             />
           ))}
         </div>
-        <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-          近 30 天日写作量（条柱越高=写得越多）
+        <div className="statsBarLabels muted">
+          {dailyLast30.length > 0 ? (
+            <>
+              <span>{dailyLast30[0]!.date.slice(5)}</span>
+              <span>{dailyLast30[dailyLast30.length - 1]!.date.slice(5)}</span>
+            </>
+          ) : null}
         </div>
-      </div>
+      </section>
 
-      {/* 每章字数柱状图 */}
-      <div style={{ marginBottom: 16 }}>
-        <div className="auditCharDetailLabel" style={{ marginBottom: 6 }}>章节长度分布</div>
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 80, padding: "4px 0" }}>
+      <section className="statsSection">
+        <div className="auditCharDetailLabel">章节长度分布</div>
+        <div className="statsBarChart statsBarChart--short">
           {stats.chapterWordCounts.map((ch) => (
             <div
               key={ch.index}
-              title={`第${ch.index}章: ${ch.wordCount} 字`}
-              style={{
-                flex: 1,
-                background: "var(--accent)",
-                height: `${Math.max(2, (ch.wordCount / maxChapterWords) * 80)}px`,
-                minWidth: 3,
-                borderRadius: "2px 2px 0 0",
-                opacity: 0.7
-              }}
+              className="statsBar"
+              title={`第${ch.index}章 ${ch.title}: ${ch.wordCount} 字`}
+              style={{ height: `${Math.max(2, (ch.wordCount / maxChapterWords) * 100)}%` }}
             />
           ))}
         </div>
-        <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-          每章字数（从左到右按章节顺序）
-        </div>
-      </div>
+      </section>
 
-      {/* 累积字数 */}
-      <div>
-        <div className="auditCharDetailLabel" style={{ marginBottom: 6 }}>累积字数趋势</div>
-        <div style={{ display: "flex", alignItems: "flex-end", gap: 2, height: 80, padding: "4px 0" }}>
+      <section className="statsSection">
+        <div className="auditCharDetailLabel">累积字数趋势</div>
+        <div className="statsBarChart statsBarChart--short">
           {stats.cumulativeWords.map((c) => (
             <div
               key={c.index}
-              title={`第${c.index}章: 累积 ${c.words} 字`}
+              className="statsBar"
+              title={`第${c.index}章: 累积 ${formatNum(c.words)} 字`}
               style={{
-                flex: 1,
-                background: "var(--accent)",
-                height: `${Math.max(2, (c.words / stats.totalWords) * 80)}px`,
-                minWidth: 3,
-                borderRadius: "2px 2px 0 0",
-                opacity: 0.7
+                height: `${Math.max(2, (c.words / Math.max(stats.totalWords, 1)) * 100)}%`
               }}
             />
           ))}
         </div>
-        <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>
-          总字数: {formatNum(stats.totalWords)}
-        </div>
-      </div>
+        <div className="muted statsTotalHint">全书 {formatNum(stats.totalWords)} 字</div>
+      </section>
     </div>
   );
 }
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
-    <div style={{
-      background: "var(--bg2)",
-      borderRadius: 6,
-      padding: "8px 10px",
-      border: "1px solid var(--border)"
-    }}>
-      <div className="muted" style={{ fontSize: 11, marginBottom: 2 }}>{label}</div>
-      <div style={{ fontSize: 18, fontWeight: 700 }}>{value}</div>
-      {sub ? <div className="muted" style={{ fontSize: 10, marginTop: 2 }}>{sub}</div> : null}
+    <div className="statsCard">
+      <div className="muted statsCardLabel">{label}</div>
+      <div className="statsCardValue">{value}</div>
+      {sub ? <div className="muted statsCardSub">{sub}</div> : null}
     </div>
   );
 }

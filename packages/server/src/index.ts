@@ -54,6 +54,7 @@ import {
   IdeaItem
 } from "./fsStore.js";
 import { resolveDataDir, safeSlug } from "./paths.js";
+import { computeBookStats } from "./bookStats.js";
 
 const app = Fastify({ logger: true });
 
@@ -2914,6 +2915,21 @@ app.delete("/api/books/:slug/chapters/:filename", async (req, reply) => {
     return { ok: true };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || "Delete failed" });
+  }
+});
+
+app.get("/api/books/:slug/stats", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const querySchema = z.object({ backfill: z.enum(["mtime"]).optional() });
+  const params = paramsSchema.parse((req as any).params);
+  const query = querySchema.parse((req as any).query ?? {});
+  try {
+    const stats = await computeBookStats(dataDir, params.slug, {
+      backfillMtime: query.backfill === "mtime"
+    });
+    return { stats };
+  } catch (e: any) {
+    return reply.code(400).send({ message: e?.message || "Stats failed" });
   }
 });
 
