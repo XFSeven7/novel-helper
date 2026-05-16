@@ -7,7 +7,7 @@ description: 本地写小说的网页端工具
 started: 2026-05-04
 updated: 2026-05-16
 
-current_focus: 分析功能优化迭代
+current_focus: 新增写作统计看板
 
 milestones:
   - name: v1.0 基础写作功能
@@ -27,10 +27,19 @@ milestones:
       - 灵感库管理
 
   - name: v1.2 分析优化
+    status: done
+    completed: 2026-05-16
+    features:
+      - 分析功能优化
+
+  - name: v1.3 写作统计看板
     status: active
     features:
-      - 分析功能优化（上次提交）
-      - 更多分析维度
+      - 每日写作量趋势柱状图
+      - 每章字数分布
+      - 累积字数趋势
+      - 连续/停更天数提示
+      - 概览统计卡片
 
 tasks: []
 blockers: []
