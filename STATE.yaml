@@ -1,0 +1,38 @@
+# novelHelper 项目状态
+# 自动管理 - 对话驱动，无需手动编辑
+
+project: novel-helper
+repo: https://github.com/XFSeven7/novel-helper
+description: 本地写小说的网页端工具
+started: 2026-05-04
+updated: 2026-05-16
+
+current_focus: 分析功能优化迭代
+
+milestones:
+  - name: v1.0 基础写作功能
+    status: done
+    completed: 2026-05-08
+    features:
+      - 书架/章节编辑/资料卡
+      - AI分析/审计阅读
+      - 角色/地点/组织库
+
+  - name: v1.1 内容生成增强
+    status: done
+    completed: 2026-05-09
+    features:
+      - 角色/地点/组织/道具生成
+      - 事件/秘闻/功法生成
+      - 灵感库管理
+
+  - name: v1.2 分析优化
+    status: active
+    features:
+      - 分析功能优化（上次提交）
+      - 更多分析维度
+
+tasks: []
+blockers: []
+next_actions: []
+decisions: []

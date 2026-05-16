@@ -14,6 +14,7 @@ import {
 import { auditCharacterNewBadgeClass, auditCharacterRoleClass, formatAuditCharField } from "./utils/auditCharacters";
 import { clamp } from "./utils/math";
 import { MemoryPanel } from "./components/GlobalInfo/MemoryPanel";
+import { StatsPanel } from "./components/StatsPanel";
 import { useLayout3Splitters } from "./hooks/useLayout3Splitters";
 import { useLocalStorageState } from "./hooks/useLocalStorageState";
 import {
@@ -79,7 +80,9 @@ import {
   generateInspirationPreview,
   generateInspirationVariants,
   type InspirationIndex,
-  type IdeaItem
+  type IdeaItem,
+  getBookStats,
+  type BookStats
 } from "./api";
 import type { BookSearchGroup, BookSearchHit } from "./api";
 
@@ -95,7 +98,7 @@ type InspGenSlice = {
   freeText: string;
   useMemory: boolean;
   count: number;
-  /** 道具生成：持有者角色名；空字符串表示无主/待定 */
+  /** 道具生成:持有者角色名;空字符串表示无主/待定 */
   itemOwnerCharacterName: string;
 };
 
@@ -152,9 +155,9 @@ function parseInspirationPlaceContent(raw: string): InspirationPlaceContent | nu
 
 function inspirationPlaceCollapsedBlurb(data: InspirationPlaceContent, title: string): string {
   const a = String(data.atmosphere || "").trim();
-  if (a) return a.length > 140 ? `${a.slice(0, 140)}…` : a;
+  if (a) return a.length > 140 ? `${a.slice(0, 140)}...` : a;
   const l = String(data.layout || "").trim();
-  if (l) return l.length > 140 ? `${l.slice(0, 140)}…` : l;
+  if (l) return l.length > 140 ? `${l.slice(0, 140)}...` : l;
   return title ? `「${title}」` : "地点卡";
 }
 
@@ -193,9 +196,9 @@ function parseInspirationItemContent(raw: string): InspirationItemContent | null
 
 function inspirationItemCollapsedBlurb(data: InspirationItemContent, title: string): string {
   const a = String(data.appearance || "").trim();
-  if (a) return a.length > 140 ? `${a.slice(0, 140)}…` : a;
+  if (a) return a.length > 140 ? `${a.slice(0, 140)}...` : a;
   const f = String(data.functions || "").trim();
-  if (f) return f.length > 140 ? `${f.slice(0, 140)}…` : f;
+  if (f) return f.length > 140 ? `${f.slice(0, 140)}...` : f;
   return title ? `「${title}」` : "道具卡";
 }
 
@@ -234,11 +237,11 @@ function parseInspirationOrgContent(raw: string): InspirationOrgContent | null {
 
 function inspirationOrgCollapsedBlurb(data: InspirationOrgContent, title: string): string {
   const d = String(data.doctrine || "").trim();
-  if (d) return d.length > 140 ? `${d.slice(0, 140)}…` : d;
+  if (d) return d.length > 140 ? `${d.slice(0, 140)}...` : d;
   const h = String(data.hidden_agenda || "").trim();
-  if (h) return h.length > 140 ? `${h.slice(0, 140)}…` : h;
+  if (h) return h.length > 140 ? `${h.slice(0, 140)}...` : h;
   const p = String(data.power_base || "").trim();
-  if (p) return p.length > 140 ? `${p.slice(0, 140)}…` : p;
+  if (p) return p.length > 140 ? `${p.slice(0, 140)}...` : p;
   return title ? `「${title}」` : "组织卡";
 }
 
@@ -348,9 +351,9 @@ function parseInspirationEventContent(raw: string): InspirationEventContent | nu
 
 function inspirationEventCollapsedBlurb(data: InspirationEventContent, title: string): string {
   const d = String(data.description || "").trim();
-  if (d) return d.length > 140 ? `${d.slice(0, 140)}…` : d;
+  if (d) return d.length > 140 ? `${d.slice(0, 140)}...` : d;
   const tr = String(data.trigger || "").trim();
-  if (tr) return tr.length > 140 ? `${tr.slice(0, 140)}…` : tr;
+  if (tr) return tr.length > 140 ? `${tr.slice(0, 140)}...` : tr;
   return title ? `「${title}」` : "事件卡";
 }
 
@@ -417,9 +420,9 @@ function parseInspirationLoreContent(raw: string): InspirationLoreContent | null
 
 function inspirationLoreCollapsedBlurb(data: InspirationLoreContent, title: string): string {
   const s = String(data.surface_rumor || "").trim();
-  if (s) return s.length > 140 ? `${s.slice(0, 140)}…` : s;
+  if (s) return s.length > 140 ? `${s.slice(0, 140)}...` : s;
   const h = String(data.hidden_truth || "").trim();
-  if (h) return h.length > 140 ? `${h.slice(0, 140)}…` : h;
+  if (h) return h.length > 140 ? `${h.slice(0, 140)}...` : h;
   return title ? `「${title}」` : "秘闻卡";
 }
 
@@ -467,9 +470,9 @@ function parseInspirationTechniqueContent(raw: string): InspirationTechniqueCont
 
 function inspirationTechniqueCollapsedBlurb(data: InspirationTechniqueContent, title: string): string {
   const e = String(data.effect || "").trim();
-  if (e) return e.length > 140 ? `${e.slice(0, 140)}…` : e;
+  if (e) return e.length > 140 ? `${e.slice(0, 140)}...` : e;
   const l = String(data.logic_flow || "").trim();
-  if (l) return l.length > 140 ? `${l.slice(0, 140)}…` : l;
+  if (l) return l.length > 140 ? `${l.slice(0, 140)}...` : l;
   return title ? `「${title}」` : "功法卡";
 }
 
@@ -513,9 +516,9 @@ function InspirationPlaceStructuredView({ data }: { data: InspirationPlaceConten
         <div className="inspirationPlaceBlock">
           <div className="inspirationPlaceLabel">感官印记</div>
           <div className="inspirationPlaceBody">
-            {sf.sound?.trim() ? <div>声：{sf.sound.trim()}</div> : null}
-            {sf.visual?.trim() ? <div>视：{sf.visual.trim()}</div> : null}
-            {sf.smell?.trim() ? <div>嗅：{sf.smell.trim()}</div> : null}
+            {sf.sound?.trim() ? <div>声:{sf.sound.trim()}</div> : null}
+            {sf.visual?.trim() ? <div>视:{sf.visual.trim()}</div> : null}
+            {sf.smell?.trim() ? <div>嗅:{sf.smell.trim()}</div> : null}
           </div>
         </div>
       ) : null}
@@ -598,7 +601,7 @@ function diffChars(aRaw: string, bRaw: string): DiffSeg[] {
   const n = A.length;
   const m = B.length;
 
-  // LCS DP（n*m）—章节润色一般可接受；用于“标记修改”预览，不影响保存逻辑
+  // LCS DP(n*m)-章节润色一般可接受;用于"标记修改"预览,不影响保存逻辑
   const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
   for (let i = n - 1; i >= 0; i--) {
     for (let j = m - 1; j >= 0; j--) {
@@ -639,7 +642,7 @@ function diffChars(aRaw: string, bRaw: string): DiffSeg[] {
     j++;
   }
 
-  // 仅展示“润色后的文本”时，删除段无处显示；这里保留 del 以便未来扩展，但 UI 只高亮 ins
+  // 仅展示"润色后的文本"时,删除段无处显示;这里保留 del 以便未来扩展,但 UI 只高亮 ins
   return out;
 }
 
@@ -685,21 +688,21 @@ function toStateFieldLines(state: any): string[] {
     if (typeof v === "string") {
       const t = v.trim();
       if (!t) return;
-      out.push(`${label}：${t}`);
+      out.push(`${label}:${t}`);
       return;
     }
     if (typeof v === "number" || typeof v === "boolean") {
-      out.push(`${label}：${String(v)}`);
+      out.push(`${label}:${String(v)}`);
       return;
     }
     if (Array.isArray(v)) {
       const items = v.map((x) => String(x ?? "").trim()).filter(Boolean);
       if (!items.length) return;
-      out.push(`${label}：${items.join("、")}`);
+      out.push(`${label}:${items.join("、")}`);
       return;
     }
     if (typeof v === "object") {
-      // 扁平化一层：用 “父字段.子字段” 形式，避免 JSON 花括号
+      // 扁平化一层:用 "父字段.子字段" 形式,避免 JSON 花括号
       const entries = Object.entries(v as Record<string, any>)
         .map(([kk, vv]) => [String(kk).trim(), vv] as const)
         .filter(([kk]) => kk);
@@ -709,7 +712,7 @@ function toStateFieldLines(state: any): string[] {
         if (vv === null || vv === undefined) continue;
         const s = typeof vv === "string" ? vv.trim() : Array.isArray(vv) ? vv.map(String).join("、") : String(vv);
         if (!String(s).trim()) continue;
-        out.push(`${childLabel}：${s}`);
+        out.push(`${childLabel}:${s}`);
       }
     }
   };
@@ -743,10 +746,10 @@ function buildAuditTargets(input: {
     const tags = Array.isArray(c?.tags) ? c.tags.map(String).filter(Boolean) : [];
     const personality = String(c?.personalityAnalysis || "").trim();
     const lines: string[] = [];
-    lines.push(`姓名：${name}`);
-    if (role) lines.push(`身份：${role}`);
-    if (tags.length) lines.push(`标签：${tags.join("、")}`);
-    if (personality) lines.push(`性格分析：${personality}`);
+    lines.push(`姓名:${name}`);
+    if (role) lines.push(`身份:${role}`);
+    if (tags.length) lines.push(`标签:${tags.join("、")}`);
+    if (personality) lines.push(`性格分析:${personality}`);
     const stateFields = toStateFieldLines(c?.state);
     for (const l of stateFields) lines.push(l);
     const compact = lines.map((s) => String(s)).filter((s) => s.trim().length > 0);
@@ -754,7 +757,7 @@ function buildAuditTargets(input: {
       kind: "character",
       id: name,
       display: name,
-      summaryLines: compact.length ? compact : ["角色卡（未补充更多信息）"],
+      summaryLines: compact.length ? compact : ["角色卡(未补充更多信息)"],
       jump: { tab: "auditCharacters", key: name }
     });
   }
@@ -768,12 +771,12 @@ function buildAuditTargets(input: {
     if (!name || hiddenPlaces.has(name)) continue;
     const desc = String(p?.description || "").trim();
     const note = String(p?.lastNote || "").trim();
-    const last = p?.lastChapter ? `最近：第 ${p.lastChapter} 章` : "";
+    const last = p?.lastChapter ? `最近:第 ${p.lastChapter} 章` : "";
     push({
       kind: "place",
       id: name,
       display: name,
-      summaryLines: [desc ? `简述：${desc}` : "", note ? `发生：${note}` : "", last].filter(Boolean).slice(0, 6),
+      summaryLines: [desc ? `简述:${desc}` : "", note ? `发生:${note}` : "", last].filter(Boolean).slice(0, 6),
       jump: { tab: "places", key: name }
     });
   }
@@ -788,7 +791,7 @@ function buildAuditTargets(input: {
       kind: "timelineEvent",
       id,
       display: title,
-      summaryLines: [sum ? `摘要：${sum}` : "", e?.startChapter ? `范围：第 ${e.startChapter}${e.endChapter && e.endChapter !== e.startChapter ? `-${e.endChapter}` : ""} 章` : ""].filter(Boolean),
+      summaryLines: [sum ? `摘要:${sum}` : "", e?.startChapter ? `范围:第 ${e.startChapter}${e.endChapter && e.endChapter !== e.startChapter ? `-${e.endChapter}` : ""} 章` : ""].filter(Boolean),
       jump: { tab: "timeline", key: id }
     });
   }
@@ -799,12 +802,12 @@ function buildAuditTargets(input: {
       kind: "storyFile",
       id: String(f.path),
       display: String(f.title),
-      summaryLines: [`资料：${f.title}`],
+      summaryLines: [`资料:${f.title}`],
       jump: { tab: "story", key: String(f.path) }
     });
   }
 
-  // 组织：暂用 story/characters 之外没有正式索引；后续在 server-orgs-index-optional 中补齐
+  // 组织:暂用 story/characters 之外没有正式索引;后续在 server-orgs-index-optional 中补齐
   const orgs = Array.isArray(input.auditOrgsIndex?.orgs) ? input.auditOrgsIndex.orgs : [];
   const hiddenOrgs = new Set(
     Array.isArray(input.auditOrgsIndex?.hiddenNames) ? input.auditOrgsIndex.hiddenNames.map(String) : []
@@ -814,12 +817,12 @@ function buildAuditTargets(input: {
     if (!name || hiddenOrgs.has(name)) continue;
     const desc = String(o?.description || "").trim();
     const note = String(o?.lastNote || "").trim();
-    const last = o?.lastChapter ? `最近：第 ${o.lastChapter} 章` : "";
+    const last = o?.lastChapter ? `最近:第 ${o.lastChapter} 章` : "";
     push({
       kind: "org",
       id: name,
       display: name,
-      summaryLines: [desc ? `简述：${desc}` : "", note ? `动态：${note}` : "", last].filter(Boolean).slice(0, 6),
+      summaryLines: [desc ? `简述:${desc}` : "", note ? `动态:${note}` : "", last].filter(Boolean).slice(0, 6),
       jump: { tab: "orgs", key: name }
     });
   }
@@ -847,7 +850,7 @@ function auditCharTopExtraRows(c: Record<string, unknown>): Array<[string, strin
     "state",
     "evidenceQuotes",
     "updatedAt",
-    // 角色画像字段：已在 UI 以分组方式专门渲染，避免这里把 object 展示成一行导致“格式乱”
+    // 角色画像字段:已在 UI 以分组方式专门渲染,避免这里把 object 展示成一行导致"格式乱"
     "socialTags",
     "historicalDebts",
     "occurredNotes",
@@ -879,9 +882,9 @@ type ModelConfig = {
   testUrl: string;
   model?: string;
   extraHeadersJson?: string;
-  /** 最近一次测试是否通过（仅用于 UI 展示） */
+  /** 最近一次测试是否通过(仅用于 UI 展示) */
   lastTestOk?: boolean;
-  /** 仅部分 provider 可提供：最近一次测试拿到的模型列表（如 Ollama /api/tags） */
+  /** 仅部分 provider 可提供:最近一次测试拿到的模型列表(如 Ollama /api/tags) */
   lastModels?: string[];
 };
 
@@ -889,8 +892,8 @@ const BUILTIN_MODEL_PROVIDERS: Array<{ id: ModelProviderId; label: string }> = [
   { id: "openai", label: "OpenAI" },
   { id: "deepseek", label: "DeepSeek" },
   { id: "gemini", label: "Gemini" },
-  { id: "qwen", label: "千问（通义千问）" },
-  { id: "ollama", label: "Ollama（本地）" },
+  { id: "qwen", label: "千问(通义千问)" },
+  { id: "ollama", label: "Ollama(本地)" },
   { id: "custom", label: "自定义服务" }
 ];
 
@@ -939,7 +942,7 @@ function defaultConfigFor(provider: ModelProviderId): ModelConfig {
   if (provider === "ollama")
     return {
       id,
-      label: "Ollama（本地）",
+      label: "Ollama(本地)",
       provider,
       baseUrl: "http://127.0.0.1:11434",
       apiKey: "",
@@ -996,13 +999,13 @@ function loadThemePreference(): ThemePreference {
   }
 }
 
-/** 停止输入约多久后写入磁盘（毫秒） */
+/** 停止输入约多久后写入磁盘(毫秒) */
 const AUTOSAVE_DEBOUNCE_MS = 900;
 
-/** 允许在线改标题的文件名：`序号_任意标题.md` */
+/** 允许在线改标题的文件名:`序号_任意标题.md` */
 const CHAPTER_TITLE_RENAME_FILE_RE = /^(\d+)_.+\.md$/;
 
-/** 与服务端一致的近似字数（列表与编辑器共用） */
+/** 与服务端一致的近似字数(列表与编辑器共用) */
 function approximateWordCount(s: string): number {
   const zh = (s.match(/[\u4e00-\u9fa5]/g) || []).length;
   const en = (s.replace(/[\u4e00-\u9fa5]/g, " ").match(/[A-Za-z0-9]+/g) || []).length;
@@ -1013,7 +1016,7 @@ function normalizeChapterGapList(raw: number[]): number[] {
   return [...new Set(raw)].filter((n) => Number.isFinite(n) && n >= 1).sort((a, b) => a - b);
 }
 
-/** 展示用：「第 4 章、第 7 章」 */
+/** 展示用:「第 4 章、第 7 章」 */
 function formatMissingChapterList(gaps: number[]): string {
   return normalizeChapterGapList(gaps)
     .map((n) => `第 ${n} 章`)
@@ -1030,7 +1033,7 @@ function formatBookCreatedAt(iso: string): string {
   }
 }
 
-/** 左侧栏展开/收起（收起时令图标水平镜像） */
+/** 左侧栏展开/收起(收起时令图标水平镜像) */
 function SidebarToggleIcon({ mirrored }: { mirrored: boolean }) {
   return (
     <svg
@@ -1089,7 +1092,7 @@ async function toggleDocumentFullscreen(): Promise<void> {
   else if (root.msRequestFullscreen) await Promise.resolve(root.msRequestFullscreen());
 }
 
-/** 进入全屏（四角外扩） */
+/** 进入全屏(四角外扩) */
 function IconFullscreenEnter(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg
@@ -1113,7 +1116,7 @@ function IconFullscreenEnter(props: React.SVGProps<SVGSVGElement>) {
   );
 }
 
-/** 退出全屏（四角内收） */
+/** 退出全屏(四角内收) */
 function IconFullscreenExit(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg
@@ -1140,15 +1143,15 @@ function IconFullscreenExit(props: React.SVGProps<SVGSVGElement>) {
 export function App() {
   const [leftTab, setLeftTab] = useState<"chapters" | "global" | "progress" | "inspiration">("chapters");
   const [globalTab, setGlobalTab] = useState<
-    "auditCharacters" | "relations" | "places" | "timeline" | "foreshadows"
+    "auditCharacters" | "relations" | "places" | "timeline" | "foreshadows" | "stats"
   >(
     "auditCharacters"
   );
   const [books, setBooks] = useState<BookMeta[]>([]);
   const [activeBook, setActiveBook] = useState<string>("");
-  /** true：左侧显示书架；false：左侧显示当前书的章节 */
+  /** true:左侧显示书架;false:左侧显示当前书的章节 */
   const [navHome, setNavHome] = useState(true);
-  /** false：与服务端一致（书按创建时间升序、章节按序号升序）；true：倒序展示 */
+  /** false:与服务端一致(书按创建时间升序、章节按序号升序);true:倒序展示 */
   const [bookShelfSortDesc, setBookShelfSortDesc] = useState(false);
   const [chapterSortDesc, setChapterSortDesc] = useState(false);
   const [chapters, setChapters] = useState<ChapterMeta[]>([]);
@@ -1164,7 +1167,7 @@ export function App() {
   const [modalNewSynopsis, setModalNewSynopsis] = useState("");
   const [deleteBookModalOpen, setDeleteBookModalOpen] = useState(false);
   const [deleteBookTarget, setDeleteBookTarget] = useState<BookMeta | null>(null);
-  // 书架不再“展开简介”，点击直接进入书籍概览
+  // 书架不再"展开简介",点击直接进入书籍概览
 
   const [chapterTitle, setChapterTitle] = useState("");
   const [createCharacterModalOpen, setCreateCharacterModalOpen] = useState(false);
@@ -1195,10 +1198,10 @@ export function App() {
   const [inspirationBusy, setInspirationBusy] = useState(false);
   const [inspirationErr, setInspirationErr] = useState("");
   const [inspirationFilter, setInspirationFilter] = useState<"all" | "pinned">("all");
-  // 搜索框已按需求移除（减少占用空间）
+  // 搜索框已按需求移除(减少占用空间)
   // const [inspirationSearch, setInspirationSearch] = useState("");
 
-  /** 按「角色/地点/组织/道具」分桶：生成预览、表单与编辑状态互不串台 */
+  /** 按「角色/地点/组织/道具」分桶:生成预览、表单与编辑状态互不串台 */
   const [inspGenByType, setInspGenByType] = useState<Record<InspTypeKey, InspGenSlice>>(() => ({
     character: emptyInspGenSlice(),
     place: emptyInspGenSlice(),
@@ -1209,7 +1212,7 @@ export function App() {
     technique: emptyInspGenSlice()
   }));
 
-  /** 列表/回收站条目展开（与生成预览的 expanded 分离） */
+  /** 列表/回收站条目展开(与生成预览的 expanded 分离) */
   const [inspirationListExpanded, setInspirationListExpanded] = useState<Record<string, boolean>>({});
   const [expandedAuditCharIds, setExpandedAuditCharIds] = useState<Record<string, boolean>>({});
   const [status, setStatus] = useState<string>("");
@@ -1225,7 +1228,7 @@ export function App() {
   const searchDebounceRef = useRef<number | null>(null);
   const searchPickBookFirstBtnRef = useRef<HTMLButtonElement | null>(null);
 
-  // 仅搜索章节正文：不再需要 story/audit 的命中预览
+  // 仅搜索章节正文:不再需要 story/audit 的命中预览
 
   const [mergeFromEditOpen, setMergeFromEditOpen] = useState(false);
   const [mergeFromEditSelected, setMergeFromEditSelected] = useState<Record<string, boolean>>({});
@@ -1387,7 +1390,7 @@ export function App() {
     }
   }
 
-  // highlightTextareaHit 已不再需要（只搜索章节正文）
+  // highlightTextareaHit 已不再需要(只搜索章节正文)
 
   chapterContentRef.current = chapterContent;
   selectedCardRef.current = selectedCard;
@@ -1651,7 +1654,7 @@ export function App() {
         setSearchOpen(true);
         return;
       }
-      // 不抢输入框快捷键：除非已经打开搜索浮层；但全局搜索快捷键始终生效
+      // 不抢输入框快捷键:除非已经打开搜索浮层;但全局搜索快捷键始终生效
       if (!searchOpen && shouldIgnoreTarget(e.target)) return;
       if (searchOpen && e.key === "Escape") {
         e.preventDefault();
@@ -1708,7 +1711,7 @@ export function App() {
   }, [modelConfigs, activeModelId]);
 
   useEffect(() => {
-    // 同步到服务端供审计调用（失败不影响前端使用）
+    // 同步到服务端供审计调用(失败不影响前端使用)
     void putModelConfigs({ configs: modelConfigs as any, activeId: activeModelId ?? null }).catch(() => {});
   }, [modelConfigs, activeModelId]);
 
@@ -1721,7 +1724,7 @@ export function App() {
   const [auditOrgsIndex, setAuditOrgsIndex] = useState<any | null>(null);
   const [auditForeshadowsIndex, setAuditForeshadowsIndex] = useState<any | null>(null);
   const [auditProgressIndex, setAuditProgressIndex] = useState<any | null>(null);
-  /** 进入灵感库时拉取审核角色索引，供道具/功法「持有人」下拉（不依赖是否已打开某一章） */
+  /** 进入灵感库时拉取审核角色索引,供道具/功法「持有人」下拉(不依赖是否已打开某一章) */
   useEffect(() => {
     if (!activeBook || leftTab !== "inspiration") return;
     let cancelled = false;
@@ -1750,7 +1753,7 @@ export function App() {
     return bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
   }
 
-  // 正文改动后：判断“本章分析是否过期”（分析结果绑定 auditedHash）
+  // 正文改动后:判断"本章分析是否过期"(分析结果绑定 auditedHash)
   useEffect(() => {
     const auditedHash = String((auditRun as any)?.source?.contentHash || "").trim();
     const auditedLenRaw = Number((auditRun as any)?.source?.contentLength);
@@ -1895,7 +1898,7 @@ export function App() {
   const [expandExtraContext, setExpandExtraContext] = useState("");
   const [expandBusy, setExpandBusy] = useState(false);
   const [expandDraft, setExpandDraft] = useState("");
-  /** SSE 收到的完整思考缓冲（服务端可能一次推一大块）；界面用 RAF 逐段追上 */
+  /** SSE 收到的完整思考缓冲(服务端可能一次推一大块);界面用 RAF 逐段追上 */
   const auditThinkingBufferRef = useRef("");
   const auditDisplayedLenRef = useRef(0);
   const auditRevealRafRef = useRef<number | null>(null);
@@ -1971,7 +1974,7 @@ export function App() {
   }, [auditStreamText, rightTab]);
 
   useEffect(() => {
-    // 从“非运行章节”切回“运行章节”时：如果后台缓冲已经变长，立即继续追帧更新 UI
+    // 从"非运行章节"切回"运行章节"时:如果后台缓冲已经变长,立即继续追帧更新 UI
     const running = auditRunningChapter;
     if (!running) return;
     if (!selectedChapter) return;
@@ -1983,7 +1986,7 @@ export function App() {
   }, [auditRunningChapter, selectedChapter, auditStreamPhase, flushAuditThinkingReveal]);
 
   useEffect(() => {
-    // 只允许选择“连接成功”的配置；如果当前 active 不在成功列表，自动回落
+    // 只允许选择"连接成功"的配置;如果当前 active 不在成功列表,自动回落
     if (!okModelConfigs.length) return;
     if (activeModelId && okModelConfigs.some((c) => c.id === activeModelId)) return;
     setModelState((prev) => ({ ...prev, activeId: okModelConfigs[0].id }));
@@ -2121,7 +2124,7 @@ export function App() {
       void persistSynopsisNow();
     }, AUTOSAVE_DEBOUNCE_MS);
     return () => clearSynopsisTimer();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- persistSynopsisNow 依赖 ref，避免重复挂载定时器
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- persistSynopsisNow 依赖 ref,避免重复挂载定时器
   }, [synopsisDraft, activeBook, selectedChapter]);
 
   useEffect(() => {
@@ -2169,7 +2172,7 @@ export function App() {
     setChapterAutosaveHint("");
     setCardAutosaveHint("");
     setChapterTitleEditing(false);
-    // 进入书籍后默认展示书籍概览（selectedChapter=null）
+    // 进入书籍后默认展示书籍概览(selectedChapter=null)
     void loadInspiration(b.slug);
   }
 
@@ -2193,7 +2196,7 @@ export function App() {
       await refreshBooks();
       setActiveBook(book.slug);
       setNavHome(false);
-      setStatus(`已创建书籍：${book.title}`);
+      setStatus(`已创建书籍:${book.title}`);
       void loadInspiration(book.slug);
     } catch (e: any) {
       setStatus(e?.message || String(e));
@@ -2202,7 +2205,7 @@ export function App() {
     }
   }
 
-  // 书架不再保存简介（改为在书籍概览中编辑）
+  // 书架不再保存简介(改为在书籍概览中编辑)
 
   function openDeleteBookModal(b: BookMeta) {
     setDeleteBookTarget(b);
@@ -2232,7 +2235,7 @@ export function App() {
         setChapterContent("");
         setCardContent("");
       }
-      setStatus(`已废弃书籍：《${b.title}》`);
+      setStatus(`已废弃书籍:《${b.title}》`);
     } catch (e: any) {
       setStatus(e?.message || String(e));
     } finally {
@@ -2274,7 +2277,7 @@ export function App() {
       chapterBaselineRef.current = content;
       setChapterTitleEditing(false);
 
-      // 新建章节后：刷新右侧内容整理数据源
+      // 新建章节后:刷新右侧内容整理数据源
       setAuditStreamPhase("idle");
       resetAuditThinkingReveal();
       setAuditRun(null);
@@ -2287,7 +2290,7 @@ export function App() {
       void loadAuditArtifacts(bookSlug, chapter.filename);
       setRightTab("writingPack");
       void doGenerateWritingPack(bookSlug, chapter.filename);
-      setStatus("已新建章节，并写入本地文件。");
+      setStatus("已新建章节,并写入本地文件。");
     } catch (e: any) {
       setStatus(e?.message || String(e));
     } finally {
@@ -2308,7 +2311,7 @@ export function App() {
     if (!activeBook) return;
     if (!chapterTitle.trim()) return;
 
-    // 点击“新增章节”立刻重置右侧内容整理（避免残留上一章的摘要/角色展开/时间线等）
+    // 点击"新增章节"立刻重置右侧内容整理(避免残留上一章的摘要/角色展开/时间线等)
     setRightTab("chapterAnalysis");
     setExpandedAuditCharIds({});
     setSelectedCard(null);
@@ -2380,22 +2383,22 @@ export function App() {
       queueMicrotask(() => scrollChapterToTop());
       void loadAuditArtifacts(activeBook, c.filename);
       void loadGlobalArtifacts(activeBook);
-      // 运行中：允许切章浏览，但不清空缓冲/不断流
+      // 运行中:允许切章浏览,但不清空缓冲/不断流
       const running = auditRunningChapterRef.current;
       const phase = auditStreamPhaseRef.current;
       const isAuditRunningInThisBook = running && phase === "running" && running.bookSlug === activeBook;
       const isOpeningRunningChapter = isAuditRunningInThisBook && running.filename === c.filename;
 
       if (isAuditRunningInThisBook && !isOpeningRunningChapter) {
-        // 正在分析别章：清空展示避免串章，但不重置缓冲/phase
+        // 正在分析别章:清空展示避免串章,但不重置缓冲/phase
         setAuditStreamText("");
       } else if (!isOpeningRunningChapter) {
-        // 非运行章（或没有在分析）：按原逻辑重置面板
+        // 非运行章(或没有在分析):按原逻辑重置面板
         resetAuditThinkingReveal();
         setAuditStreamPhase("idle");
       }
 
-      // 切回运行章：立即从缓冲回填，并继续追帧
+      // 切回运行章:立即从缓冲回填,并继续追帧
       if (isOpeningRunningChapter) {
         setAuditStreamPhase("running");
         setAuditStreamText(auditThinkingBufferRef.current.slice(0, auditDisplayedLenRef.current));
@@ -2463,14 +2466,14 @@ export function App() {
         running && running.bookSlug === slug && running.filename !== chapterFilename && auditStreamPhaseRef.current === "running";
 
       if (!isRunningThis && persisted.trim()) {
-        // 持久化的“本章分析”文本：直接当成完整缓冲，避免 RAF 逐段追帧导致二次“打字机效果”
+        // 持久化的"本章分析"文本:直接当成完整缓冲,避免 RAF 逐段追帧导致二次"打字机效果"
         resetAuditThinkingReveal();
         auditThinkingBufferRef.current = persisted;
         auditDisplayedLenRef.current = persisted.length;
         setAuditStreamText(persisted);
         setAuditStreamPhase("done");
       } else if (!isRunningThis && isViewingNonRunningWhileRunning) {
-        // 正在分析别章，但用户在查看本章：本章无持久化内容时，显示为空（不影响运行缓冲）
+        // 正在分析别章,但用户在查看本章:本章无持久化内容时,显示为空(不影响运行缓冲)
         if (!persisted.trim()) {
           setAuditStreamText("");
         }
@@ -2605,7 +2608,7 @@ export function App() {
     const title = editForeshadowTitle.trim();
     try {
       const chapters = editForeshadowChapters
-        .split(/[，,、\s]+/g)
+        .split(/[,,、\s]+/g)
         .map((x) => Math.floor(Number(x)))
         .filter((n) => Number.isFinite(n) && n >= 1);
       const uniq = [...new Set(chapters)].sort((a, b) => a - b);
@@ -2682,7 +2685,7 @@ export function App() {
         .sort((x: string, y: string) => x.localeCompare(y, "zh-Hans-CN"))
         .join("、");
       const ok = window.confirm(
-        `你要压缩的区间第 ${a}-${b} 章与已有多章概要重叠：${list}\n\n是否合并为更粗区间：第 ${unionA}-${unionB} 章？\n（合并后会删除上述旧区间，仅保留并集区间摘要）`
+        `你要压缩的区间第 ${a}-${b} 章与已有多章概要重叠:${list}\n\n是否合并为更粗区间:第 ${unionA}-${unionB} 章?\n(合并后会删除上述旧区间,仅保留并集区间摘要)`
       );
       if (!ok) {
         setTimelineBusy(false);
@@ -2691,7 +2694,7 @@ export function App() {
       targetA = unionA;
       targetB = unionB;
 
-      // union_replace：先删旧区间再压缩新并集
+      // union_replace:先删旧区间再压缩新并集
       for (const r of overlaps) {
         try {
           const { index } = await deleteTimelineRange(activeBook, { startChapter: r.startChapter, endChapter: r.endChapter });
@@ -2718,12 +2721,12 @@ export function App() {
 
   const jumpToOrganize = useCallback(
     (tab: "chapterAnalysis" | "chapterEntities" | "auditCharacters" | "places" | "timeline" | "foreshadows" | "story" | "orgs", key: string) => {
-      // 额外展开：让“跳转过去”落点是可见的
+      // 额外展开:让"跳转过去"落点是可见的
       if (tab === "auditCharacters") {
         setExpandedAuditCharIds((prev) => ({ ...prev, [key]: true }));
       }
       if (tab === "places") {
-        // 展开地点：若在折叠组内，先打开对应组（collapsed=false）
+        // 展开地点:若在折叠组内,先打开对应组(collapsed=false)
         const places = Array.isArray(auditPlacesIndex?.places) ? (auditPlacesIndex.places as any[]) : [];
         const p = places.find((x) => String(x?.name || "").trim() === key);
         const group = String(p?.group || "").trim();
@@ -2735,7 +2738,7 @@ export function App() {
         setLeftTab("global");
         setGlobalTab(tab);
       } else {
-        setStatus("该分类已取消（不再提供入口）。");
+        setStatus("该分类已取消(不再提供入口)。");
         return;
       }
 
@@ -2767,7 +2770,7 @@ export function App() {
     [auditPlacesIndex]
   );
 
-  // 角色卡合并入口改到“编辑角色”弹窗内（更符合用户直觉）
+  // 角色卡合并入口改到"编辑角色"弹窗内(更符合用户直觉)
 
   function openEditCharacter(c: any) {
     const name = String(c?.name || "").trim();
@@ -2884,7 +2887,7 @@ export function App() {
       try {
         state = JSON.parse(stText);
       } catch (e: any) {
-        setStatus(`state 不是合法 JSON：${e?.message || String(e)}`);
+        setStatus(`state 不是合法 JSON:${e?.message || String(e)}`);
         return;
       }
     }
@@ -2950,7 +2953,7 @@ export function App() {
           maybeTypes.startsWith("types=") || maybeTypes.startsWith("type=")
             ? maybeTypes
                 .replace(/^types?=/, "")
-                .split(/[,，、]/)
+                .split(/[,,、]/)
                 .map((s) => s.trim())
                 .filter(Boolean)
             : [];
@@ -2959,7 +2962,7 @@ export function App() {
         const secretsRaw = String(parts[4] || "").trim();
         const sharedSecrets = secretsRaw
           ? secretsRaw
-              .split(/[,，、]/)
+              .split(/[,,、]/)
               .map((s) => s.trim())
               .filter(Boolean)
           : [];
@@ -3011,11 +3014,11 @@ export function App() {
   async function onAuditSelectedChapter() {
     if (!activeBook || !selectedChapter) return;
     if (!okModelConfigs.length) {
-      setStatus("没有可用模型：请先在「模型配置」里测试连接，连接成功后再分析。");
+      setStatus("没有可用模型:请先在「模型配置」里测试连接,连接成功后再分析。");
       return;
     }
 
-    // 提醒：如果本章之前存在未分析章节，直接分析本章可能遗漏上下文
+    // 提醒:如果本章之前存在未分析章节,直接分析本章可能遗漏上下文
     try {
       const parseNo = (filename: string) => {
         const m = String(filename || "").match(/^(\d+)[_\.]/);
@@ -3032,7 +3035,7 @@ export function App() {
         const uniq = [...new Set(prevMissing)].slice(0, 24);
         if (uniq.length) {
           const ok = window.confirm(
-            `提示：检测到本章之前仍有未分析章节：第 ${uniq.join("、")} 章。\n\n直接分析本章可能会出现内容遗漏。\n\n仍要继续分析本章吗？`
+            `提示:检测到本章之前仍有未分析章节:第 ${uniq.join("、")} 章。\n\n直接分析本章可能会出现内容遗漏。\n\n仍要继续分析本章吗?`
           );
           if (!ok) return;
         }
@@ -3045,20 +3048,20 @@ export function App() {
       const runningMeta = chapters.find((x) => x.filename === auditRunningChapter.filename);
       const noFromName = Number(String(auditRunningChapter.filename).match(/^(\d+)/)?.[1] || "");
       const no = Number.isFinite(noFromName) && noFromName > 0 ? noFromName : runningMeta ? chapters.indexOf(runningMeta) + 1 : 0;
-      setStatus(`当前第 ${no || "?"} 章正在分析中，请先回到该章节查看进度。`);
+      setStatus(`当前第 ${no || "?"} 章正在分析中,请先回到该章节查看进度。`);
       return;
     }
     setAuditBusy(true);
     setStatus("");
     setAuditStreamPhase("running");
-    setAuditProgress({ step: 1, total: 5, label: "准备输入（读取章节/角色/索引）" });
+    setAuditProgress({ step: 1, total: 5, label: "准备输入(读取章节/角色/索引)" });
     const runningBookSlug = activeBook;
     const runningChapterFilename = selectedChapter.filename;
     setAuditRunningChapter({ bookSlug: runningBookSlug, filename: runningChapterFilename });
     resetAuditThinkingReveal();
     try {
       const debugKey = `${runningBookSlug}/${runningChapterFilename}/${Date.now()}`;
-      // 先尽力同步一次（避免服务端没有最新配置）
+      // 先尽力同步一次(避免服务端没有最新配置)
       await putModelConfigs({ configs: modelConfigs as any, activeId: activeModelId ?? null }).catch(() => {});
 
       const res = await fetch(
@@ -3108,9 +3111,9 @@ export function App() {
               const prompt = String(payload.prompt ?? "");
               const title = `[audit] 提问${stage ? `(${stage})` : ""} ${debugKey} len=${prompt.length}`;
               const preview = prompt.slice(0, 220);
-              // Console 里更易查阅：折叠分组 + 预览 + 完整正文
+              // Console 里更易查阅:折叠分组 + 预览 + 完整正文
               console.groupCollapsed(title);
-              console.log("preview:", preview + (prompt.length > preview.length ? " …" : ""));
+              console.log("preview:", preview + (prompt.length > preview.length ? " ..." : ""));
               console.log("prompt:");
               console.log(prompt);
               console.groupEnd();
@@ -3118,7 +3121,7 @@ export function App() {
             if (payload?.type === "phase") {
               const step = Math.max(1, Math.floor(Number(payload.step || 1)));
               const total = Math.max(step, Math.floor(Number(payload.total || 5)));
-              const label = String(payload.label || "").trim() || "处理中…";
+              const label = String(payload.label || "").trim() || "处理中...";
               setAuditProgress({ step, total, label });
             }
             if (payload?.type === "done") {
@@ -3157,7 +3160,7 @@ export function App() {
   async function onPolishSelectedChapter() {
     if (!activeBook || !selectedChapter) return;
     if (!okModelConfigs.length) {
-      setStatus("没有可用模型：请先在「模型配置」里测试连接，连接成功后再润色。");
+      setStatus("没有可用模型:请先在「模型配置」里测试连接,连接成功后再润色。");
       return;
     }
     setPolishBusy(true);
@@ -3231,7 +3234,7 @@ export function App() {
   async function onExpandWithTargetWords(targetWords: number, extraContext: string) {
     if (!activeBook || !selectedChapter) return;
     if (!okModelConfigs.length) {
-      setStatus("没有可用模型：请先在「模型配置」里测试连接，连接成功后再扩写。");
+      setStatus("没有可用模型:请先在「模型配置」里测试连接,连接成功后再扩写。");
       return;
     }
     setExpandBusy(true);
@@ -3420,9 +3423,9 @@ export function App() {
         setSearchOpen(false);
         return;
       }
-      // 仅搜索章节正文：不会再出现 story 命中
-      // audit：V1 先不做精确跳转，至少提示路径
-      setStatus(`审计产物命中：${hit.path}`);
+      // 仅搜索章节正文:不会再出现 story 命中
+      // audit:V1 先不做精确跳转,至少提示路径
+      setStatus(`审计产物命中:${hit.path}`);
       setSearchOpen(false);
     } catch (e: any) {
       setStatus(e?.message || String(e));
@@ -3500,14 +3503,14 @@ export function App() {
       setModelTestStatus("请先填写测试地址。");
       return;
     }
-    setModelTestStatus("测试中…");
+    setModelTestStatus("测试中...");
     try {
       const headers: Record<string, string> = {};
       if (cfg.provider === "openai" || cfg.provider === "deepseek" || cfg.provider === "qwen") {
         if (cfg.apiKey.trim()) headers.Authorization = `Bearer ${cfg.apiKey.trim()}`;
       }
       if (cfg.provider === "gemini") {
-        // gemini 常用 key=...；这里不强绑，若用户已把 key 写进 url 则不追加
+        // gemini 常用 key=...;这里不强绑,若用户已把 key 写进 url 则不追加
         if (cfg.apiKey.trim() && !cfg.testUrl.includes("key=")) {
           const u = new URL(cfg.testUrl);
           u.searchParams.set("key", cfg.apiKey.trim());
@@ -3537,9 +3540,9 @@ export function App() {
             : [];
           if (names.length) {
             const preview = names.slice(0, 6).join("、");
-            suffix = ` · 共 ${names.length} 个模型：${preview}${names.length > 6 ? "…" : ""}`;
+            suffix = ` · 共 ${names.length} 个模型:${preview}${names.length > 6 ? "..." : ""}`;
           }
-          // 存一份供“当前模型选择器”使用
+          // 存一份供"当前模型选择器"使用
           setModelEditorDraft((prev) => (prev ? { ...prev, lastModels: names } : prev));
           lastModels = names;
         } catch {
@@ -3567,7 +3570,7 @@ export function App() {
           novel-helper
         </button>
         <div className="hint">
-          默认写入 <code>book/</code>（可用 <code>NOVEL_HELPER_DATA_DIR</code> 指定根目录）
+          默认写入 <code>book/</code>(可用 <code>NOVEL_HELPER_DATA_DIR</code> 指定根目录)
         </div>
         <div className="topbarRight">
           <div className="themeLabel">外观</div>
@@ -3576,7 +3579,7 @@ export function App() {
             value={themePreference}
             onChange={(e) => setThemePreference(e.target.value as ThemePreference)}
             disabled={busy}
-            title="跟随系统：随操作系统浅色/深色自动切换"
+            title="跟随系统:随操作系统浅色/深色自动切换"
           >
             {THEME_OPTIONS.map((t) => (
               <option key={t.id} value={t.id}>
@@ -3589,10 +3592,10 @@ export function App() {
             className={`btnFullscreenToggle ${fullscreenOn ? "active" : ""}`}
             onClick={() =>
               void toggleDocumentFullscreen().catch(() =>
-                setStatus("无法切换全屏：浏览器不支持或权限被拒绝。")
+                setStatus("无法切换全屏:浏览器不支持或权限被拒绝。")
               )
             }
-            title={fullscreenOn ? "退出全屏（Esc）" : "全屏显示"}
+            title={fullscreenOn ? "退出全屏(Esc)" : "全屏显示"}
             aria-label={fullscreenOn ? "退出全屏" : "全屏"}
             aria-pressed={fullscreenOn}
           >
@@ -3616,7 +3619,7 @@ export function App() {
               {navHome ? (
                 <>
                   <div className="navTitle">书架</div>
-                  <div className="navShelfHint muted">点击书名展开简介；书名下方显示缺失章节数量；点此新建书籍。</div>
+                  <div className="navShelfHint muted">点击书名展开简介;书名下方显示缺失章节数量;点此新建书籍。</div>
                   <div className="navNewBookRow">
                     <button type="button" className="btnNewBookFull" onClick={() => openCreateBookModal()} disabled={busy}>
                       新建书籍
@@ -3635,7 +3638,7 @@ export function App() {
                   </div>
                   <div className="tree navListDense bookShelfList">
                     {books.length === 0 ? (
-                      <div className="empty">还没有书，先新建一本。</div>
+                      <div className="empty">还没有书,先新建一本。</div>
                     ) : (
                       displayedBooks.map((b) => {
                         const gapCount = normalizeChapterGapList(b.missingChapterIndexes ?? []).length;
@@ -3656,8 +3659,8 @@ export function App() {
                                   void openBookFromShelf(b);
                                 }
                               }}
-                              title={`打开全书 · ${b.slug}\n创建：${formatBookCreatedAt(b.createdAt)}\n${b.status} · ${b.chapterCount}章${
-                                gapCount ? `\n缺失序号 ${gapCount} 处（进入该书后在左侧书名下处理）` : ""
+                              title={`打开全书 · ${b.slug}\n创建:${formatBookCreatedAt(b.createdAt)}\n${b.status} · ${b.chapterCount}章${
+                                gapCount ? `\n缺失序号 ${gapCount} 处(进入该书后在左侧书名下处理)` : ""
                               }`}
                             >
                               <span
@@ -3696,7 +3699,7 @@ export function App() {
                         onClick={() => openShelfChapterGapModal(activeBookMeta)}
                         title="选择补齐空缺或接在最大序号之后新建"
                       >
-                        空缺：{formatMissingChapterList(sortedActiveMissingChapterIndexes)} · 点此新建
+                        空缺:{formatMissingChapterList(sortedActiveMissingChapterIndexes)} · 点此新建
                       </button>
                     ) : null}
                   </div>
@@ -3743,7 +3746,7 @@ export function App() {
                         if (activeBook) void loadInspiration(activeBook);
                       }}
                       disabled={busy}
-                      title="灵感库：灵感生成与记录"
+                      title="灵感库:灵感生成与记录"
                     >
                       灵感库
                     </button>
@@ -3767,7 +3770,7 @@ export function App() {
                         <div className="chapterNavScroll">
                           <div className="tree navListDense chapterNavList">
                             {chapters.length === 0 ? (
-                              <div className="empty">暂无章节，请在下方新建。</div>
+                              <div className="empty">暂无章节,请在下方新建。</div>
                             ) : (
                               displayedChapters.map((c) => (
                                 <button
@@ -3816,7 +3819,7 @@ export function App() {
                     <div className="navGlobalScroll">
                       <div className="auditPanel inspirationPanelFlat">
                         <div className="auditPanelBody">
-                          {/* 顶部标题/刷新按钮移除：左侧 Tab 已是“灵感库”，保持面板紧凑 */}
+                          {/* 顶部标题/刷新按钮移除:左侧 Tab 已是"灵感库",保持面板紧凑 */}
 
                           <div className="browserTabsBar" role="tablist" aria-label="灵感库分类" style={{ marginTop: 0 }}>
                             <div className="browserTabsStrip tabsWrap">
@@ -4039,7 +4042,7 @@ export function App() {
                                         justifyContent: "flex-start"
                                       }}
                                     >
-                                      {/* 生成类型由上方内容页签决定；这里不再提供下拉框 */}
+                                      {/* 生成类型由上方内容页签决定;这里不再提供下拉框 */}
 
                                       <label className="toggle timelineToggle" style={{ margin: 0 }}>
                                         <input
@@ -4115,7 +4118,7 @@ export function App() {
                                                 savedIdSet: {}
                                               }
                                             }));
-                                            setStatus("已生成（未保存）。");
+                                            setStatus("已生成(未保存)。");
                                           } catch (e: any) {
                                             setInspirationErr(e?.message || String(e));
                                           } finally {
@@ -4124,7 +4127,7 @@ export function App() {
                                         }}
                                         title="调用模型生成并保存"
                                       >
-                                        {inspirationBusy ? "生成中…" : "生成"}
+                                        {inspirationBusy ? "生成中..." : "生成"}
                                       </button>
 
                                       {genSlice.previewItems.length ? (
@@ -4145,7 +4148,7 @@ export function App() {
                                                 editContent: ""
                                               }
                                             }));
-                                            setStatus("已清空本次生成结果（不影响已保存）。");
+                                            setStatus("已清空本次生成结果(不影响已保存)。");
                                           }}
                                           title="仅清空本次类型的生成预览"
                                         >
@@ -4189,7 +4192,7 @@ export function App() {
                                             style={{ flex: 1, minWidth: 160, height: 32 }}
                                           >
                                             <option value="">
-                                              无主 / 待定归属（先收灵感，后可分配给角色）
+                                              无主 / 待定归属(先收灵感,后可分配给角色)
                                             </option>
                                             {(() => {
                                               const all = Array.isArray(auditCharactersIndex?.characters)
@@ -4227,18 +4230,18 @@ export function App() {
                                         }
                                         placeholder={
                                           inspirationTypeTab === "place"
-                                            ? "自由输入（可选）：如：一个适合藏匿赃物、充满霉味的废弃杂役仓"
+                                            ? "自由输入(可选):如:一个适合藏匿赃物、充满霉味的废弃杂役仓"
                                             : inspirationTypeTab === "item"
-                                              ? "自由输入（可选）：如：偏邪道、与某事件证物相关、代价偏重…"
+                                              ? "自由输入(可选):如:偏邪道、与某事件证物相关、代价偏重..."
                                               : inspirationTypeTab === "org"
-                                                ? "自由输入（可选）：如：偏谍报与渗透、与当权者对立、内部派系倾轧严重…"
+                                                ? "自由输入(可选):如:偏谍报与渗透、与当权者对立、内部派系倾轧严重..."
                                                 : inspirationTypeTab === "event"
-                                                  ? "自由输入（可选）：如：逼主角二选一、连锁因果、要改业力账本…"
+                                                  ? "自由输入(可选):如:逼主角二选一、连锁因果、要改业力账本..."
                                                   : inspirationTypeTab === "lore"
-                                                    ? "自由输入（可选）：如：宗门丑闻、被掩盖的历史、禁忌知识…"
+                                                    ? "自由输入(可选):如:宗门丑闻、被掩盖的历史、禁忌知识..."
                                                     : inspirationTypeTab === "technique"
-                                                      ? "自由输入（可选）：如：高反噬邪功、需特殊心境、与某段血史相关…"
-                                                      : "自由输入（可选）：例如「更阴谋一点」「不要低俗」「与主角表面盟友、暗藏私心」…"
+                                                      ? "自由输入(可选):如:高反噬邪功、需特殊心境、与某段血史相关..."
+                                                      : "自由输入(可选):例如「更阴谋一点」「不要低俗」「与主角表面盟友、暗藏私心」..."
                                         }
                                         disabled={busy || inspirationBusy}
                                         style={{ marginTop: 0, minHeight: 70 }}
@@ -4247,7 +4250,7 @@ export function App() {
 
                                     {genSlice.previewItems.length ? (
                                       <div className="timelineSection" style={{ marginTop: 10 }}>
-                                        <div className="auditPanelTitle">生成结果（点保存后进入列表）</div>
+                                        <div className="auditPanelTitle">生成结果(点保存后进入列表)</div>
                                         <div className="timelineRangeList">
                                           {genSlice.previewItems.map((it, idx) => {
                                             const key = it.id || String(idx);
@@ -4274,7 +4277,7 @@ export function App() {
                                               <div key={key} className="timelineRangeItem">
                                                 <div className="timelineRangeTop" style={{ gap: 8, flexWrap: "wrap" }}>
                                                   <div className="timelineRangeTitle" style={{ flex: 1, minWidth: 120 }}>
-                                                    {title || "（生成内容）"}
+                                                    {title || "(生成内容)"}
                                                   </div>
                                                   <button
                                                     type="button"
@@ -4410,18 +4413,18 @@ export function App() {
                                                       }
                                                       placeholder={
                                                         kindForUi === "place"
-                                                          ? "标题：地点名"
+                                                          ? "标题:地点名"
                                                           : kindForUi === "item"
-                                                            ? "标题：道具名"
+                                                            ? "标题:道具名"
                                                             : kindForUi === "org"
-                                                              ? "标题：组织或势力名"
+                                                              ? "标题:组织或势力名"
                                                               : kindForUi === "event"
-                                                                ? "标题：事件名"
+                                                                ? "标题:事件名"
                                                                 : kindForUi === "lore"
-                                                                  ? "标题：秘闻标题"
+                                                                  ? "标题:秘闻标题"
                                                                   : kindForUi === "technique"
-                                                                    ? "标题：功法名"
-                                                                    : "标题（角色名等）"
+                                                                    ? "标题:功法名"
+                                                                    : "标题(角色名等)"
                                                       }
                                                       disabled={busy || inspirationBusy}
                                                     />
@@ -4441,7 +4444,7 @@ export function App() {
                                                         kindForUi === "event" ||
                                                         kindForUi === "lore" ||
                                                         kindForUi === "technique"
-                                                          ? "正文：结构化卡片为 JSON，编辑后请保持可解析"
+                                                          ? "正文:结构化卡片为 JSON,编辑后请保持可解析"
                                                           : "正文内容"
                                                       }
                                                       disabled={busy || inspirationBusy}
@@ -4509,14 +4512,14 @@ export function App() {
                                         disabled={busy || inspirationBusy || !activeBook}
                                         onClick={async () => {
                                           if (!activeBook) return;
-                                          const ok = window.confirm("确认清空回收站？（彻底删除不可恢复）");
+                                          const ok = window.confirm("确认清空回收站?(彻底删除不可恢复)");
                                           if (!ok) return;
                                           setInspirationBusy(true);
                                           setInspirationErr("");
                                           try {
                                             const { index, purged } = await purgeInspirationDeleted(activeBook);
                                             setInspirationIndex(index);
-                                            setStatus(`已清空回收站：删除 ${purged} 条。`);
+                                            setStatus(`已清空回收站:删除 ${purged} 条。`);
                                           } catch (e: any) {
                                             setInspirationErr(e?.message || String(e));
                                           } finally {
@@ -4564,9 +4567,9 @@ export function App() {
                                           <div key={it.id} className="timelineRangeItem">
                                             <div className="timelineRangeTop" style={{ gap: 8, flexWrap: "wrap" }}>
                                               <div className="timelineRangeTitle" style={{ flex: 1, minWidth: 120 }}>
-                                                {title || (it.type === "naming" ? "（名字）" : "（灵感）")}
+                                                {title || (it.type === "naming" ? "(名字)" : "(灵感)")}
                                                 {itemOwnerSaved ? (
-                                                  <span className="muted"> · 持有：{itemOwnerSaved}</span>
+                                                  <span className="muted"> · 持有:{itemOwnerSaved}</span>
                                                 ) : null}
                                                 {it.subtype ? <span className="muted"> · {it.subtype}</span> : null}
                                               </div>
@@ -4586,7 +4589,7 @@ export function App() {
                                                 disabled={busy}
                                                 onClick={async () => {
                                                   if (!activeBook) return;
-                                                  const ok = window.confirm("确认移到回收站？（可在回收站恢复）");
+                                                  const ok = window.confirm("确认移到回收站?(可在回收站恢复)");
                                                   if (!ok) return;
                                                   setInspirationBusy(true);
                                                   setInspirationErr("");
@@ -4719,8 +4722,8 @@ export function App() {
                                 <div className="progressSummary">
                                   <div className="progressSummaryTitle">当前进度</div>
                                   <div className="muted progressSummaryMeta">
-                                    {updatedAt ? `上次更新：${updatedAt}` : "尚无进度（请先完成一次章节分析）"}
-                                    {src?.filename ? ` · 来源：${String(src.filename)}` : ""}
+                                    {updatedAt ? `上次更新:${updatedAt}` : "尚无进度(请先完成一次章节分析)"}
+                                    {src?.filename ? ` · 来源:${String(src.filename)}` : ""}
                                   </div>
                                   {summary ? <div className="progressSummaryText">{summary}</div> : null}
                                 </div>
@@ -4811,7 +4814,17 @@ export function App() {
                               >
                                 伏笔
                               </button>
-                              {/* 资料卡页签入口已移除：合并功能改在“编辑角色”弹窗内 */}
+                              <button
+                                type="button"
+                                role="tab"
+                                className={`browserTab ${globalTab === "stats" ? "active" : ""}`}
+                                aria-selected={globalTab === "stats"}
+                                onClick={() => setGlobalTab("stats")}
+                                disabled={busy}
+                              >
+                                统计
+                              </button>
+                              {/* 资料卡页签入口已移除：合并功能改在"编辑角色"弹窗内 */}
                             </div>
                           </div>
                           <div className="navGlobalScroll">
@@ -4831,7 +4844,7 @@ export function App() {
                                 className="auditRelationsSearch"
                                 value={auditCharactersSearch}
                                 onChange={(e) => setAuditCharactersSearch(e.target.value)}
-                                placeholder="搜索角色：名字 / 身份 / 标签…"
+                                placeholder="搜索角色:名字 / 身份 / 标签..."
                                 disabled={busy}
                               />
                             </div>
@@ -4939,7 +4952,7 @@ export function App() {
                                                     setStatus(e?.message || String(e));
                                                   }
                                                 }}
-                                                title="隐藏该角色（全书范围）"
+                                                title="隐藏该角色(全书范围)"
                                               >
                                                 隐藏
                                               </button>
@@ -4947,7 +4960,7 @@ export function App() {
 
                                             {open ? (
                                               <div className="auditCharCardBody">
-                                                {/* Logic & Status（账本最关心） */}
+                                                {/* Logic & Status(账本最关心) */}
                                                 {roleStr ? (
                                                   <div className="auditCharDetailRow">
                                                     <div className="auditCharDetailLabel">身份</div>
@@ -4997,15 +5010,15 @@ export function App() {
                                                     ? (social as any).other.map((x: any) => String(x).trim()).filter(Boolean)
                                                     : [];
                                                   const lines: string[] = [];
-                                                  if (profession) lines.push(`职业：${profession}`);
-                                                  if (cls) lines.push(`阶级：${cls}`);
-                                                  if (titles.length) lines.push(`头衔：${titles.join("、")}`);
-                                                  if (other.length) lines.push(`其他：${other.join("、")}`);
+                                                  if (profession) lines.push(`职业:${profession}`);
+                                                  if (cls) lines.push(`阶级:${cls}`);
+                                                  if (titles.length) lines.push(`头衔:${titles.join("、")}`);
+                                                  if (other.length) lines.push(`其他:${other.join("、")}`);
                                                   if (!lines.length) return null;
                                                   return (
                                                     <div className="auditCharDetailRow">
                                                       <div className="auditCharDetailLabel">社会身份</div>
-                                                      <div className="auditCharDetailValue">{lines.join("；")}</div>
+                                                      <div className="auditCharDetailValue">{lines.join(";")}</div>
                                                     </div>
                                                   );
                                                 })()}
@@ -5056,17 +5069,17 @@ export function App() {
                                                     <div className="auditCharQuotes">
                                                       <div className="auditCharDetailLabel">叙事驱动力</div>
                                                       <div className="auditCharDetailValue">
-                                                        {want ? <div>Want：{want}</div> : null}
-                                                        {need ? <div>Need：{need}</div> : null}
-                                                        {moral ? <div>道德罗盘：{moral}</div> : null}
+                                                        {want ? <div>Want:{want}</div> : null}
+                                                        {need ? <div>Need:{need}</div> : null}
+                                                        {moral ? <div>道德罗盘:{moral}</div> : null}
                                                         {flaws.length ? (
                                                           <div>
-                                                            缺陷：{flaws.join("、")}
+                                                            缺陷:{flaws.join("、")}
                                                           </div>
                                                         ) : null}
                                                         {blind.length ? (
                                                           <div>
-                                                            盲点：{blind.join("、")}
+                                                            盲点:{blind.join("、")}
                                                           </div>
                                                         ) : null}
                                                       </div>
@@ -5094,16 +5107,16 @@ export function App() {
                                                       persona: String(m?.persona || "").trim()
                                                     }))
                                                     .filter((m: any) => m.context || m.persona)
-                                                    .map((m: any) => `${m.context || "（场景）"}：${m.persona || "（人设）"}`);
+                                                    .map((m: any) => `${m.context || "(场景)"}:${m.persona || "(人设)"}`);
                                                   if (!ling.length && !catchp.length && !man.length && !maskLines.length) return null;
                                                   return (
                                                     <div className="auditCharQuotes">
                                                       <div className="auditCharDetailLabel">表现力指纹</div>
                                                       <div className="auditCharDetailValue">
-                                                        {ling.length ? <div>语气/句式：{ling.join("、")}</div> : null}
-                                                        {catchp.length ? <div>口癖：{catchp.join("、")}</div> : null}
-                                                        {man.length ? <div>动作：{man.join("、")}</div> : null}
-                                                        {maskLines.length ? <div>面具：{maskLines.join("；")}</div> : null}
+                                                        {ling.length ? <div>语气/句式:{ling.join("、")}</div> : null}
+                                                        {catchp.length ? <div>口癖:{catchp.join("、")}</div> : null}
+                                                        {man.length ? <div>动作:{man.join("、")}</div> : null}
+                                                        {maskLines.length ? <div>面具:{maskLines.join(";")}</div> : null}
                                                       </div>
                                                     </div>
                                                   );
@@ -5135,9 +5148,9 @@ export function App() {
                                                             {relRows.map((r: any, i: number) => (
                                                               <div key={`rel-${r.targetName}-${i}`}>
                                                                 - {r.targetName}
-                                                                {r.emotionalPolarity ? ` · 情感：${r.emotionalPolarity}` : ""}
-                                                                {r.conflictIndex ? ` · 冲突：${r.conflictIndex}` : ""}
-                                                                {r.sharedSecrets.length ? ` · 秘密：${r.sharedSecrets.join("、")}` : ""}
+                                                                {r.emotionalPolarity ? ` · 情感:${r.emotionalPolarity}` : ""}
+                                                                {r.conflictIndex ? ` · 冲突:${r.conflictIndex}` : ""}
+                                                                {r.sharedSecrets.length ? ` · 秘密:${r.sharedSecrets.join("、")}` : ""}
                                                               </div>
                                                             ))}
                                                           </div>
@@ -5183,7 +5196,7 @@ export function App() {
                                               disabled={busy || !activeBook}
                                               onClick={() => setHiddenCharPanelOpen(true)}
                                             >
-                                              已隐藏 {hidden.length}/{all.length} 个角色，点击查看
+                                              已隐藏 {hidden.length}/{all.length} 个角色,点击查看
                                             </button>
                                           );
                                         })()}
@@ -5203,7 +5216,7 @@ export function App() {
                               <input
                                 value={relationsSearch}
                                 onChange={(e) => setRelationsSearch(e.target.value)}
-                                placeholder="搜索关系：角色名 / types / 情感 / 冲突…"
+                                placeholder="搜索关系:角色名 / types / 情感 / 冲突..."
                                 disabled={busy}
                               />
                               <label className="toggle">
@@ -5274,7 +5287,7 @@ export function App() {
                                     .trim();
                                   return hay.includes(q);
                                 });
-                                if (!filtered.length) return <div className="muted auditPanelEmpty">暂无关系数据（或被筛选条件隐藏）。</div>;
+                                if (!filtered.length) return <div className="muted auditPanelEmpty">暂无关系数据(或被筛选条件隐藏)。</div>;
                                 return filtered.map((e, idx) => {
                                   const typesZh = e.types.map((t: string) => typeLabels[t] || t).filter(Boolean);
                                   return (
@@ -5291,16 +5304,16 @@ export function App() {
                                             const src = chars.find((c) => String(c?.name || "").trim() === e.source);
                                             if (src) openEditCharacter(src);
                                           }}
-                                          title="编辑源角色（关系从源角色上维护）"
+                                          title="编辑源角色(关系从源角色上维护)"
                                         >
                                           编辑
                                         </button>
                                       </div>
-                                      {typesZh.length ? <div className="muted">types：{typesZh.join("、")}</div> : null}
-                                      {e.emotionalPolarity ? <div className="muted">情感：{e.emotionalPolarity}</div> : null}
-                                      {e.conflictIndex ? <div className="muted">冲突：{e.conflictIndex}</div> : null}
+                                      {typesZh.length ? <div className="muted">types:{typesZh.join("、")}</div> : null}
+                                      {e.emotionalPolarity ? <div className="muted">情感:{e.emotionalPolarity}</div> : null}
+                                      {e.conflictIndex ? <div className="muted">冲突:{e.conflictIndex}</div> : null}
                                       {Array.isArray(e.sharedSecrets) && e.sharedSecrets.length ? (
-                                        <div className="muted">秘密：{e.sharedSecrets.join("、")}</div>
+                                        <div className="muted">秘密:{e.sharedSecrets.join("、")}</div>
                                       ) : null}
                                     </div>
                                   );
@@ -5324,8 +5337,8 @@ export function App() {
                                 const inferGroup = (name: string) => {
                                   const n = String(name || "").trim();
                                   if (!n) return "未分组";
-                                  // 常见写法：青石村·晒谷场 / 青石村-晒谷场 / 青石村 晒谷场
-                                  const m = n.split(/[·•—\-\/\s]/).map((s) => s.trim()).filter(Boolean);
+                                  // 常见写法:青石村·晒谷场 / 青石村-晒谷场 / 青石村 晒谷场
+                                  const m = n.split(/[·•\-\/\s]+/).map((s) => s.trim()).filter(Boolean);
                                   return m[0] ? m[0] : "未分组";
                                 };
                                 const groups = new Map<string, any[]>();
@@ -5360,9 +5373,9 @@ export function App() {
                                                 {list.map((p) => {
                                                   const key = `${g}::${p.name}`;
                                                   const expanded = !!placeTextExpanded[key];
-                                                  const noteText = String(p.lastNote || "").trim() || "—";
+                                                  const noteText = String(p.lastNote || "").trim() || "-";
                                                   const noteNeedToggle = noteText.length >= 36;
-                                                  const descText = String(p.description || "").trim() || "—";
+                                                  const descText = String(p.description || "").trim() || "-";
                                                   const meta = p.lastChapter ? `第 ${p.lastChapter} 章` : "";
                                                   return (
                                                     <div key={p.name} className="placeItem" data-place-name={p.name}>
@@ -5415,7 +5428,7 @@ export function App() {
                                                                 onClick={() => setPlaceTextExpanded((prev) => ({ ...prev, [key]: !prev[key] }))}
                                                                 disabled={busy}
                                                               >
-                                                                {expanded ? "收起" : "…展开"}
+                                                                {expanded ? "收起" : "...展开"}
                                                               </button>
                                                             ) : null}
                                                           </span>
@@ -5441,7 +5454,7 @@ export function App() {
                                             disabled={busy || !activeBook}
                                             onClick={() => setHiddenPlacePanelOpen(true)}
                                           >
-                                            已隐藏 {hidden.length}/{all.length} 个地点，点击查看
+                                            已隐藏 {hidden.length}/{all.length} 个地点,点击查看
                                           </button>
                                         );
                                       })()}
@@ -5501,6 +5514,13 @@ export function App() {
                               }
                             }}
                           />
+                        ) : globalTab === "stats" ? (
+                          <StatsPanel
+                            busy={busy}
+                            activeBook={activeBook}
+                            chapters={chapters}
+                            onSetStatus={setStatus}
+                          />
                         ) : (
                           <div className="foreshadowPanel">
                             {(() => {
@@ -5533,7 +5553,7 @@ export function App() {
                                     >
                                       新增伏笔
                                     </button>
-                                    <div className="muted">自动来自审计：openLoops / closedLoops（你也可以手动维护）</div>
+                                    <div className="muted">自动来自审计:openLoops / closedLoops(你也可以手动维护)</div>
                                   </div>
 
                                   {visible.length ? (
@@ -5616,10 +5636,10 @@ export function App() {
                                                     if (c) void onOpenChapter(c);
                                                   }}
                                                 >
-                                                  首次：第 {first} 章
+                                                  首次:第 {first} 章
                                                 </button>
                                               ) : (
-                                                <span>首次：—</span>
+                                                <span>首次:-</span>
                                               )}
                                               <span className="mutedDot">·</span>
                                               {last ? (
@@ -5632,10 +5652,10 @@ export function App() {
                                                     if (c) void onOpenChapter(c);
                                                   }}
                                                 >
-                                                  最近：第 {last} 章
+                                                  最近:第 {last} 章
                                                 </button>
                                               ) : (
-                                                <span>最近：—</span>
+                                                <span>最近:-</span>
                                               )}
                                             </div>
 
@@ -5663,7 +5683,7 @@ export function App() {
                                     </div>
                                   ) : (
                                     <div className="muted auditPanelEmpty">
-                                      暂无伏笔。完成一次审计后会自动沉淀；也可以手动新增。
+                                      暂无伏笔。完成一次审计后会自动沉淀;也可以手动新增。
                                     </div>
                                   )}
 
@@ -5675,7 +5695,7 @@ export function App() {
                                         disabled={busy || !activeBook}
                                         onClick={() => setHiddenForeshadowPanelOpen(true)}
                                       >
-                                        已隐藏 {hidden.length}/{all.length} 条伏笔，点击查看
+                                        已隐藏 {hidden.length}/{all.length} 条伏笔,点击查看
                                       </button>
                                     ) : null}
                                   </div>
@@ -5760,7 +5780,7 @@ export function App() {
                   </>
                 ) : !selectedChapterMeta ? (
                   <>
-                    <div className="centerTitle">章节加载中…</div>
+                    <div className="centerTitle">章节加载中...</div>
                     <span className="titleAutosave autosaveHint" />
                   </>
                 ) : chapterTitleEditing && canRenameChapterFilename ? (
@@ -5813,7 +5833,7 @@ export function App() {
                         });
                       }}
                       title={
-                        canRenameChapterFilename ? "双击修改标题（回车确认，Esc 取消）" : undefined
+                        canRenameChapterFilename ? "双击修改标题(回车确认,Esc 取消)" : undefined
                       }
                     >
                       {selectedChapterMeta.id}
@@ -5827,7 +5847,7 @@ export function App() {
                         onClick={() => void openChapterTitleSuggestModal()}
                         title="根据本章正文生成多个标题候选"
                       >
-                        {chapterTitleSuggestBusy ? "生成中…" : "生成标题"}
+                        {chapterTitleSuggestBusy ? "生成中..." : "生成标题"}
                       </button>
                     ) : null}
                     <span
@@ -5850,19 +5870,19 @@ export function App() {
             ) : showBookOverview && activeBookMeta ? (
               <div className="centerMeta centerMetaOverview">
                 <span title={activeBookMeta.createdAt}>
-                  创建时间：{formatBookCreatedAt(activeBookMeta.createdAt)}
+                  创建时间:{formatBookCreatedAt(activeBookMeta.createdAt)}
                 </span>
                 <span className="centerMetaSep">·</span>
                 <span>{activeBookMeta.status}</span>
                 <span className="centerMetaSep">·</span>
                 <span>{activeBookMeta.chapterCount} 章</span>
                 <span className="centerMetaSep">·</span>
-                <span>总字数：{bookTotalWordCount}</span>
+                <span>总字数:{bookTotalWordCount}</span>
                 <span className="centerMetaSep">·</span>
                 <span className="muted">标识 {activeBookMeta.slug}</span>
               </div>
             ) : (
-              <div className="centerMeta">字数：{chapterWordCount}</div>
+              <div className="centerMeta">字数:{chapterWordCount}</div>
             )}
             {selectedChapter ? (
               <div className="centerReading">
@@ -5871,7 +5891,7 @@ export function App() {
                   className="btnReadingNav"
                   disabled={busy || !adjacentChapters.prev}
                   onClick={() => adjacentChapters.prev && void onOpenChapter(adjacentChapters.prev)}
-                  title={adjacentChapters.prev ? `上一章：${adjacentChapters.prev.id}` : "没有上一章"}
+                  title={adjacentChapters.prev ? `上一章:${adjacentChapters.prev.id}` : "没有上一章"}
                 >
                   上一章
                 </button>
@@ -5880,7 +5900,7 @@ export function App() {
                   className="btnReadingNav"
                   disabled={busy || !adjacentChapters.next}
                   onClick={() => adjacentChapters.next && void onOpenChapter(adjacentChapters.next)}
-                  title={adjacentChapters.next ? `下一章：${adjacentChapters.next.id}` : "没有下一章"}
+                  title={adjacentChapters.next ? `下一章:${adjacentChapters.next.id}` : "没有下一章"}
                 >
                   下一章
                 </button>
@@ -5915,7 +5935,7 @@ export function App() {
                   }}
                   title={polishModeOn ? "退出润色对照" : "用 AI 润色本章并提供对照"}
                 >
-                  {polishBusy ? "润色中…" : polishModeOn ? "退出润色" : "润色"}
+                  {polishBusy ? "润色中..." : polishModeOn ? "退出润色" : "润色"}
                 </button>
                 <button
                   type="button"
@@ -5928,20 +5948,20 @@ export function App() {
                     setExpandDraft("");
                     setExpandModalOpen(true);
                   }}
-                  title="快速扩写：输入目标字数并结合全书记忆摘要扩写本章"
+                  title="快速扩写:输入目标字数并结合全书记忆摘要扩写本章"
                 >
-                  {expandBusy ? "扩写中…" : "扩写"}
+                  {expandBusy ? "扩写中..." : "扩写"}
                 </button>
                 <button
                   type="button"
                   className={`btnAuditRead ${auditReadModeOn ? "active" : ""}`}
                   disabled={busy}
                   onClick={() => setAuditReadModeOn((v) => !v)}
-                  title={auditReadModeOn ? "退出审计阅读模式" : "进入审计阅读模式（高亮内容整理关联）"}
+                  title={auditReadModeOn ? "退出审计阅读模式" : "进入审计阅读模式(高亮内容整理关联)"}
                 >
                   {auditReadModeOn ? "退出审计" : "审计"}
                 </button>
-                {/* 移动端预览固定 iPhone 14 尺寸，不再提供机型切换 */}
+                {/* 移动端预览固定 iPhone 14 尺寸,不再提供机型切换 */}
               </div>
             ) : null}
           </div>
@@ -5993,7 +6013,7 @@ export function App() {
                       <input
                         value={modelEditorDraft.apiKey}
                         onChange={(e) => setModelEditorDraft({ ...modelEditorDraft, apiKey: e.target.value })}
-                        placeholder="可留空（如 Ollama）"
+                        placeholder="可留空(如 Ollama)"
                         disabled={busy}
                       />
                     </div>
@@ -6007,7 +6027,7 @@ export function App() {
                       />
                     </div>
                     <div className="modelField">
-                      <div className="navSubtitle">模型名（可选）</div>
+                      <div className="navSubtitle">模型名(可选)</div>
                       <input
                         value={modelEditorDraft.model ?? ""}
                         onChange={(e) => setModelEditorDraft({ ...modelEditorDraft, model: e.target.value })}
@@ -6017,7 +6037,7 @@ export function App() {
                     </div>
                     {modelEditorDraft.provider === "custom" ? (
                       <div className="modelField">
-                        <div className="navSubtitle">额外 Headers（JSON，可选）</div>
+                        <div className="navSubtitle">额外 Headers(JSON,可选)</div>
                         <textarea
                           className="modelHeadersTextarea"
                           value={modelEditorDraft.extraHeadersJson ?? ""}
@@ -6114,7 +6134,7 @@ export function App() {
                       className="btnSort btnDanger"
                       disabled={busy || !activeBook}
                       onClick={() => activeBookMeta && openDeleteBookModal(activeBookMeta)}
-                      title="软删除：书籍目录仍保留在本地"
+                      title="软删除:书籍目录仍保留在本地"
                     >
                       废弃书籍
                     </button>
@@ -6126,7 +6146,7 @@ export function App() {
                 value={synopsisDraft}
                 onChange={(e) => setSynopsisDraft(e.target.value)}
                 disabled={busy}
-                placeholder="写一句简介或内容简介…（保存到书籍 meta.json）"
+                placeholder="写一句简介或内容简介...(保存到书籍 meta.json)"
                 aria-label="书籍简介"
                 rows={4}
               />
@@ -6192,7 +6212,7 @@ export function App() {
                       </div>
                       <div className="polishCol">
                         <div className="polishColTitle muted">扩写后</div>
-                        <div className="polishText">{expandDraft || (expandBusy ? "扩写中…" : "—")}</div>
+                        <div className="polishText">{expandDraft || (expandBusy ? "扩写中..." : "-")}</div>
                       </div>
                     </div>
                   </div>
@@ -6212,7 +6232,7 @@ export function App() {
                           className="btnSort"
                           disabled={busy || polishBusy || !okModelConfigs.length}
                           onClick={() => void onPolishSelectedChapter()}
-                          title={!okModelConfigs.length ? "请先在「模型配置」里测试连接" : "重新润色（覆盖右侧润色稿）"}
+                          title={!okModelConfigs.length ? "请先在「模型配置」里测试连接" : "重新润色(覆盖右侧润色稿)"}
                         >
                           重新润色
                         </button>
@@ -6374,7 +6394,7 @@ export function App() {
                     value={chapterContent}
                     onChange={(e) => setChapterContent(e.target.value)}
                     disabled={busy || !selectedChapter}
-                    placeholder="在左侧选择章节或新建章节后开始写作…"
+                    placeholder="在左侧选择章节或新建章节后开始写作..."
                   />
                 )}
               </div>
@@ -6437,7 +6457,7 @@ export function App() {
                       </div>
                       <div className="polishCol">
                         <div className="polishColTitle muted">扩写后</div>
-                        <div className="polishText">{expandDraft || (expandBusy ? "扩写中…" : "—")}</div>
+                        <div className="polishText">{expandDraft || (expandBusy ? "扩写中..." : "-")}</div>
                       </div>
                     </div>
                   </div>
@@ -6457,7 +6477,7 @@ export function App() {
                           className="btnSort"
                           disabled={busy || polishBusy || !okModelConfigs.length}
                           onClick={() => void onPolishSelectedChapter()}
-                          title={!okModelConfigs.length ? "请先在「模型配置」里测试连接" : "重新润色（覆盖右侧润色稿）"}
+                          title={!okModelConfigs.length ? "请先在「模型配置」里测试连接" : "重新润色(覆盖右侧润色稿)"}
                         >
                           重新润色
                         </button>
@@ -6618,7 +6638,7 @@ export function App() {
                     value={chapterContent}
                     onChange={(e) => setChapterContent(e.target.value)}
                     disabled={busy || !selectedChapter}
-                    placeholder="在左侧选择章节或新建章节后开始写作…"
+                    placeholder="在左侧选择章节或新建章节后开始写作..."
                   />
                 )}
               </div>
@@ -6651,8 +6671,8 @@ export function App() {
                   onClick={() => setAuditModelPickerOpen((v) => !v)}
                   title={
                     okModelConfigs.length === 0
-                      ? "暂无连接成功的模型，请先去「模型配置」里测试连接"
-                      : "选择具体模型（仅显示连接成功的）"
+                      ? "暂无连接成功的模型,请先去「模型配置」里测试连接"
+                      : "选择具体模型(仅显示连接成功的)"
                   }
                 >
                   <span className="auditModelBtnText">{activeModelLabel}</span>
@@ -6777,7 +6797,7 @@ export function App() {
                               onClick={() => void doGenerateWritingPack(activeBook, selectedChapter.filename)}
                               title="重新生成并覆盖保存的写作包"
                             >
-                              {writingPackBusy ? "生成中…" : "重新生成"}
+                              {writingPackBusy ? "生成中..." : "重新生成"}
                             </button>
                           ) : null}
                         </div>
@@ -6801,7 +6821,7 @@ export function App() {
 
                             <div className="writingPackDisclaimer muted">
                               {String(writingPack.disclaimer || "").trim() ||
-                                "写作包仅供参考：你完全可以不采纳，按自己的创作思路推进。"}
+                                "写作包仅供参考:你完全可以不采纳,按自己的创作思路推进。"}
                             </div>
 
                             <div className="row" style={{ gap: 8, marginTop: 10, alignItems: "center" }}>
@@ -6849,7 +6869,7 @@ export function App() {
                                       ))}
                                     </div>
                                   ) : (
-                                    <div className="muted">（暂无）</div>
+                                    <div className="muted">(暂无)</div>
                                   )}
                                 </div>
 
@@ -6865,7 +6885,7 @@ export function App() {
                                       ))}
                                     </div>
                                   ) : (
-                                    <div className="muted">（暂无）</div>
+                                    <div className="muted">(暂无)</div>
                                   )}
                                 </div>
 
@@ -6881,7 +6901,7 @@ export function App() {
                                       ))}
                                     </div>
                                   ) : (
-                                    <div className="muted">（暂无）</div>
+                                    <div className="muted">(暂无)</div>
                                   )}
                                 </div>
                               </div>
@@ -6889,7 +6909,7 @@ export function App() {
                           </>
                         ) : (
                           <div className="muted auditPanelEmpty">
-                            暂无写作包。你可以点击右上角“重新生成”来生成一份（会保存到本地）。{writingPackBusy ? "（生成中…）" : ""}
+                            暂无写作包。你可以点击右上角"重新生成"来生成一份(会保存到本地)。{writingPackBusy ? "(生成中...)" : ""}
                           </div>
                         )}
                       </div>
@@ -6900,10 +6920,10 @@ export function App() {
                         {auditDirty ? (
                           <div className="auditDirtyBar" role="status" aria-label="分析可能过期提示">
                             <div className="auditDirtyText">
-                              正文已修改，分析可能过期
+                              正文已修改,分析可能过期
                               {auditDirtyDelta ? (
                                 <span className="auditDirtyMeta muted">
-                                  （约 {auditDirtyDelta.abs} 字变动 · {(auditDirtyDelta.ratio * 100).toFixed(0)}%）
+                                  (约 {auditDirtyDelta.abs} 字变动 · {(auditDirtyDelta.ratio * 100).toFixed(0)}%)
                                 </span>
                               ) : null}
                             </div>
@@ -6986,7 +7006,7 @@ export function App() {
                                     <div key={r.k} className="auditCheckItem">
                                       <div className="auditCheckIssue">
                                         {r.label}
-                                        {Number.isFinite(Number(r.score)) ? <span className="muted">（{Number(r.score)}）</span> : null}
+                                        {Number.isFinite(Number(r.score)) ? <span className="muted">({Number(r.score)})</span> : null}
                                       </div>
                                       {String(r.comment || "").trim() ? <div className="muted auditCheckSug">{String(r.comment || "").trim()}</div> : null}
                                     </div>
@@ -7036,7 +7056,7 @@ export function App() {
                               onClick={() => void jumpToRunningAuditChapter()}
                               disabled={busy}
                             >
-                              当前正在分析「{auditRunningChapter.filename}」，点击跳转回该章节查看进度
+                              当前正在分析「{auditRunningChapter.filename}」,点击跳转回该章节查看进度
                             </button>
                           </div>
                         ) : null}
@@ -7055,10 +7075,10 @@ export function App() {
                             <div className="auditStreamInner muted">
                               {auditProgress ? (
                                 <>
-                                  正在执行 {auditProgress.step}/{auditProgress.total}：{auditProgress.label}
+                                  正在执行 {auditProgress.step}/{auditProgress.total}:{auditProgress.label}
                                 </>
                               ) : (
-                                "正在执行中…"
+                                "正在执行中..."
                               )}
                             </div>
                           ) : auditRunningChapter &&
@@ -7088,21 +7108,21 @@ export function App() {
                                 onClick={() => void onAuditSelectedChapter()}
                                 title={
                                   !okModelConfigs.length
-                                    ? "请先在「模型配置」里测试连接，连接成功后再分析"
+                                    ? "请先在「模型配置」里测试连接,连接成功后再分析"
                                     : auditRunningChapter &&
                                         activeBook &&
                                         selectedChapter &&
                                         auditRunningChapter.bookSlug === activeBook &&
                                         auditRunningChapter.filename !== selectedChapter.filename &&
                                         auditStreamPhase === "running"
-                                      ? "当前有章节正在分析中，请先跳回查看进度"
-                                      : "调用当前模型分析本章（摘要与右侧内容整理将一并更新）"
+                                      ? "当前有章节正在分析中,请先跳回查看进度"
+                                      : "调用当前模型分析本章(摘要与右侧内容整理将一并更新)"
                                 }
                               >
                                 开始分析
                               </button>
                               {!okModelConfigs.length ? (
-                                <div className="muted auditStreamEmptyHint">暂无连接成功的模型，请先到「模型配置」测试连接。</div>
+                                <div className="muted auditStreamEmptyHint">暂无连接成功的模型,请先到「模型配置」测试连接。</div>
                               ) : (
                                 <div className="muted auditStreamEmptyHint">使用右侧所选模型梳理本章要点。</div>
                               )}
@@ -7148,10 +7168,10 @@ export function App() {
                             {auditDirty ? (
                               <div className="auditDirtyBar" role="status" aria-label="分析可能过期提示">
                                 <div className="auditDirtyText">
-                                  正文已修改，分析可能过期
+                                  正文已修改,分析可能过期
                                   {auditDirtyDelta ? (
                                     <span className="auditDirtyMeta muted">
-                                      （约 {auditDirtyDelta.abs} 字变动 · {(auditDirtyDelta.ratio * 100).toFixed(0)}%）
+                                      (约 {auditDirtyDelta.abs} 字变动 · {(auditDirtyDelta.ratio * 100).toFixed(0)}%)
                                     </span>
                                   ) : null}
                                 </div>
@@ -7252,7 +7272,7 @@ export function App() {
                                           <div className="chapterEventType">{String(ev?.type || "").trim() || "事件"}</div>
                                         </div>
                                         <div className="chapterEventSummary">
-                                          {String(ev?.summary || ev?.what || ev?.event || "").trim() || "—"}
+                                          {String(ev?.summary || ev?.what || ev?.event || "").trim() || "-"}
                                         </div>
                                       </div>
                                     ))}
@@ -7316,14 +7336,14 @@ export function App() {
             </div>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-book-synopsis">
-                简介<span className="modalOptional">（选填）</span>
+                简介<span className="modalOptional">(选填)</span>
               </label>
               <textarea
                 id="modal-book-synopsis"
                 className="modalTextarea"
                 value={modalNewSynopsis}
                 onChange={(e) => setModalNewSynopsis(e.target.value)}
-                placeholder="可留空，创建后再补充"
+                placeholder="可留空,创建后再补充"
                 disabled={busy}
                 rows={4}
               />
@@ -7535,7 +7555,7 @@ export function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="modal-edit-org-heading" className="modalHeading">
-              编辑组织：{editOrgName}
+              编辑组织:{editOrgName}
             </h2>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-org-desc">
@@ -7552,7 +7572,7 @@ export function App() {
             </div>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-org-note">
-                动态（简述）
+                动态(简述)
               </label>
               <textarea
                 id="modal-edit-org-note"
@@ -7668,7 +7688,7 @@ export function App() {
                 className="modalInput"
                 value={foreshadowCreateTitle}
                 onChange={(e) => setForeshadowCreateTitle(e.target.value)}
-                placeholder="例如：神秘戒指的来历"
+                placeholder="例如:神秘戒指的来历"
                 disabled={busy}
               />
             </div>
@@ -7726,7 +7746,7 @@ export function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="modal-edit-foreshadow-heading" className="modalHeading">
-              编辑伏笔：{editForeshadowTitle || editForeshadowId}
+              编辑伏笔:{editForeshadowTitle || editForeshadowId}
             </h2>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-foreshadow-title">
@@ -7758,14 +7778,14 @@ export function App() {
             </div>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-foreshadow-chapters">
-                出现章节（逗号分隔）
+                出现章节(逗号分隔)
               </label>
               <input
                 id="modal-edit-foreshadow-chapters"
                 className="modalInput"
                 value={editForeshadowChapters}
                 onChange={(e) => setEditForeshadowChapters(e.target.value)}
-                placeholder="例如：3,7,10"
+                placeholder="例如:3,7,10"
                 disabled={busy}
               />
             </div>
@@ -7849,12 +7869,12 @@ export function App() {
                 inputMode="numeric"
               />
               <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-                会自动把全书记忆“压缩摘要”投喂给模型作为已发生事件上下文。
+                会自动把全书记忆"压缩摘要"投喂给模型作为已发生事件上下文。
               </div>
             </div>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-expand-extra">
-                补充：当前发生的事情（可选）
+                补充:当前发生的事情(可选)
               </label>
               <textarea
                 id="modal-expand-extra"
@@ -7863,14 +7883,14 @@ export function App() {
                 onChange={(e) => setExpandExtraContext(e.target.value)}
                 disabled={busy || expandBusy}
                 rows={4}
-                placeholder="例如：本章此刻主角刚到青石村晒谷场，准备……"
+                placeholder="例如:本章此刻主角刚到青石村晒谷场,准备......"
               />
             </div>
             {expandDraft.trim() ? (
               <div className="modalField">
                 <label className="modalLabel">已生成扩写稿</label>
                 <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-                  扩写中会直接在编辑区以左右对照展示；你也可以点击“一键更换”替换正文。
+                  扩写中会直接在编辑区以左右对照展示;你也可以点击"一键更换"替换正文。
                 </div>
               </div>
             ) : null}
@@ -7914,7 +7934,7 @@ export function App() {
                   void onExpandWithTargetWords(n, expandExtraContext);
                 }}
               >
-                {expandBusy ? "扩写中…" : "开始扩写"}
+                {expandBusy ? "扩写中..." : "开始扩写"}
               </button>
             </div>
           </div>
@@ -7937,7 +7957,7 @@ export function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="modal-edit-place-heading" className="modalHeading">
-              编辑地点：{editPlaceName}
+              编辑地点:{editPlaceName}
             </h2>
 
             <div className="modalTopActions">
@@ -8036,7 +8056,7 @@ export function App() {
                       return;
                     }
                     const ok = window.confirm(
-                      `确认应用合并？\n\n保留：${primaryName}\n合并并移除：${secondaryNames.join("、")}\n\n提示：将按预览草稿写入地点库。`
+                      `确认应用合并?\n\n保留:${primaryName}\n合并并移除:${secondaryNames.join("、")}\n\n提示:将按预览草稿写入地点库。`
                     );
                     if (!ok) return;
                     setBusy(true);
@@ -8048,7 +8068,7 @@ export function App() {
                         try {
                           draftObj = JSON.parse(text);
                         } catch {
-                          setStatus("预览 JSON 解析失败，请检查格式。");
+                          setStatus("预览 JSON 解析失败,请检查格式。");
                           return;
                         }
                       }
@@ -8067,7 +8087,7 @@ export function App() {
                   return (
                     <>
                       <div className="muted" style={{ marginBottom: 8 }}>
-                        选择要合并进“{primaryName}”的其它地点（可多选）
+                        选择要合并进"{primaryName}"的其它地点(可多选)
                       </div>
                       <div className="checkList">
                         {options.map((n) => (
@@ -8085,7 +8105,7 @@ export function App() {
 
                       <div className="modalActions" style={{ justifyContent: "flex-start", gap: 8, marginTop: 10 }}>
                         <button type="button" className="btnModalSecondary" disabled={busy || mergePlaceDraftBusy} onClick={() => void doPreview()}>
-                          {mergePlaceDraftBusy ? "生成中…" : "生成合并预览（AI）"}
+                          {mergePlaceDraftBusy ? "生成中..." : "生成合并预览(AI)"}
                         </button>
                         <button
                           type="button"
@@ -8111,7 +8131,7 @@ export function App() {
                       {mergePlaceDraftText ? (
                         <div className="modalField" style={{ marginTop: 10 }}>
                           <label className="modalLabel" htmlFor="modal-merge-place-draft">
-                            合并预览（可编辑 JSON）
+                            合并预览(可编辑 JSON)
                           </label>
                           <textarea
                             id="modal-merge-place-draft"
@@ -8139,21 +8159,21 @@ export function App() {
                 className="modalTextarea"
                 value={editPlaceDesc}
                 onChange={(e) => setEditPlaceDesc(e.target.value)}
-                placeholder="如：青石村晒谷场，村民聚集处…"
+                placeholder="如:青石村晒谷场,村民聚集处..."
                 disabled={busy}
                 rows={6}
               />
             </div>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-place-note">
-                发生的事（简述）
+                发生的事(简述)
               </label>
               <textarea
                 id="modal-edit-place-note"
                 className="modalTextarea"
                 value={editPlaceLastNote}
                 onChange={(e) => setEditPlaceLastNote(e.target.value)}
-                placeholder="如：主角与反派第一次冲突…"
+                placeholder="如:主角与反派第一次冲突..."
                 disabled={busy}
                 rows={6}
               />
@@ -8186,11 +8206,11 @@ export function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="modal-edit-char-heading" className="modalHeading">
-              编辑角色：{editCharName}
+              编辑角色:{editCharName}
             </h2>
             <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
               <div className="muted" style={{ fontSize: 12 }}>
-                角色合并：用于解决“同一角色被拆成多个角色条目”的情况（合并角色库信息）。
+                角色合并:用于解决"同一角色被拆成多个角色条目"的情况(合并角色库信息)。
               </div>
               <button
                 type="button"
@@ -8199,7 +8219,7 @@ export function App() {
                 onClick={() => {
                   setMergeFromEditOpen((v) => !v);
                   if (!Object.keys(mergeFromEditSelected).some((k) => mergeFromEditSelected[k])) {
-                    // 初次打开时不默认选择，避免误合并
+                    // 初次打开时不默认选择,避免误合并
                     setMergeFromEditSelected({});
                   }
                 }}
@@ -8223,7 +8243,7 @@ export function App() {
                     const B = String(b || "").trim();
                     if (!A || !B) return -1;
                     if (A === B) return 1e9;
-                    // 强相关：包含关系
+                    // 强相关:包含关系
                     if (A.includes(B) || B.includes(A)) return 5e6 + Math.min(A.length, B.length) * 1000;
                     // 共同前缀长度
                     let p = 0;
@@ -8231,7 +8251,7 @@ export function App() {
                       if (A[i] !== B[i]) break;
                       p += 1;
                     }
-                    // 轻量编辑距离（截断到 12 字以内，避免 O(n*m) 放大）
+                    // 轻量编辑距离(截断到 12 字以内,避免 O(n*m) 放大)
                     const s1 = A.slice(0, 12);
                     const s2 = B.slice(0, 12);
                     const n = s1.length;
@@ -8249,7 +8269,7 @@ export function App() {
                       }
                     }
                     const dist = dp[m];
-                    // 分数越大越相似：前缀优先，其次编辑距离越小越优
+                    // 分数越大越相似:前缀优先,其次编辑距离越小越优
                     return p * 100000 - dist * 1000 - Math.abs(A.length - B.length);
                   };
 
@@ -8273,7 +8293,7 @@ export function App() {
                       return;
                     }
                     const ok = window.confirm(
-                      `确认应用合并？\n\n保留：${primaryName}\n合并并移除：${secondaryNames.join("、")}\n\n提示：将按预览草稿写入角色库，并修正关系引用。`
+                      `确认应用合并?\n\n保留:${primaryName}\n合并并移除:${secondaryNames.join("、")}\n\n提示:将按预览草稿写入角色库,并修正关系引用。`
                     );
                     if (!ok) return;
                     setBusy(true);
@@ -8285,7 +8305,7 @@ export function App() {
                         try {
                           draftObj = JSON.parse(text);
                         } catch (err: any) {
-                          throw new Error(`预览 JSON 不是合法 JSON：${err?.message || String(err)}`);
+                          throw new Error(`预览 JSON 不是合法 JSON:${err?.message || String(err)}`);
                         }
                       }
                       const { index } = await applyMergeAuditCharacters(activeBook, {
@@ -8298,7 +8318,7 @@ export function App() {
                       setMergeFromEditSelected({});
                       setMergeFromEditDraft(null);
                       setMergeFromEditDraftText("");
-                      setStatus("已合并角色（已按预览草稿写入）。");
+                      setStatus("已合并角色(已按预览草稿写入)。");
                     } catch (e: any) {
                       setStatus(e?.message || String(e));
                     } finally {
@@ -8309,13 +8329,13 @@ export function App() {
                   return (
                     <>
                       <div className="muted" style={{ marginBottom: 8 }}>
-                        当前角色：{primaryName || "（未命名）"}
+                        当前角色:{primaryName || "(未命名)"}
                       </div>
                       {options.length === 0 ? (
                         <div className="muted">当前没有其他角色可合并。</div>
                       ) : (
                         <>
-                          <label className="modalLabel">选择要合并进来的角色（可多选）</label>
+                          <label className="modalLabel">选择要合并进来的角色(可多选)</label>
                           <div style={{ maxHeight: 220, overflow: "auto", border: "1px solid var(--border)", borderRadius: 8 }}>
                             {options.map((name) => (
                               <label
@@ -8341,7 +8361,7 @@ export function App() {
                             ))}
                           </div>
                           <div className="muted" style={{ marginTop: 6 }}>
-                            先用 AI 生成“合并后草稿”并预览，确认后才会真正写入并移除被合并角色。
+                            先用 AI 生成"合并后草稿"并预览,确认后才会真正写入并移除被合并角色。
                           </div>
                           <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginTop: 10 }}>
                             <button
@@ -8374,7 +8394,7 @@ export function App() {
                               }}
                               title="调用当前活动模型生成合并草稿"
                             >
-                              {mergeFromEditDraftBusy ? "生成中…" : "生成合并预览（AI）"}
+                              {mergeFromEditDraftBusy ? "生成中..." : "生成合并预览(AI)"}
                             </button>
                             <button
                               type="button"
@@ -8390,7 +8410,7 @@ export function App() {
                           </div>
                           {mergeFromEditDraftText.trim() ? (
                             <div className="modalField" style={{ marginTop: 10 }}>
-                              <label className="modalLabel">合并后草稿预览（JSON）</label>
+                              <label className="modalLabel">合并后草稿预览(JSON)</label>
                               <textarea
                                 className="modalTextarea"
                                 value={mergeFromEditDraftText}
@@ -8399,7 +8419,7 @@ export function App() {
                                 rows={10}
                               />
                               <div className="muted" style={{ marginTop: 6 }}>
-                                你可以在这里手工微调 JSON（会按此内容应用）。不想手改就直接点击“开始合并”。
+                                你可以在这里手工微调 JSON(会按此内容应用)。不想手改就直接点击"开始合并"。
                               </div>
                             </div>
                           ) : null}
@@ -8429,13 +8449,13 @@ export function App() {
                 className="modalInput"
                 value={editCharRole}
                 onChange={(e) => setEditCharRole(e.target.value)}
-                placeholder="如：主角/配角/反派…"
+                placeholder="如:主角/配角/反派..."
                 disabled={busy}
               />
             </div>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-tags">
-                标签<span className="modalOptional">（逗号分隔）</span>
+                标签<span className="modalOptional">(逗号分隔)</span>
               </label>
               <label className="toggle">
                 <input
@@ -8444,14 +8464,14 @@ export function App() {
                   onChange={(e) => setEditCharLockTags(e.target.checked)}
                   disabled={busy}
                 />
-                锁定（后续审计不自动改）
+                锁定(后续审计不自动改)
               </label>
               <input
                 id="modal-edit-char-tags"
                 className="modalInput"
                 value={editCharTags}
                 onChange={(e) => setEditCharTags(e.target.value)}
-                placeholder="盟友, 敌对, 神秘…"
+                placeholder="盟友, 敌对, 神秘..."
                 disabled={busy}
               />
             </div>
@@ -8464,14 +8484,14 @@ export function App() {
                 className="modalInput"
                 value={editCharPersonality}
                 onChange={(e) => setEditCharPersonality(e.target.value)}
-                placeholder="性格、动机、弱点、行为模式…"
+                placeholder="性格、动机、弱点、行为模式..."
                 disabled={busy}
               />
             </div>
 
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-social-prof">
-                社会身份：职业
+                社会身份:职业
               </label>
               <label className="toggle">
                 <input
@@ -8480,54 +8500,54 @@ export function App() {
                   onChange={(e) => setEditCharLockSocialTags(e.target.checked)}
                   disabled={busy}
                 />
-                锁定（后续审计不自动改）
+                锁定(后续审计不自动改)
               </label>
               <input
                 id="modal-edit-char-social-prof"
                 className="modalInput"
                 value={editCharSocialProfession}
                 onChange={(e) => setEditCharSocialProfession(e.target.value)}
-                placeholder="如：老兵/捕快/商人…"
+                placeholder="如:老兵/捕快/商人..."
                 disabled={busy}
               />
             </div>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-social-class">
-                社会身份：阶级
+                社会身份:阶级
               </label>
               <input
                 id="modal-edit-char-social-class"
                 className="modalInput"
                 value={editCharSocialClass}
                 onChange={(e) => setEditCharSocialClass(e.target.value)}
-                placeholder="如：贵族/平民/宗门内门…"
+                placeholder="如:贵族/平民/宗门内门..."
                 disabled={busy}
               />
             </div>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-social-titles">
-                社会身份：头衔<span className="modalOptional">（一行一个）</span>
+                社会身份:头衔<span className="modalOptional">(一行一个)</span>
               </label>
               <textarea
                 id="modal-edit-char-social-titles"
                 className="modalTextarea"
                 value={editCharSocialTitles}
                 onChange={(e) => setEditCharSocialTitles(e.target.value)}
-                placeholder={"如：镇北将军\n青石村猎户…"}
+                placeholder={"如:镇北将军\n青石村猎户..."}
                 disabled={busy}
                 rows={4}
               />
             </div>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-social-other">
-                社会身份：其他标签<span className="modalOptional">（一行一个）</span>
+                社会身份:其他标签<span className="modalOptional">(一行一个)</span>
               </label>
               <textarea
                 id="modal-edit-char-social-other"
                 className="modalTextarea"
                 value={editCharSocialOther}
                 onChange={(e) => setEditCharSocialOther(e.target.value)}
-                placeholder={"如：军功在身\n被通缉…"}
+                placeholder={"如:军功在身\n被通缉..."}
                 disabled={busy}
                 rows={4}
               />
@@ -8535,7 +8555,7 @@ export function App() {
 
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-debts">
-                历史债<span className="modalOptional">（一行一个）</span>
+                历史债<span className="modalOptional">(一行一个)</span>
               </label>
               <label className="toggle">
                 <input
@@ -8544,14 +8564,14 @@ export function App() {
                   onChange={(e) => setEditCharLockHistoricalDebts(e.target.checked)}
                   disabled={busy}
                 />
-                锁定（后续审计不自动改）
+                锁定(后续审计不自动改)
               </label>
               <textarea
                 id="modal-edit-char-debts"
                 className="modalTextarea"
                 value={editCharHistoricalDebts}
                 onChange={(e) => setEditCharHistoricalDebts(e.target.value)}
-                placeholder={"如：第5章曾杀过人\n欠某人一条命…"}
+                placeholder={"如:第5章曾杀过人\n欠某人一条命..."}
                 disabled={busy}
                 rows={5}
               />
@@ -8559,7 +8579,7 @@ export function App() {
 
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-occurred">
-                发生过的事情<span className="modalOptional">（一行一个）</span>
+                发生过的事情<span className="modalOptional">(一行一个)</span>
               </label>
               <label className="toggle">
                 <input
@@ -8568,14 +8588,14 @@ export function App() {
                   onChange={(e) => setEditCharLockOccurredNotes(e.target.checked)}
                   disabled={busy}
                 />
-                锁定（后续审计不自动改）
+                锁定(后续审计不自动改)
               </label>
               <textarea
                 id="modal-edit-char-occurred"
                 className="modalTextarea"
                 value={editCharOccurredNotes}
                 onChange={(e) => setEditCharOccurredNotes(e.target.value)}
-                placeholder={"如：第8章与某人对峙\n在村口救下孩子…"}
+                placeholder={"如:第8章与某人对峙\n在村口救下孩子..."}
                 disabled={busy}
                 rows={6}
               />
@@ -8583,7 +8603,7 @@ export function App() {
 
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-want">
-                Want<span className="modalOptional">（显性目标）</span>
+                Want<span className="modalOptional">(显性目标)</span>
               </label>
               <label className="toggle">
                 <input
@@ -8592,27 +8612,27 @@ export function App() {
                   onChange={(e) => setEditCharLockNarrativeDrives(e.target.checked)}
                   disabled={busy}
                 />
-                锁定（后续审计不自动改）
+                锁定(后续审计不自动改)
               </label>
               <input
                 id="modal-edit-char-want"
                 className="modalInput"
                 value={editCharWant}
                 onChange={(e) => setEditCharWant(e.target.value)}
-                placeholder="如：复仇/变强/赚一千万…"
+                placeholder="如:复仇/变强/赚一千万..."
                 disabled={busy}
               />
             </div>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-need">
-                Need<span className="modalOptional">（隐性成长）</span>
+                Need<span className="modalOptional">(隐性成长)</span>
               </label>
               <input
                 id="modal-edit-char-need"
                 className="modalInput"
                 value={editCharNeed}
                 onChange={(e) => setEditCharNeed(e.target.value)}
-                placeholder="如：学会信任/面对恐惧…"
+                placeholder="如:学会信任/面对恐惧..."
                 disabled={busy}
               />
             </div>
@@ -8625,34 +8645,34 @@ export function App() {
                 className="modalInput"
                 value={editCharMoralCompass}
                 onChange={(e) => setEditCharMoralCompass(e.target.value)}
-                placeholder="如：利己/集体主义/底线…"
+                placeholder="如:利己/集体主义/底线..."
                 disabled={busy}
               />
             </div>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-flaws">
-                缺陷<span className="modalOptional">（一行一个）</span>
+                缺陷<span className="modalOptional">(一行一个)</span>
               </label>
               <textarea
                 id="modal-edit-char-flaws"
                 className="modalTextarea"
                 value={editCharFlaws}
                 onChange={(e) => setEditCharFlaws(e.target.value)}
-                placeholder={"如：冲动\n不善表达…"}
+                placeholder={"如:冲动\n不善表达..."}
                 disabled={busy}
                 rows={4}
               />
             </div>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-blind">
-                盲点<span className="modalOptional">（一行一个）</span>
+                盲点<span className="modalOptional">(一行一个)</span>
               </label>
               <textarea
                 id="modal-edit-char-blind"
                 className="modalTextarea"
                 value={editCharBlindSpots}
                 onChange={(e) => setEditCharBlindSpots(e.target.value)}
-                placeholder={"如：误以为某人可信\n不了解某势力真实目的…"}
+                placeholder={"如:误以为某人可信\n不了解某势力真实目的..."}
                 disabled={busy}
                 rows={4}
               />
@@ -8660,7 +8680,7 @@ export function App() {
 
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-ling">
-                语气/句式特征<span className="modalOptional">（一行一个，3-7条即可）</span>
+                语气/句式特征<span className="modalOptional">(一行一个,3-7条即可)</span>
               </label>
               <label className="toggle">
                 <input
@@ -8669,56 +8689,56 @@ export function App() {
                   onChange={(e) => setEditCharLockFingerprints(e.target.checked)}
                   disabled={busy}
                 />
-                锁定（后续审计不自动改）
+                锁定(后续审计不自动改)
               </label>
               <textarea
                 id="modal-edit-char-ling"
                 className="modalTextarea"
                 value={editCharLinguisticStyle}
                 onChange={(e) => setEditCharLinguisticStyle(e.target.value)}
-                placeholder={"如：短句居多\n爱反问…"}
+                placeholder={"如:短句居多\n爱反问..."}
                 disabled={busy}
                 rows={4}
               />
             </div>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-catch">
-                口癖<span className="modalOptional">（一行一个）</span>
+                口癖<span className="modalOptional">(一行一个)</span>
               </label>
               <textarea
                 id="modal-edit-char-catch"
                 className="modalTextarea"
                 value={editCharCatchphrases}
                 onChange={(e) => setEditCharCatchphrases(e.target.value)}
-                placeholder={"如：懂？\n别急…"}
+                placeholder={"如:懂?\n别急..."}
                 disabled={busy}
                 rows={3}
               />
             </div>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-man">
-                标志性动作<span className="modalOptional">（一行一个）</span>
+                标志性动作<span className="modalOptional">(一行一个)</span>
               </label>
               <textarea
                 id="modal-edit-char-man"
                 className="modalTextarea"
                 value={editCharMannerisms}
                 onChange={(e) => setEditCharMannerisms(e.target.value)}
-                placeholder={"如：思考时揉指关节\n紧张时摸刀柄…"}
+                placeholder={"如:思考时揉指关节\n紧张时摸刀柄..."}
                 disabled={busy}
                 rows={4}
               />
             </div>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-mask">
-                社交面具<span className="modalOptional">（一行一个：场景=人设）</span>
+                社交面具<span className="modalOptional">(一行一个:场景=人设)</span>
               </label>
               <textarea
                 id="modal-edit-char-mask"
                 className="modalTextarea"
                 value={editCharMaskLines}
                 onChange={(e) => setEditCharMaskLines(e.target.value)}
-                placeholder={"如：在部下面前=严厉\n在妻子面前=温柔…"}
+                placeholder={"如:在部下面前=严厉\n在妻子面前=温柔..."}
                 disabled={busy}
                 rows={4}
               />
@@ -8726,8 +8746,8 @@ export function App() {
 
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-relations">
-                关系钩子：结构化
-                <span className="modalOptional">（一行一个：对方|types=a,b|情感|冲突|秘密1,秘密2）</span>
+                关系钩子:结构化
+                <span className="modalOptional">(一行一个:对方|types=a,b|情感|冲突|秘密1,秘密2)</span>
               </label>
               <label className="toggle">
                 <input
@@ -8736,35 +8756,35 @@ export function App() {
                   onChange={(e) => setEditCharLockRelationalHooks(e.target.checked)}
                   disabled={busy}
                 />
-                锁定（后续审计不自动改）
+                锁定(后续审计不自动改)
               </label>
               <textarea
                 id="modal-edit-char-relations"
                 className="modalTextarea"
                 value={editCharRelationsLines}
                 onChange={(e) => setEditCharRelationsLines(e.target.value)}
-                placeholder="如：张三|types=narrative.Ally,karma.Contractual|亏欠|债务纠葛|暗号,家族秘闻"
+                placeholder="如:张三|types=narrative.Ally,karma.Contractual|亏欠|债务纠葛|暗号,家族秘闻"
                 disabled={busy}
                 rows={5}
               />
             </div>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-rel-free">
-                关系钩子：自由文本<span className="modalOptional">（兜底）</span>
+                关系钩子:自由文本<span className="modalOptional">(兜底)</span>
               </label>
               <textarea
                 id="modal-edit-char-rel-free"
                 className="modalTextarea"
                 value={editCharRelationsFreeText}
                 onChange={(e) => setEditCharRelationsFreeText(e.target.value)}
-                placeholder="无法结构化的关系线索…"
+                placeholder="无法结构化的关系线索..."
                 disabled={busy}
                 rows={4}
               />
             </div>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-edit-char-state">
-                state<span className="modalOptional">（JSON，可选）</span>
+                state<span className="modalOptional">(JSON,可选)</span>
               </label>
               <textarea
                 id="modal-edit-char-state"
@@ -8812,7 +8832,7 @@ export function App() {
               })()}
             </p>
             <p className="modalChapterGapBody">
-              当前空缺：{formatMissingChapterList(chapterGapModalIndexes)}。填写章节标题后，选择补齐最先空缺或跳过空缺接续在最大序号之后。
+              当前空缺:{formatMissingChapterList(chapterGapModalIndexes)}。填写章节标题后,选择补齐最先空缺或跳过空缺接续在最大序号之后。
             </p>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-chapter-gap-title">
@@ -8872,7 +8892,7 @@ export function App() {
               章节名候选
             </h2>
             <div className="muted titleSuggestCurrent">
-              {selectedChapterMeta ? `当前：${selectedChapterMeta.title}` : ""}
+              {selectedChapterMeta ? `当前:${selectedChapterMeta.title}` : ""}
             </div>
             <div className="titleSuggestControls" role="radiogroup" aria-label="章节名生成风格">
               {[
@@ -8914,7 +8934,7 @@ export function App() {
             ) : null}
 
             {chapterTitleSuggestBusy ? (
-              <div className="muted">生成中…</div>
+              <div className="muted">生成中...</div>
             ) : chapterTitleSuggestList.length ? (
               <div className="titleSuggestList" role="radiogroup" aria-label="章节名候选">
                 {chapterTitleSuggestList.map((t) => (
@@ -8985,7 +9005,7 @@ export function App() {
             <div className="muted" style={{ marginBottom: 10 }}>
               {(() => {
                 const isMac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || "");
-                return isMac ? "快捷键：⌘I" : "快捷键：Ctrl+I";
+                return isMac ? "快捷键:⌘I" : "快捷键:Ctrl+I";
               })()}
             </div>
 
@@ -8993,7 +9013,7 @@ export function App() {
               <div style={{ marginBottom: 12 }}>
                 <div className="auditErrorBox" style={{ margin: 0 }}>
                   <div className="auditErrorTitle">未选择书籍</div>
-                  <div className="auditErrorMsg">请选择要搜索的书籍（点击后会自动跳转到该书并在此弹窗内继续搜索）。</div>
+                  <div className="auditErrorMsg">请选择要搜索的书籍(点击后会自动跳转到该书并在此弹窗内继续搜索)。</div>
                 </div>
                 <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
                   {(books || []).map((b, idx) => (
@@ -9031,7 +9051,7 @@ export function App() {
                   setSearchErr("");
                   scheduleSearch(v);
                 }}
-                placeholder={activeBook ? "输入关键词（仅搜索章节正文）" : "先选择一本书，然后输入关键词"}
+                placeholder={activeBook ? "输入关键词(仅搜索章节正文)" : "先选择一本书,然后输入关键词"}
                 disabled={busy || !activeBook}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
@@ -9097,7 +9117,7 @@ export function App() {
                         ))}
                       </div>
                     ) : (
-                      <div className="muted">（本组无结果）</div>
+                      <div className="muted">(本组无结果)</div>
                     )}
                   </div>
                 ))
@@ -9132,7 +9152,7 @@ export function App() {
               废弃书籍
             </h2>
             <p className="modalChapterGapBody">
-              确定废弃《{deleteBookTarget.title}》吗？不会删除任何本地内容，但书架将不再展示该书。
+              确定废弃《{deleteBookTarget.title}》吗?不会删除任何本地内容,但书架将不再展示该书。
             </p>
             <div className="modalActions">
               <button type="button" className="btnModalSecondary" disabled={busy} onClick={() => closeDeleteBookModal()}>
@@ -9227,7 +9247,7 @@ export function App() {
                 <input
                   value={modalCharacterTagDraft}
                   onChange={(e) => setModalCharacterTagDraft(e.target.value)}
-                  placeholder="输入自定义标签，回车添加"
+                  placeholder="输入自定义标签,回车添加"
                   disabled={busy || !activeBook}
                   onKeyDown={(e) => {
                     if (e.key !== "Enter") return;
@@ -9290,7 +9310,7 @@ export function App() {
         </div>
       ) : null}
 
-      {/* 合并入口已迁移到“编辑角色”弹窗中 */}
+      {/* 合并入口已迁移到"编辑角色"弹窗中 */}
     </div>
   );
 }

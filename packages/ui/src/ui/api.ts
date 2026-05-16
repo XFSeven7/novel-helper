@@ -690,3 +690,23 @@ export async function mergeCharacterCards(
   });
 }
 
+export type BookStats = {
+  totalChapters: number;
+  totalWords: number;
+  avgChapterLength: number;
+  maxChapterWordCount: number;
+  maxChapterTitle: string;
+  minChapterWordCount: number;
+  minChapterTitle: string;
+  streak: number;
+  daysSinceLastWrite: number;
+  lastWriteDate: string;
+  dailyBreakdown: { date: string; words: number; chapters: number }[];
+  chapterWordCounts: { index: number; title: string; wordCount: number; filename: string }[];
+  cumulativeWords: { index: number; title: string; words: number }[];
+};
+
+export async function getBookStats(slug: string) {
+  return await http<{ stats: BookStats }>(`/api/books/${encodeURIComponent(slug)}/stats`);
+}
+

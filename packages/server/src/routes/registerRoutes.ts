@@ -3275,5 +3275,104 @@ export async function registerRoutes(app: any, input: { dataDir: string }) {
       return reply.code(400).send({ message: e?.message || "Delete failed" });
     }
   });
+
+  // ---- writing stats ----
+
+  app.get("/api/books/:slug/stats", async (req: any) => {
+    const paramsSchema = z.object({ slug: z.string().min(1) });
+    const params = paramsSchema.parse(req.params);
+    const slug = params.slug;
+
+    const chapters = await listChapters(dataDir, slug);
+    const chaptersDir = path.join(dataDir, slug, "chapters");
+
+    const dailyStats: Record<string, { words: number; count: number }> = {};
+    let totalWords = 0;
+
+    for (const ch of chapters) {
+      totalWords += ch.wordCount;
+      // 尝试从 git log 获取日期，否则用文件 mtime
+      let fileDate = "";
+      try {
+        const stat = await fs.stat(path.join(chaptersDir, ch.filename));
+        const d = new Date(stat.mtime);
+        fileDate = d.toISOString().slice(0, 10);
+      } catch {}
+
+      if (fileDate) {
+        if (!dailyStats[fileDate]) {
+          dailyStats[fileDate] = { words: 0, count: 0 };
+        }
+        dailyStats[fileDate].words += ch.wordCount;
+        dailyStats[fileDate].count += 1;
+      }
+    }
+
+    const chapterWordCounts = chapters.map((ch: any, i: number) => ({
+      index: i + 1,
+      title: ch.title,
+      wordCount: ch.wordCount,
+      filename: ch.filename
+    }));
+
+    const sortedDays = Object.entries(dailyStats).sort(([a], [b]) => a.localeCompare(b));
+
+    // 计算连续写作天数
+    let streak = 0;
+    const today = new Date().toISOString().slice(0, 10);
+    const dates = sortedDays.map(([d]) => d);
+    for (let i = dates.length - 1; i >= 0; i--) {
+      const expected = new Date();
+      expected.setDate(expected.getDate() - (dates.length - 1 - i));
+      const expectedStr = expected.toISOString().slice(0, 10);
+      if (dates[i] === expectedStr) {
+        streak++;
+      } else {
+        break;
+      }
+    }
+
+    // 停更天数
+    const lastDate = dates.length > 0 ? dates[dates.length - 1] : "";
+    let daysSinceLastWrite = 0;
+    if (lastDate) {
+      const diff = new Date(today).getTime() - new Date(lastDate).getTime();
+      daysSinceLastWrite = Math.floor(diff / 86400000);
+    }
+
+    const avgChapterLength = chapters.length > 0 ? Math.round(totalWords / chapters.length) : 0;
+    const maxChapter = chapterWordCounts.reduce((a: any, b: any) => (a.wordCount > b.wordCount ? a : b), { wordCount: 0 });
+    const minChapter = chapterWordCounts.reduce((a: any, b: any) => (a.wordCount < b.wordCount ? a : b), { wordCount: 0 });
+
+    return {
+      stats: {
+        totalChapters: chapters.length,
+        totalWords,
+        avgChapterLength,
+        maxChapterWordCount: maxChapter.wordCount,
+        maxChapterTitle: maxChapter.title,
+        minChapterWordCount: minChapter.wordCount,
+        minChapterTitle: minChapter.title,
+        streak,
+        daysSinceLastWrite,
+        lastWriteDate: lastDate,
+        dailyBreakdown: sortedDays.map(([date, data]) => ({
+          date,
+          words: data.words,
+          chapters: data.count
+        })),
+        chapterWordCounts,
+        // 累积字数趋势
+        cumulativeWords: (() => {
+          let cum = 0;
+          return chapterWordCounts.map((ch: any) => {
+            cum += ch.wordCount;
+            return { index: ch.index, title: ch.title, words: cum };
+          });
+        })()
+      }
+    };
+  });
 }
+
 
