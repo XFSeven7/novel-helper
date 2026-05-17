@@ -40,6 +40,9 @@ import { GlobalInfoPanel, type GlobalTabId } from "./components/GlobalInfo/Globa
 import { InspirationTab } from "./components/inspiration/InspirationTab";
 import { getFullscreenElement } from "./components/layout/fullscreen";
 import { TopBar } from "./components/layout/TopBar";
+import { SettingsPage, type SettingsTabId } from "./components/settings/SettingsPage";
+import { SettingsModelsPanel } from "./components/settings/SettingsModelsPanel";
+import { SettingsDataDirPanel } from "./components/settings/SettingsDataDirPanel";
 import { BookShelfNav } from "./components/nav/BookShelfNav";
 import { ChapterNav } from "./components/nav/ChapterNav";
 import { OutlineWorkspace } from "./components/outline/OutlineWorkspace";
@@ -232,7 +235,8 @@ export function App() {
   const [modelConfigEditorId, setModelConfigEditorId] = useState<string | null>(null);
   const [modelEditorDraft, setModelEditorDraft] = useState<ModelConfig | null>(null);
   const [modelTestStatus, setModelTestStatus] = useState<string>("");
-  const [homeCenterTab, setHomeCenterTab] = useState<"welcome" | "model">("welcome");
+  const [homeCenterTab, setHomeCenterTab] = useState<"welcome" | "settings">("welcome");
+  const [settingsTab, setSettingsTab] = useState<SettingsTabId>("models");
   const [navCollapsed, setNavCollapsed] = useLocalStorageState<boolean>({
     key: NAV_COLLAPSED_STORAGE_KEY,
     defaultValue: false,
@@ -1035,7 +1039,7 @@ export function App() {
       .filter((g) => g.items.length);
   }, [okModelGroups, auditModelSearch]);
 
-  async function goModelConfigList() {
+  async function goSettings(tab: SettingsTabId = "models") {
     try {
       await flushSynopsisSave();
       await flushChapterSave();
@@ -1045,7 +1049,8 @@ export function App() {
     setAuditModelPickerOpen(false);
     setAuditModelSearch("");
     setNavHome(true);
-    setHomeCenterTab("model");
+    setHomeCenterTab("settings");
+    setSettingsTab(tab);
     setActiveBook("");
     setSelectedChapter(null);
     setSelectedCard(null);
@@ -2013,7 +2018,7 @@ export function App() {
   async function onAuditSelectedChapter() {
     if (!activeBook || !selectedChapter) return;
     if (!okModelConfigs.length) {
-      setStatus("没有可用模型:请先在「模型配置」里测试连接,连接成功后再分析。");
+      setStatus("没有可用模型:请先在「设置」中配置模型并测试连接,连接成功后再分析。");
       return;
     }
 
@@ -2159,7 +2164,7 @@ export function App() {
   async function onPolishSelectedChapter() {
     if (!activeBook || !selectedChapter) return;
     if (!okModelConfigs.length) {
-      setStatus("没有可用模型:请先在「模型配置」里测试连接,连接成功后再润色。");
+      setStatus("没有可用模型:请先在「设置」中配置模型并测试连接,连接成功后再润色。");
       return;
     }
     setPolishBusy(true);
@@ -2233,7 +2238,7 @@ export function App() {
   async function onExpandWithTargetWords(targetWords: number, extraContext: string) {
     if (!activeBook || !selectedChapter) return;
     if (!okModelConfigs.length) {
-      setStatus("没有可用模型:请先在「模型配置」里测试连接,连接成功后再扩写。");
+      setStatus("没有可用模型:请先在「设置」中配置模型并测试连接,连接成功后再扩写。");
       return;
     }
     setExpandBusy(true);
@@ -2492,7 +2497,7 @@ export function App() {
       ...prev,
       configs: prev.configs.map((c) => (c.id === modelEditorDraft.id ? modelEditorDraft : c))
     }));
-    setStatus("已保存模型配置。");
+    setStatus("已保存模型设置。");
   }
 
   async function testModelConfigDraft() {
@@ -2571,6 +2576,7 @@ export function App() {
         fullscreenOn={fullscreenOn}
         onGoHome={goNavHome}
         onFullscreenError={setStatus}
+        onOpenSettings={() => void goSettings("models")}
         navCollapsed={navCollapsed}
         onToggleNav={() => setNavCollapsed((v) => !v)}
         rightCollapsed={rightCollapsed}
@@ -2851,19 +2857,6 @@ export function App() {
             </div>
           )}
 
-          {navHome ? (
-            <div className="navSection navModelConfigSection">
-              <button
-                type="button"
-                className="btnModelConfig"
-                disabled={busy}
-                title="在中间配置模型与 API Key"
-                onClick={() => setHomeCenterTab("model")}
-              >
-                模型配置
-              </button>
-            </div>
-          ) : null}
         </aside>
 
         <div
@@ -2885,7 +2878,9 @@ export function App() {
               <div className="centerTitleRow">
                 {!activeBook ? (
                   <>
-                    <div className="centerTitle">请从书架打开一本书</div>
+                    <div className="centerTitle">
+                      {homeCenterTab === "settings" ? "设置" : "请从书架打开一本书"}
+                    </div>
                     <span className="titleAutosave autosaveHint" />
                   </>
                 ) : showBookOverview ? (
@@ -2996,7 +2991,7 @@ export function App() {
                 <div className="renameHint">当前文件名需在文件夹中手动改名。</div>
               ) : null}
             </div>
-            {!activeBook ? (
+            {!activeBook && homeCenterTab !== "settings" ? (
               <div className="centerMeta muted">打开一本书后可查看书籍信息、简介与章节正文。</div>
             ) : showBookOverview && activeBookMeta ? (
               <div className="centerMeta centerMetaOverview">
@@ -3093,143 +3088,44 @@ export function App() {
             ) : null}
           </div>
           {!activeBook ? (
-            homeCenterTab === "model" ? (
-              <div className="homeModelConfig">
-                <div className="homeModelHeader">
-                  <div className="centerMeta">模型配置</div>
-                </div>
-
-                {modelConfigEditorId && modelEditorDraft ? (
-                  <div className="homeModelEditor">
-                    <div className="row">
-                      <button
-                        type="button"
-                        className="btnBack"
-                        onClick={() => {
-                          setModelConfigEditorId(null);
-                          setModelEditorDraft(null);
-                          setModelTestStatus("");
-                        }}
-                        disabled={busy}
-                      >
-                        返回列表
-                      </button>
-                      <button
-                        type="button"
-                        className="btnSort"
-                        onClick={() => {
-                          setModelState((prev) => ({ ...prev, activeId: modelEditorDraft.id }));
-                          setStatus("已设为当前模型配置。");
-                        }}
-                        disabled={busy}
-                      >
-                        设为当前
-                      </button>
-                    </div>
-
-                    <div className="modelField">
-                      <div className="navSubtitle">名称</div>
-                      <input
-                        value={modelEditorDraft.label}
-                        onChange={(e) => setModelEditorDraft({ ...modelEditorDraft, label: e.target.value })}
-                        disabled={busy}
-                      />
-                    </div>
-                    <div className="modelField">
-                      <div className="navSubtitle">API Key</div>
-                      <input
-                        value={modelEditorDraft.apiKey}
-                        onChange={(e) => setModelEditorDraft({ ...modelEditorDraft, apiKey: e.target.value })}
-                        placeholder="可留空(如 Ollama)"
-                        disabled={busy}
-                      />
-                    </div>
-                    <div className="modelField">
-                      <div className="navSubtitle">测试地址</div>
-                      <input
-                        value={modelEditorDraft.testUrl}
-                        onChange={(e) => setModelEditorDraft({ ...modelEditorDraft, testUrl: e.target.value })}
-                        placeholder="例如 https://api.openai.com/v1/models"
-                        disabled={busy}
-                      />
-                    </div>
-                    <div className="modelField">
-                      <div className="navSubtitle">模型名(可选)</div>
-                      <input
-                        value={modelEditorDraft.model ?? ""}
-                        onChange={(e) => setModelEditorDraft({ ...modelEditorDraft, model: e.target.value })}
-                        placeholder="例如 gpt-4.1-mini / deepseek-chat / gemini-1.5-flash"
-                        disabled={busy}
-                      />
-                    </div>
-                    {modelEditorDraft.provider === "custom" ? (
-                      <div className="modelField">
-                        <div className="navSubtitle">额外 Headers(JSON,可选)</div>
-                        <textarea
-                          className="modelHeadersTextarea"
-                          value={modelEditorDraft.extraHeadersJson ?? ""}
-                          onChange={(e) =>
-                            setModelEditorDraft({ ...modelEditorDraft, extraHeadersJson: e.target.value })
-                          }
-                          placeholder='例如 {"X-My-Header":"123"}'
-                          disabled={busy}
-                          rows={3}
-                        />
-                      </div>
-                    ) : null}
-
-                    <div className="row">
-                      <button type="button" className="btnSort" onClick={() => void testModelConfigDraft()} disabled={busy}>
-                        测试连接
-                      </button>
-                      <button
-                        type="button"
-                        className="btnModalPrimary"
-                        onClick={() => saveModelConfigDraft()}
-                        disabled={busy || !modelEditorDraft.label.trim()}
-                      >
-                        保存
-                      </button>
-                    </div>
-                    {modelTestStatus ? <div className="empty">{modelTestStatus}</div> : null}
-                  </div>
-                ) : (
-                  <div className="homeModelList">
-                    <div className="modelProviderGrid">
-                      {BUILTIN_MODEL_PROVIDERS.map((p) => {
-                        const c = modelConfigs.find((x) => x.provider === p.id) ?? defaultConfigFor(p.id);
-                        const configured =
-                          p.id === "ollama"
-                            ? Boolean(c.baseUrl?.trim())
-                            : p.id === "custom"
-                              ? Boolean(c.testUrl?.trim() || c.baseUrl?.trim())
-                              : Boolean(c.apiKey?.trim());
-                        const statusText = c.lastTestOk ? "已连接" : configured ? "已配置" : "未配置";
-                        return (
-                          <button
-                            key={p.id}
-                            type="button"
-                            className={`modelProviderCard ${c.id === activeModelId ? "active" : ""}`}
-                            onClick={() => openModelConfigEditor(c.id)}
-                            disabled={busy}
-                            title="点击配置"
-                          >
-                            <div className="modelProviderTop">
-                              <div className="modelProviderName">{p.label}</div>
-                              <span
-                                className={`modelProviderDot ${
-                                  c.lastTestOk ? "ok" : configured ? "warn" : "off"
-                                }`}
-                              />
-                            </div>
-                            <div className="modelProviderStatus">{statusText}</div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
+            homeCenterTab === "settings" ? (
+              <SettingsPage
+                tab={settingsTab}
+                onTabChange={setSettingsTab}
+                modelsPanel={
+                  <SettingsModelsPanel
+                    busy={busy}
+                    modelConfigs={modelConfigs}
+                    activeModelId={activeModelId}
+                    modelConfigEditorId={modelConfigEditorId}
+                    modelEditorDraft={modelEditorDraft}
+                    modelTestStatus={modelTestStatus}
+                    setModelConfigEditorId={setModelConfigEditorId}
+                    setModelEditorDraft={setModelEditorDraft}
+                    setModelTestStatus={setModelTestStatus}
+                    setModelState={setModelState}
+                    openModelConfigEditor={openModelConfigEditor}
+                    testModelConfigDraft={() => void testModelConfigDraft()}
+                    saveModelConfigDraft={saveModelConfigDraft}
+                    setStatus={setStatus}
+                  />
+                }
+                dataDirPanel={
+                  <SettingsDataDirPanel
+                    busy={busy}
+                    onStatus={setStatus}
+                    onDataDirChanged={async () => {
+                      await refreshBooks();
+                      setActiveBook("");
+                      setSelectedChapter(null);
+                      setSelectedCard(null);
+                      setChapters([]);
+                      setStoryFiles([]);
+                      setCharFiles([]);
+                    }}
+                  />
+                }
+              />
             ) : (
               <div className="empty centerBodyHint">从左侧书架选择一本书开始。</div>
             )
@@ -3336,7 +3232,7 @@ export function App() {
           setAuditModelSearch={setAuditModelSearch}
           okModelGroupsFiltered={okModelGroupsFiltered}
           setModelState={setModelState}
-          onGoModelConfigList={() => void goModelConfigList()}
+          onGoModelConfigList={() => void goSettings("models")}
           writingPack={writingPack}
           writingPackBusy={writingPackBusy}
           writingPackErr={writingPackErr}

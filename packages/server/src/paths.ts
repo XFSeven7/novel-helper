@@ -1,14 +1,9 @@
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { resolveDataDirWithSource } from "./appConfig.js";
+
+export { repoRoot, appConfigPath } from "./appConfig.js";
 
 export function resolveDataDir(explicit?: string) {
-  // 默认写到仓库根目录下，方便你直接看到生成的文件；也可以用 env 覆盖
-  const base = explicit?.trim() || process.env.NOVEL_HELPER_DATA_DIR?.trim() || "";
-  if (base) return path.resolve(base);
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const repoRoot = path.resolve(here, "..", "..", "..");
-  // 你要求的结构：book/<bookSlug>/chapters + story/*
-  return path.resolve(repoRoot, "book");
+  return resolveDataDirWithSource(explicit).effectiveDataDir;
 }
 
 export function safeSlug(input: string) {
@@ -20,4 +15,3 @@ export function safeSlug(input: string) {
     .replace(/-+/g, "-")
     .replace(/^[-_]+|[-_]+$/g, "");
 }
-

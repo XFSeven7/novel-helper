@@ -95,7 +95,7 @@ export function RightPanel({
           onClick={() => setAuditModelPickerOpen((v) => !v)}
           title={
             okModelConfigs.length === 0
-              ? "暂无连接成功的模型,请先去「模型配置」里测试连接"
+              ? "暂无连接成功的模型,请先在「设置」中配置模型并测试连接"
               : "选择具体模型(仅显示连接成功的)"
           }
         >
@@ -159,7 +159,7 @@ export function RightPanel({
               )}
             </div>
             <button type="button" className="auditModelManage" onClick={() => void onGoModelConfigList()}>
-              模型配置
+              设置
             </button>
           </div>
         ) : null}
@@ -354,7 +354,7 @@ export function RightPanel({
                       className="btnSquare"
                       disabled={busy || auditBusy || !okModelConfigs.length}
                       onClick={() => void onAuditSelectedChapter()}
-                      title={!okModelConfigs.length ? "请先在「模型配置」里测试连接" : "重新分析本章以同步内容整理"}
+                      title={!okModelConfigs.length ? "请先在「设置」中配置模型并测试连接" : "重新分析本章以同步内容整理"}
                     >
                       重新分析
                     </button>
@@ -398,7 +398,7 @@ export function RightPanel({
                           auditRunningChapter.bookSlug === activeBook &&
                           auditRunningChapter.filename !== selectedChapter.filename)
                       }
-                      title={!okModelConfigs.length ? "请先在「模型配置」里测试连接" : "重新调用模型分析本章"}
+                      title={!okModelConfigs.length ? "请先在「设置」中配置模型并测试连接" : "重新调用模型分析本章"}
                     >
                       重新分析
                     </button>
@@ -530,7 +530,7 @@ export function RightPanel({
                         onClick={() => void onAuditSelectedChapter()}
                         title={
                           !okModelConfigs.length
-                            ? "请先在「模型配置」里测试连接,连接成功后再分析"
+                            ? "请先在「设置」中配置模型并测试连接,连接成功后再分析"
                             : auditRunningChapter &&
                                 activeBook &&
                                 selectedChapter &&
@@ -544,7 +544,7 @@ export function RightPanel({
                         开始分析
                       </button>
                       {!okModelConfigs.length ? (
-                        <div className="muted auditStreamEmptyHint">暂无连接成功的模型,请先到「模型配置」测试连接。</div>
+                        <div className="muted auditStreamEmptyHint">暂无连接成功的模型,请先在「设置」中配置模型并测试连接。</div>
                       ) : (
                         <div className="muted auditStreamEmptyHint">使用右侧所选模型梳理本章要点。</div>
                       )}
@@ -602,7 +602,7 @@ export function RightPanel({
                           className="btnSquare"
                           disabled={busy || auditBusy || !okModelConfigs.length}
                           onClick={() => void onAuditSelectedChapter()}
-                          title={!okModelConfigs.length ? "请先在「模型配置」里测试连接" : "重新分析本章以同步内容整理"}
+                          title={!okModelConfigs.length ? "请先在「设置」中配置模型并测试连接" : "重新分析本章以同步内容整理"}
                         >
                           重新分析
                         </button>

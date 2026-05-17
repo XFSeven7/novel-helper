@@ -183,6 +183,116 @@ code {
   font-size: 12px;
 }
 
+.topbarTagline {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+  margin-left: 12px;
+}
+
+.settingsPage {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settingsDataDirPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 720px;
+}
+
+.settingsDataDirHint {
+  margin: 0;
+  line-height: 1.5;
+}
+
+.settingsDataDirRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.settingsDataDirPath {
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.settingsDataDirSource {
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 6px;
+  color: var(--muted);
+}
+
+.settingsDataDirContent {
+  margin-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settingsDataDirContent .modelField {
+  margin-bottom: 0;
+}
+
+.settingsDataDirContent .navSubtitle {
+  margin: 0 0 6px;
+}
+
+.settingsDataDirInputRow {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.settingsDataDirInputRow input {
+  flex: 1;
+  min-width: 0;
+}
+
+.settingsDataDirPickBtn.btnSort {
+  flex-shrink: 0;
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0 14px;
+  font-size: inherit;
+  line-height: 1.2;
+  border-radius: 0;
+}
+
+.settingsDataDirPanel input[readonly] {
+  cursor: default;
+  color: color-mix(in srgb, var(--text) 88%, var(--muted));
+}
+
+.settingsDataDirMigratePath {
+  margin: 0 0 8px;
+  line-height: 1.45;
+  word-break: break-all;
+}
+
+.settingsDataDirMigratePath code {
+  display: block;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.settingsDataDirMigrateLabel {
+  font-size: 12px;
+}
+
+.settingsDataDirMigrateCheck {
+  margin: 12px 0 4px;
+}
+
 .topbarRight {
   margin-left: auto;
   display: flex;
@@ -193,7 +303,8 @@ code {
 
 .btnFullscreenToggle,
 .btnThemeToggle,
-.btnGithubLink {
+.btnGithubLink,
+.btnSettingsToggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -211,7 +322,8 @@ code {
 
 .btnFullscreenToggle:hover,
 .btnThemeToggle:hover,
-.btnGithubLink:hover {
+.btnGithubLink:hover,
+.btnSettingsToggle:hover {
   background: transparent;
   color: var(--text);
 }
@@ -224,7 +336,8 @@ code {
 
 .btnFullscreenToggle:focus-visible,
 .btnThemeToggle:focus-visible,
-.btnGithubLink:focus-visible {
+.btnGithubLink:focus-visible,
+.btnSettingsToggle:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent, #a78bfa) 55%, transparent);
   outline-offset: 2px;
 }

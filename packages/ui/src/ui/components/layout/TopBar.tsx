@@ -1,6 +1,13 @@
 import React from "react";
 import { GITHUB_REPO_URL, type ThemePreference } from "../../constants";
-import { IconFullscreenEnter, IconFullscreenExit, IconGitHub, IconThemeMoon, IconThemeSun } from "./LayoutIcons";
+import {
+  IconFullscreenEnter,
+  IconFullscreenExit,
+  IconGitHub,
+  IconSettings,
+  IconThemeMoon,
+  IconThemeSun
+} from "./LayoutIcons";
 import { toggleDocumentFullscreen } from "./fullscreen";
 
 export type TopBarProps = {
@@ -10,6 +17,7 @@ export type TopBarProps = {
   fullscreenOn: boolean;
   onGoHome: () => void;
   onFullscreenError: (message: string) => void;
+  onOpenSettings: () => void;
   navCollapsed: boolean;
   onToggleNav: () => void;
   rightCollapsed: boolean;
@@ -23,6 +31,7 @@ export function TopBar({
   fullscreenOn,
   onGoHome,
   onFullscreenError,
+  onOpenSettings,
   navCollapsed,
   onToggleNav,
   rightCollapsed,
@@ -33,9 +42,7 @@ export function TopBar({
       <button type="button" className="brand brandButton" onClick={() => void onGoHome()} title="返回书架">
         novel-helper
       </button>
-      <div className="hint">
-        默认写入 <code>book/</code>(可用 <code>NOVEL_HELPER_DATA_DIR</code> 指定根目录)
-      </div>
+      <span className="topbarTagline">您的智能小说助理</span>
       <div className="topbarRight">
         <div className="layoutSideToggles" role="group" aria-label="侧栏布局">
           <button
@@ -81,6 +88,16 @@ export function TopBar({
         >
           <IconGitHub />
         </a>
+        <button
+          type="button"
+          className="btnSettingsToggle"
+          onClick={onOpenSettings}
+          disabled={busy}
+          title="设置"
+          aria-label="设置"
+        >
+          <IconSettings />
+        </button>
         <button
           type="button"
           className={`btnFullscreenToggle ${fullscreenOn ? "active" : ""}`}

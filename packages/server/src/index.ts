@@ -53,6 +53,28 @@ import {
   InspirationIndex,
   IdeaItem
 } from "./fsStore.js";
+import {
+  readAppConfigFile,
+  writeAppConfigFile,
+  resolveDataDirWithSource,
+  validateAndNormalizeDataDir,
+  type AppSettingsResponse
+} from "./appConfig.js";
+import { pickDataDirectory } from "./nativeFolderPicker.js";
+import {
+  clearDataDirCaches,
+  getDataDir,
+  initDataDir,
+  registerDataDirCacheClear,
+  setDataDir
+} from "./dataDirContext.js";
+import {
+  assertDirEmpty,
+  cleanupDirBestEffort,
+  copyDataDirContents,
+  deleteDataDirTree,
+  verifyMigratedData
+} from "./dataDirMigrate.js";
 import { resolveDataDir, safeSlug } from "./paths.js";
 import { computeBookStats } from "./bookStats.js";
 import {
@@ -93,7 +115,7 @@ await app.register(cors, {
 });
 
 const PORT = Number(process.env.PORT || 3177);
-const dataDir = resolveDataDir(process.env.NOVEL_HELPER_DATA_DIR);
+initDataDir(resolveDataDir(process.env.NOVEL_HELPER_DATA_DIR));
 
 type ModelProviderId = "openai" | "deepseek" | "gemini" | "qwen" | "ollama" | "custom";
 type ModelConfig = {
@@ -131,9 +153,10 @@ type BookSearchCache = {
   docsByPath: Map<string, CachedDoc>;
 };
 const searchCacheByBook = new Map<string, BookSearchCache>();
+registerDataDirCacheClear(() => searchCacheByBook.clear());
 
 function settingsDir() {
-  return path.join(dataDir, "_settings");
+  return path.join(getDataDir(), "_settings");
 }
 
 async function readModelSettings(): Promise<{ configs: ModelConfig[]; activeId: string | null }> {
@@ -607,7 +630,7 @@ function isWholeWordOk(line: string, start: number, end: number): boolean {
 async function buildOrRefreshBookSearchCache(slug: string): Promise<BookSearchCache> {
   const key = safeSlug(slug);
   const cached = searchCacheByBook.get(key) || { updatedAtMs: 0, docsByPath: new Map<string, CachedDoc>() };
-  const bookDir = path.join(dataDir, key);
+  const bookDir = path.join(getDataDir(), key);
 
   const candidates: Array<{ kind: CachedDoc["kind"]; abs: string; rel: string }> = [];
   // 仅搜索章节正文（不包含 story / meta/audit）
@@ -1055,7 +1078,7 @@ async function updateTimelineIndexAfterAudit(input: {
   ledger: any;
 }): Promise<TimelineIndex> {
   const { cfg, slug, filename, run, ledger } = input;
-  const idx = normalizeTimelineIndex(await readTimelineIndex(dataDir, slug));
+  const idx = normalizeTimelineIndex(await readTimelineIndex(getDataDir(), slug));
   const n = parseChapterNumberFromFilename(filename);
   const title = String(run?.chapter?.title || filename.replace(/\.md$/, ""));
   const auditedAt = String(run?.chapter?.auditedAt || new Date().toISOString());
@@ -1097,8 +1120,8 @@ async function updateTimelineIndexAfterAudit(input: {
       .slice(0, 3);
   }
   idx.updatedAt = auditedAt;
-  await writeTimelineIndex(dataDir, slug, idx);
-  await writeStoryTimelineMarkdownFromIndex(dataDir, slug, idx);
+  await writeTimelineIndex(getDataDir(), slug, idx);
+  await writeStoryTimelineMarkdownFromIndex(getDataDir(), slug, idx);
   return idx;
 }
 
@@ -1123,7 +1146,7 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
 
   // 绑定分析到“正文快照”（用于前端 dirty 判断）
   try {
-    const raw = await readChapter(dataDir, slug, filename);
+    const raw = await readChapter(getDataDir(), slug, filename);
     const normalized = String(raw || "").replace(/\r/g, "");
     const hash = crypto.createHash("sha1").update(normalized, "utf8").digest("hex");
     run.source = { contentHash: hash, contentLength: normalized.length };
@@ -1133,9 +1156,9 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
     // ignore: 不阻断审计落盘
   }
 
-  await writeAuditRun(dataDir, slug, filename, run);
+  await writeAuditRun(getDataDir(), slug, filename, run);
 
-  const idx = await readAuditCharactersIndex(dataDir, slug);
+  const idx = await readAuditCharactersIndex(getDataDir(), slug);
   const auditedAtIso = String(run?.chapter?.auditedAt || new Date().toISOString());
   const normStr = (v: any) => (typeof v === "string" ? v.trim() : "");
   const uniqStrs = (arr: any) =>
@@ -1312,10 +1335,10 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
   );
   idx.updatedAt = auditedAtIso;
   (idx as any).version = 2;
-  await writeAuditCharactersIndex(dataDir, slug, idx);
+  await writeAuditCharactersIndex(getDataDir(), slug, idx);
 
   // 自动抽取地点：全书共享 placesIndex.json
-  const placesIdx = await readAuditPlacesIndex(dataDir, slug);
+  const placesIdx = await readAuditPlacesIndex(getDataDir(), slug);
   const placeExisting = new Map<string, any>(
     (placesIdx.places || [])
       .map((p: any) => ({
@@ -1378,10 +1401,10 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
   placesIdx.places = [...placeExisting.values()].sort((a: any, b: any) => String(a.name).localeCompare(String(b.name), "zh-Hans-CN"));
   if (!Array.isArray(placesIdx.hiddenNames)) placesIdx.hiddenNames = [];
   placesIdx.updatedAt = run.chapter.auditedAt;
-  await writeAuditPlacesIndex(dataDir, slug, placesIdx);
+  await writeAuditPlacesIndex(getDataDir(), slug, placesIdx);
 
   // 自动抽取组织：全书共享 orgsIndex.json
-  const orgsIdx = await readAuditOrgsIndex(dataDir, slug);
+  const orgsIdx = await readAuditOrgsIndex(getDataDir(), slug);
   const orgExisting = new Map<string, any>(
     (orgsIdx.orgs || [])
       .map((o: any) => ({ ...o, name: String(o?.name || "").trim() }))
@@ -1432,18 +1455,18 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
   );
   if (!Array.isArray(orgsIdx.hiddenNames)) orgsIdx.hiddenNames = [];
   orgsIdx.updatedAt = run.chapter.auditedAt;
-  await writeAuditOrgsIndex(dataDir, slug, orgsIdx);
+  await writeAuditOrgsIndex(getDataDir(), slug, orgsIdx);
 
-  const ledger = await readAuditLedger(dataDir, slug);
+  const ledger = await readAuditLedger(getDataDir(), slug);
   ledger.updatedAt = run.chapter.auditedAt;
   ledger.openLoops = ledger.openLoops || [];
   ledger.closedLoops = ledger.closedLoops || [];
   if (run.ledgerUpdates?.openLoops?.length) ledger.openLoops.push(...run.ledgerUpdates.openLoops);
   if (run.ledgerUpdates?.closedLoops?.length) ledger.closedLoops.push(...run.ledgerUpdates.closedLoops);
-  await writeAuditLedger(dataDir, slug, ledger);
+  await writeAuditLedger(getDataDir(), slug, ledger);
 
   // 自动沉淀伏笔：全书共享 foreshadowsIndex.json（来源 ledgerUpdates）
-  const foIdx = await readAuditForeshadowsIndex(dataDir, slug);
+  const foIdx = await readAuditForeshadowsIndex(getDataDir(), slug);
   const byId = new Map<string, any>(
     (foIdx.foreshadows || [])
       .map((f: any) => ({ ...f, id: String(f?.id || "").trim() }))
@@ -1527,7 +1550,7 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
     .sort((a: any, b: any) => String(a.title || "").localeCompare(String(b.title || ""), "zh-Hans-CN"));
   if (!Array.isArray(foIdx.hiddenIds)) foIdx.hiddenIds = [];
   foIdx.updatedAt = now;
-  await writeAuditForeshadowsIndex(dataDir, slug, foIdx);
+  await writeAuditForeshadowsIndex(getDataDir(), slug, foIdx);
 
   return run;
 }
@@ -1553,12 +1576,12 @@ async function performAuditWithAiSdk(input: {
   const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
   if (!cfg) throw new Error("未配置模型");
 
-  const chapter = await readChapter(dataDir, slug, filename);
-  const tl = normalizeTimelineIndex(await readTimelineIndex(dataDir, slug).catch(() => ({}) as any));
+  const chapter = await readChapter(getDataDir(), slug, filename);
+  const tl = normalizeTimelineIndex(await readTimelineIndex(getDataDir(), slug).catch(() => ({}) as any));
   const chapNo = parseChapterNumberFromFilename(filename);
   const memoryContext = buildMemoryContextFromTimelineBeforeChapter(tl, Number.isFinite(chapNo) ? chapNo : null);
-  const knownCharacters = await listKnownCharacterNames(dataDir, slug);
-  const knownPlaces = await listKnownPlaceNames(dataDir, slug);
+  const knownCharacters = await listKnownCharacterNames(getDataDir(), slug);
+  const knownPlaces = await listKnownPlaceNames(getDataDir(), slug);
 
   const unifiedPrompt = buildUnifiedAuditPrompt({
     chapterTitle: filename.replace(/\.md$/, ""),
@@ -1579,7 +1602,7 @@ async function performAuditWithAiSdk(input: {
   const jsonText = stripJsonFence(rawJson);
   emitPhase(3, "解析并保存审计结果");
   const run = await finalizeAuditFromJsonText(slug, filename, jsonText);
-  const ledger = await readAuditLedger(dataDir, slug);
+  const ledger = await readAuditLedger(getDataDir(), slug);
   // 每次分析后自动更新时间线索引与推荐压缩区间
   emitPhase(4, "更新全书记忆（时间线/推荐压缩）");
   await updateTimelineIndexAfterAudit({ cfg, slug, filename, run, ledger }).catch(() => {});
@@ -1621,7 +1644,7 @@ async function performPolishWithAiSdk(input: {
 
 async function updateProgressIndexAfterAudit(input: { cfg: ModelConfig; slug: string; filename: string; run: any }) {
   const { cfg, slug, filename, run } = input;
-  const prev = await readAuditProgressIndex(dataDir, slug);
+  const prev = await readAuditProgressIndex(getDataDir(), slug);
   const chapNo = parseChapterNumberFromFilename(filename);
   const prompt = buildProgressIndexPrompt({
     chapter: {
@@ -1730,7 +1753,7 @@ async function updateProgressIndexAfterAudit(input: { cfg: ModelConfig; slug: st
     items: keep
   };
 
-  await writeAuditProgressIndex(dataDir, slug, next as any);
+  await writeAuditProgressIndex(getDataDir(), slug, next as any);
 }
 
 async function performExpandWithAiSdk(input: {
@@ -1748,7 +1771,7 @@ async function performExpandWithAiSdk(input: {
   const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
   if (!cfg) throw new Error("未配置模型");
 
-  const idx = normalizeTimelineIndex(await readTimelineIndex(dataDir, slug));
+  const idx = normalizeTimelineIndex(await readTimelineIndex(getDataDir(), slug));
   const compressed = (idx.compressedRanges || [])
     .slice()
     .sort((a, b) => (a.startChapter ?? 0) - (b.startChapter ?? 0))
@@ -1783,8 +1806,8 @@ async function performAudit(slug: string, filename: string, modelConfigId: strin
   const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
   if (!cfg) throw new Error("未配置模型");
 
-  const chapter = await readChapter(dataDir, slug, filename);
-  const { charFiles } = await listStoryFiles(dataDir, slug);
+  const chapter = await readChapter(getDataDir(), slug, filename);
+  const { charFiles } = await listStoryFiles(getDataDir(), slug);
   const knownCharacters = charFiles.map((c) => c.title);
 
   const prompt = buildAuditPrompt({
@@ -1800,7 +1823,7 @@ async function performAudit(slug: string, filename: string, modelConfigId: strin
 }
 
 app.get("/api/health", async () => {
-  return { ok: true, dataDir };
+  return { ok: true, dataDir: getDataDir() };
 });
 
 app.get("/api/settings/model-configs", async () => {
@@ -1830,9 +1853,100 @@ app.put("/api/settings/model-configs", async (req) => {
   return { ok: true };
 });
 
+app.get("/api/settings/app", async (): Promise<AppSettingsResponse> => {
+  const base = resolveDataDirWithSource();
+  const file = await readAppConfigFile();
+  const fileDataDir =
+    typeof file.dataDir === "string" && file.dataDir.trim() ? path.resolve(file.dataDir.trim()) : null;
+  return {
+    ...base,
+    fileDataDir: base.envLocked ? null : fileDataDir
+  };
+});
+
+app.put("/api/settings/app", async (req, reply) => {
+  const current = resolveDataDirWithSource();
+  if (current.envLocked) {
+    return reply
+      .code(403)
+      .send({ error: "已通过环境变量 NOVEL_HELPER_DATA_DIR 指定目录，无法在应用内修改。" });
+  }
+  const body = z
+    .object({
+      dataDir: z.string().min(1),
+      migrate: z.boolean().optional(),
+      deleteSource: z.boolean().optional()
+    })
+    .parse((req as any).body);
+  const source = getDataDir();
+  try {
+    const normalized = await validateAndNormalizeDataDir(body.dataDir);
+    if (path.resolve(normalized) === path.resolve(source)) {
+      return reply.code(400).send({ error: "新路径与当前目录相同。" });
+    }
+    const migrate = body.migrate === true;
+    const deleteSource = body.deleteSource === true;
+
+    if (migrate) {
+      await assertDirEmpty(normalized);
+      try {
+        await copyDataDirContents(source, normalized);
+        await verifyMigratedData(source, normalized);
+      } catch (e) {
+        await cleanupDirBestEffort(normalized);
+        throw e;
+      }
+    }
+
+    await writeAppConfigFile(normalized);
+    setDataDir(normalized);
+    clearDataDirCaches();
+
+    let sourceDeleted = false;
+    let deleteSourceWarning: string | undefined;
+    if (migrate && deleteSource) {
+      try {
+        await deleteDataDirTree(source);
+        sourceDeleted = true;
+      } catch (e: any) {
+        deleteSourceWarning = e?.message || String(e);
+      }
+    }
+
+    const books = await listNovels(getDataDir());
+    return {
+      ok: true,
+      effectiveDataDir: getDataDir(),
+      migrated: migrate,
+      bookCount: books.length,
+      sourceDeleted: migrate && deleteSource ? sourceDeleted : undefined,
+      deleteSourceWarning
+    };
+  } catch (e: any) {
+    return reply.code(400).send({ error: e?.message || String(e) });
+  }
+});
+
+app.post("/api/settings/app/pick-directory", async (req, reply) => {
+  const current = resolveDataDirWithSource();
+  if (current.envLocked) {
+    return reply
+      .code(403)
+      .send({ error: "已通过环境变量 NOVEL_HELPER_DATA_DIR 指定目录，无法在应用内修改。" });
+  }
+  try {
+    const result = await pickDataDirectory("选择写作数据保存目录");
+    if (result.cancelled) return { cancelled: true };
+    const normalized = await validateAndNormalizeDataDir(result.path);
+    return { cancelled: false, path: normalized };
+  } catch (e: any) {
+    return reply.code(500).send({ error: e?.message || String(e) });
+  }
+});
+
 // 新路由：books（与目录结构一致）
 app.get("/api/books", async () => {
-  const novels = await listNovels(dataDir);
+  const novels = await listNovels(getDataDir());
   return { books: novels };
 });
 
@@ -1847,7 +1961,7 @@ app.post("/api/books", async (req, reply) => {
   if (!slug) return reply.code(400).send({ message: "Invalid slug/title" });
 
   try {
-    const meta = await createNovel(dataDir, slug, body.title, body.synopsis);
+    const meta = await createNovel(getDataDir(), slug, body.title, body.synopsis);
     return { book: novelSummaryFromMeta(meta, 0, []) };
   } catch (e: any) {
     return reply.code(409).send({ message: e?.message || "Conflict" });
@@ -1857,7 +1971,7 @@ app.post("/api/books", async (req, reply) => {
 app.get("/api/books/:slug", async (req, reply) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const books = await listNovels(dataDir);
+  const books = await listNovels(getDataDir());
   const book = books.find((b: any) => String(b?.slug || "").trim() === params.slug);
   if (!book) return reply.code(404).send({ message: "Not found" });
   return { book };
@@ -1874,10 +1988,10 @@ app.patch("/api/books/:slug", async (req, reply) => {
   try {
     let book: any = null;
     if (body.synopsis !== undefined) {
-      book = await updateNovelSynopsis(dataDir, params.slug, body.synopsis);
+      book = await updateNovelSynopsis(getDataDir(), params.slug, body.synopsis);
     }
     if (body.completed !== undefined) {
-      book = await updateNovelCompleted(dataDir, params.slug, body.completed);
+      book = await updateNovelCompleted(getDataDir(), params.slug, body.completed);
     }
     if (!book) return reply.code(400).send({ message: "No-op" });
     return { book };
@@ -1890,7 +2004,7 @@ app.delete("/api/books/:slug", async (req, reply) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
   try {
-    await deleteNovel(dataDir, params.slug);
+    await deleteNovel(getDataDir(), params.slug);
     return { ok: true };
   } catch {
     return reply.code(404).send({ message: "Not found" });
@@ -1901,7 +2015,7 @@ app.post("/api/books/:slug/restore", async (req, reply) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
   try {
-    await restoreNovel(dataDir, params.slug);
+    await restoreNovel(getDataDir(), params.slug);
     return { ok: true };
   } catch {
     return reply.code(404).send({ message: "Not found" });
@@ -1911,7 +2025,7 @@ app.post("/api/books/:slug/restore", async (req, reply) => {
 app.get("/api/books/:slug/chapters", async (req) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const chapters = await listChapters(dataDir, params.slug);
+  const chapters = await listChapters(getDataDir(), params.slug);
   return { chapters };
 });
 
@@ -1924,9 +2038,9 @@ app.post("/api/books/:slug/chapters", async (req) => {
   });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const chapter = await createChapter(dataDir, params.slug, body.title, body.content, body.chapterIndex);
-  const allChapters = await listChapters(dataDir, params.slug);
-  await ensureOutlineIndex(dataDir, params.slug, allChapters);
+  const chapter = await createChapter(getDataDir(), params.slug, body.title, body.content, body.chapterIndex);
+  const allChapters = await listChapters(getDataDir(), params.slug);
+  await ensureOutlineIndex(getDataDir(), params.slug, allChapters);
   return { chapter };
 });
 
@@ -1937,7 +2051,7 @@ app.get("/api/books/:slug/chapters/:filename", async (req, reply) => {
   });
   const params = paramsSchema.parse((req as any).params);
   try {
-    const content = await readChapter(dataDir, params.slug, params.filename);
+    const content = await readChapter(getDataDir(), params.slug, params.filename);
     return { content };
   } catch {
     return reply.code(404).send({ message: "Not found" });
@@ -1954,7 +2068,7 @@ app.put("/api/books/:slug/chapters/:filename", async (req) => {
   });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  await updateChapter(dataDir, params.slug, params.filename, body.content);
+  await updateChapter(getDataDir(), params.slug, params.filename, body.content);
   return { ok: true };
 });
 
@@ -1969,7 +2083,7 @@ app.patch("/api/books/:slug/chapters/:filename", async (req, reply) => {
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
   try {
-    const chapter = await renameChapterTitle(dataDir, params.slug, params.filename, body.title);
+    const chapter = await renameChapterTitle(getDataDir(), params.slug, params.filename, body.title);
     return { chapter };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || "Rename failed" });
@@ -1983,9 +2097,9 @@ app.delete("/api/books/:slug/chapters/:filename", async (req, reply) => {
   });
   const params = paramsSchema.parse((req as any).params);
   try {
-    await deleteChapter(dataDir, params.slug, params.filename);
-    const allChapters = await listChapters(dataDir, params.slug);
-    await ensureOutlineIndex(dataDir, params.slug, allChapters);
+    await deleteChapter(getDataDir(), params.slug, params.filename);
+    const allChapters = await listChapters(getDataDir(), params.slug);
+    await ensureOutlineIndex(getDataDir(), params.slug, allChapters);
     return { ok: true };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || "Delete failed" });
@@ -1996,8 +2110,8 @@ app.get("/api/books/:slug/outline", async (req, reply) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
   try {
-    const chapters = await listChapters(dataDir, params.slug);
-    const outline = await ensureOutlineIndex(dataDir, params.slug, chapters);
+    const chapters = await listChapters(getDataDir(), params.slug);
+    const outline = await ensureOutlineIndex(getDataDir(), params.slug, chapters);
     return { outline };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || String(e) });
@@ -2009,12 +2123,12 @@ app.patch("/api/books/:slug/outline", async (req, reply) => {
   const params = paramsSchema.parse((req as any).params);
   const body = (req as any).body;
   try {
-    const chapters = await listChapters(dataDir, params.slug);
+    const chapters = await listChapters(getDataDir(), params.slug);
     const filenames = chapters.map((c) => c.filename);
     const idx = normalizeOutlineIndex(body?.outline ?? body);
     const warnings = validateOutlineAgainstChapters(idx, filenames);
     if (warnings.length) return reply.code(400).send({ message: warnings.join("；") });
-    const saved = await writeOutlineIndex(dataDir, params.slug, idx);
+    const saved = await writeOutlineIndex(getDataDir(), params.slug, idx);
     return { outline: saved };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || String(e) });
@@ -2049,10 +2163,10 @@ app.post("/api/books/:slug/outline/ai", async (req, reply) => {
     const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
     if (!cfg) return reply.code(400).send({ message: "未配置模型" });
 
-    const chapters = await listChapters(dataDir, params.slug);
-    const outline = await ensureOutlineIndex(dataDir, params.slug, chapters);
+    const chapters = await listChapters(getDataDir(), params.slug);
+    const outline = await ensureOutlineIndex(getDataDir(), params.slug, chapters);
     const { preview, prompt, warnings } = await runOutlineAi({
-      dataDir,
+      dataDir: getDataDir(),
       slug: params.slug,
       mode: body.mode as OutlineAiMode,
       outline,
@@ -2080,10 +2194,10 @@ app.post("/api/books/:slug/outline/ai/apply", async (req, reply) => {
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
   try {
-    const chapters = await listChapters(dataDir, params.slug);
+    const chapters = await listChapters(getDataDir(), params.slug);
     const filenames = chapters.map((c) => c.filename);
     const validFilenames = new Set(filenames);
-    const current = await ensureOutlineIndex(dataDir, params.slug, chapters);
+    const current = await ensureOutlineIndex(getDataDir(), params.slug, chapters);
 
     if (body.preview?.report) {
       return reply.code(400).send({ message: "伏笔体检报告不可应用到大纲" });
@@ -2095,7 +2209,7 @@ app.post("/api/books/:slug/outline/ai/apply", async (req, reply) => {
     });
     const valWarnings = validateOutlineAgainstChapters(merged, filenames);
     if (valWarnings.length) return reply.code(400).send({ message: valWarnings.join("；") });
-    const saved = await writeOutlineIndex(dataDir, params.slug, merged);
+    const saved = await writeOutlineIndex(getDataDir(), params.slug, merged);
     return { outline: saved, warnings: [...warnings, ...valWarnings] };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || String(e) });
@@ -2108,7 +2222,7 @@ app.get("/api/books/:slug/stats", async (req, reply) => {
   const params = paramsSchema.parse((req as any).params);
   const query = querySchema.parse((req as any).query ?? {});
   try {
-    const stats = await computeBookStats(dataDir, params.slug, {
+    const stats = await computeBookStats(getDataDir(), params.slug, {
       backfillMtime: query.backfill === "mtime"
     });
     return { stats };
@@ -2120,7 +2234,7 @@ app.get("/api/books/:slug/stats", async (req, reply) => {
 app.get("/api/books/:slug/story", async (req) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const { storyFiles, charFiles } = await listStoryFiles(dataDir, params.slug);
+  const { storyFiles, charFiles } = await listStoryFiles(getDataDir(), params.slug);
   return { storyFiles, charFiles };
 });
 
@@ -2134,7 +2248,7 @@ app.post("/api/books/:slug/story/characters", async (req, reply) => {
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
   try {
-    const out = await createCharacterCard(dataDir, params.slug, body.name, { role: body.role, tags: body.tags });
+    const out = await createCharacterCard(getDataDir(), params.slug, body.name, { role: body.role, tags: body.tags });
     return { character: out };
   } catch (e: any) {
     return reply.code(409).send({ message: e?.message || "Conflict" });
@@ -2147,7 +2261,7 @@ app.get("/api/books/:slug/story/file", async (req, reply) => {
   const params = paramsSchema.parse((req as any).params);
   const query = querySchema.parse((req as any).query);
   try {
-    const content = await readStoryFile(dataDir, params.slug, query.path);
+    const content = await readStoryFile(getDataDir(), params.slug, query.path);
     return { content };
   } catch {
     return reply.code(404).send({ message: "Not found" });
@@ -2159,7 +2273,7 @@ app.put("/api/books/:slug/story/file", async (req) => {
   const bodySchema = z.object({ path: z.string().min(1), content: z.string() });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  await updateStoryFile(dataDir, params.slug, body.path, body.content);
+  await updateStoryFile(getDataDir(), params.slug, body.path, body.content);
   return { ok: true };
 });
 
@@ -2194,11 +2308,11 @@ app.post("/api/books/:slug/story/characters/merge", async (req, reply) => {
     if (!cfg) throw new Error("未配置模型");
 
     // 先读全量内容（失败则不做任何写入）
-    const primaryContent = await readStoryFile(dataDir, params.slug, body.primaryPath);
+    const primaryContent = await readStoryFile(getDataDir(), params.slug, body.primaryPath);
     const primaryTitle = path.basename(body.primaryPath).replace(/\.md$/, "");
     const secondaryCards: Array<{ path: string; title: string; content: string }> = [];
     for (const p of secondary) {
-      const c = await readStoryFile(dataDir, params.slug, p);
+      const c = await readStoryFile(getDataDir(), params.slug, p);
       secondaryCards.push({ path: p, title: path.basename(p).replace(/\.md$/, ""), content: c });
     }
 
@@ -2215,12 +2329,12 @@ app.post("/api/books/:slug/story/characters/merge", async (req, reply) => {
     }
 
     // 先写主卡，成功后再备份搬运次卡
-    await updateStoryFile(dataDir, params.slug, body.primaryPath, mergedTrim.endsWith("\n") ? mergedTrim : `${mergedTrim}\n`);
+    await updateStoryFile(getDataDir(), params.slug, body.primaryPath, mergedTrim.endsWith("\n") ? mergedTrim : `${mergedTrim}\n`);
 
     const now = new Date();
     const stamp = now.toISOString().replace(/[:.]/g, "-");
     const mergedDirRel = "story/characters/_merged";
-    const mergedDirAbs = path.join(dataDir, params.slug, mergedDirRel);
+    const mergedDirAbs = path.join(getDataDir(), params.slug, mergedDirRel);
     await fs.mkdir(mergedDirAbs, { recursive: true });
 
     const exists = async (p: string) => {
@@ -2242,12 +2356,12 @@ app.post("/api/books/:slug/story/characters/merge", async (req, reply) => {
     };
 
     for (const card of secondaryCards) {
-      const srcAbs = path.join(dataDir, params.slug, card.path);
+      const srcAbs = path.join(getDataDir(), params.slug, card.path);
       const destAbs = await allocDest(path.basename(card.path));
       await fs.rename(srcAbs, destAbs);
     }
 
-    const { charFiles } = await listStoryFiles(dataDir, params.slug);
+    const { charFiles } = await listStoryFiles(getDataDir(), params.slug);
     return { ok: true, charFiles };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || String(e) });
@@ -2401,7 +2515,7 @@ app.get("/api/books/:slug/audit/latest", async (req, reply) => {
   const params = paramsSchema.parse((req as any).params);
   const query = querySchema.parse((req as any).query);
   try {
-    const run = await readAuditRun(dataDir, params.slug, query.chapter);
+    const run = await readAuditRun(getDataDir(), params.slug, query.chapter);
     if (!run) return reply.code(404).send({ message: "Not found" });
     return { run };
   } catch {
@@ -2415,7 +2529,7 @@ app.get("/api/books/:slug/audit/analysis", async (req, reply) => {
   const params = paramsSchema.parse((req as any).params);
   const query = querySchema.parse((req as any).query);
   try {
-    const text = await readAuditAnalysisText(dataDir, params.slug, query.chapter);
+    const text = await readAuditAnalysisText(getDataDir(), params.slug, query.chapter);
     return { text };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || String(e) });
@@ -2428,7 +2542,7 @@ app.post("/api/books/:slug/audit/analysis/save", async (req, reply) => {
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
   try {
-    await writeAuditAnalysisText(dataDir, params.slug, body.chapter, body.text || "");
+    await writeAuditAnalysisText(getDataDir(), params.slug, body.chapter, body.text || "");
     return { ok: true };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || String(e) });
@@ -2438,14 +2552,14 @@ app.post("/api/books/:slug/audit/analysis/save", async (req, reply) => {
 app.get("/api/books/:slug/audit/ledger", async (req) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const ledger = await readAuditLedger(dataDir, params.slug);
+  const ledger = await readAuditLedger(getDataDir(), params.slug);
   return { ledger };
 });
 
 app.get("/api/books/:slug/audit/characters", async (req) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const idx = await readAuditCharactersIndex(dataDir, params.slug);
+  const idx = await readAuditCharactersIndex(getDataDir(), params.slug);
   return { index: idx };
 });
 
@@ -2455,14 +2569,14 @@ app.post("/api/books/:slug/audit/characters/hide", async (req) => {
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
 
-  const idx = await readAuditCharactersIndex(dataDir, params.slug);
+  const idx = await readAuditCharactersIndex(getDataDir(), params.slug);
   const set = new Set((idx.hiddenNames || []).map((x: any) => String(x)));
   const name = body.name.trim();
   if (body.hidden) set.add(name);
   else set.delete(name);
   idx.hiddenNames = [...set];
   idx.updatedAt = new Date().toISOString();
-  await writeAuditCharactersIndex(dataDir, params.slug, idx);
+  await writeAuditCharactersIndex(getDataDir(), params.slug, idx);
   return { ok: true, index: idx };
 });
 
@@ -2532,7 +2646,7 @@ app.post("/api/books/:slug/audit/characters/update", async (req, reply) => {
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
 
-  const idx = await readAuditCharactersIndex(dataDir, params.slug);
+  const idx = await readAuditCharactersIndex(getDataDir(), params.slug);
   const name = body.name.trim();
   const i = (idx.characters || []).findIndex((c: any) => String(c?.name || "").trim() === name);
   if (i < 0) return reply.code(404).send({ message: "角色不存在" });
@@ -2688,7 +2802,7 @@ app.post("/api/books/:slug/audit/characters/update", async (req, reply) => {
     updatedAt: now
   };
   idx.updatedAt = now;
-  await writeAuditCharactersIndex(dataDir, params.slug, idx);
+  await writeAuditCharactersIndex(getDataDir(), params.slug, idx);
   return { ok: true, index: idx };
 });
 
@@ -2709,7 +2823,7 @@ app.post("/api/books/:slug/audit/characters/merge", async (req, reply) => {
     return reply.code(400).send({ message: "参数非法" });
   }
 
-  const idx = await readAuditCharactersIndex(dataDir, params.slug);
+  const idx = await readAuditCharactersIndex(getDataDir(), params.slug);
   const now = new Date().toISOString();
   const normStr = (v: any) => (typeof v === "string" ? v.trim() : "");
   const uniqStrs = (arr: any) =>
@@ -2851,7 +2965,7 @@ app.post("/api/books/:slug/audit/characters/merge", async (req, reply) => {
     String(a?.name || "").localeCompare(String(b?.name || ""), "zh-Hans-CN")
   );
   idx.updatedAt = now;
-  await writeAuditCharactersIndex(dataDir, params.slug, idx);
+  await writeAuditCharactersIndex(getDataDir(), params.slug, idx);
   return { ok: true, index: idx, mergedNames: secondaryNames };
 });
 
@@ -2876,7 +2990,7 @@ app.post("/api/books/:slug/audit/characters/merge/preview", async (req, reply) =
     const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
     if (!cfg) throw new Error("未配置模型");
 
-    const idx = await readAuditCharactersIndex(dataDir, params.slug);
+    const idx = await readAuditCharactersIndex(getDataDir(), params.slug);
     const chars = Array.isArray(idx.characters) ? idx.characters : [];
     const primary = chars.find((c: any) => String(c?.name || "").trim() === primaryName);
     const secondaryProfiles = secondaryNames
@@ -2915,7 +3029,7 @@ app.post("/api/books/:slug/audit/characters/merge/apply", async (req, reply) => 
   if (!primaryName || secondaryNames.length < 1) return reply.code(400).send({ message: "参数非法" });
   if (!body.draft || typeof body.draft !== "object") return reply.code(400).send({ message: "draft 非法" });
 
-  const idx = await readAuditCharactersIndex(dataDir, params.slug);
+  const idx = await readAuditCharactersIndex(getDataDir(), params.slug);
   const chars = Array.isArray(idx.characters) ? idx.characters : [];
   const pi = chars.findIndex((c: any) => String(c?.name || "").trim() === primaryName);
   if (pi < 0) return reply.code(404).send({ message: "角色不存在" });
@@ -2990,14 +3104,14 @@ app.post("/api/books/:slug/audit/characters/merge/apply", async (req, reply) => 
 
   idx.characters = nextChars.sort((a: any, b: any) => String(a?.name || "").localeCompare(String(b?.name || ""), "zh-Hans-CN"));
   idx.updatedAt = now;
-  await writeAuditCharactersIndex(dataDir, params.slug, idx);
+  await writeAuditCharactersIndex(getDataDir(), params.slug, idx);
   return { ok: true, index: idx };
 });
 
 app.get("/api/books/:slug/audit/places", async (req) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const idx = await readAuditPlacesIndex(dataDir, params.slug);
+  const idx = await readAuditPlacesIndex(getDataDir(), params.slug);
   return { index: idx };
 });
 
@@ -3006,14 +3120,14 @@ app.post("/api/books/:slug/audit/places/hide", async (req) => {
   const bodySchema = z.object({ name: z.string().min(1), hidden: z.boolean() });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const idx = await readAuditPlacesIndex(dataDir, params.slug);
+  const idx = await readAuditPlacesIndex(getDataDir(), params.slug);
   const set = new Set((idx.hiddenNames || []).map((x: any) => String(x)));
   const name = body.name.trim();
   if (body.hidden) set.add(name);
   else set.delete(name);
   idx.hiddenNames = [...set];
   idx.updatedAt = new Date().toISOString();
-  await writeAuditPlacesIndex(dataDir, params.slug, idx);
+  await writeAuditPlacesIndex(getDataDir(), params.slug, idx);
   return { ok: true, index: idx };
 });
 
@@ -3026,7 +3140,7 @@ app.post("/api/books/:slug/audit/places/update", async (req, reply) => {
   });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const idx = await readAuditPlacesIndex(dataDir, params.slug);
+  const idx = await readAuditPlacesIndex(getDataDir(), params.slug);
   const name = body.name.trim();
   const i = (idx.places || []).findIndex((p: any) => String(p?.name || "").trim() === name);
   if (i < 0) return reply.code(404).send({ message: "地点不存在" });
@@ -3040,7 +3154,7 @@ app.post("/api/books/:slug/audit/places/update", async (req, reply) => {
     updatedAt: now
   };
   idx.updatedAt = now;
-  await writeAuditPlacesIndex(dataDir, params.slug, idx);
+  await writeAuditPlacesIndex(getDataDir(), params.slug, idx);
   return { ok: true, index: idx };
 });
 
@@ -3065,7 +3179,7 @@ app.post("/api/books/:slug/audit/places/merge/preview", async (req, reply) => {
     const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
     if (!cfg) throw new Error("未配置模型");
 
-    const idx = await readAuditPlacesIndex(dataDir, params.slug);
+    const idx = await readAuditPlacesIndex(getDataDir(), params.slug);
     const places = Array.isArray(idx.places) ? idx.places : [];
     const primary = places.find((p: any) => String(p?.name || "").trim() === primaryName);
     const secondary = secondaryNames
@@ -3109,7 +3223,7 @@ app.post("/api/books/:slug/audit/places/merge/apply", async (req, reply) => {
   if (!primaryName || secondaryNames.length < 1) return reply.code(400).send({ message: "参数非法" });
   if (!body.draft || typeof body.draft !== "object") return reply.code(400).send({ message: "draft 非法" });
 
-  const idx = await readAuditPlacesIndex(dataDir, params.slug);
+  const idx = await readAuditPlacesIndex(getDataDir(), params.slug);
   const places = Array.isArray(idx.places) ? idx.places : [];
   const pi = places.findIndex((p: any) => String(p?.name || "").trim() === primaryName);
   if (pi < 0) return reply.code(404).send({ message: "地点不存在" });
@@ -3159,14 +3273,14 @@ app.post("/api/books/:slug/audit/places/merge/apply", async (req, reply) => {
 
   idx.places = nextPlaces.sort((a: any, b: any) => String(a?.name || "").localeCompare(String(b?.name || ""), "zh-Hans-CN"));
   idx.updatedAt = now;
-  await writeAuditPlacesIndex(dataDir, params.slug, idx);
+  await writeAuditPlacesIndex(getDataDir(), params.slug, idx);
   return { ok: true, index: idx };
 });
 
 app.get("/api/books/:slug/audit/orgs", async (req) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const idx = await readAuditOrgsIndex(dataDir, params.slug);
+  const idx = await readAuditOrgsIndex(getDataDir(), params.slug);
   return { index: idx };
 });
 
@@ -3175,14 +3289,14 @@ app.post("/api/books/:slug/audit/orgs/hide", async (req) => {
   const bodySchema = z.object({ name: z.string().min(1), hidden: z.boolean() });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const idx = await readAuditOrgsIndex(dataDir, params.slug);
+  const idx = await readAuditOrgsIndex(getDataDir(), params.slug);
   const set = new Set((idx.hiddenNames || []).map((x: any) => String(x)));
   const name = body.name.trim();
   if (body.hidden) set.add(name);
   else set.delete(name);
   idx.hiddenNames = [...set];
   idx.updatedAt = new Date().toISOString();
-  await writeAuditOrgsIndex(dataDir, params.slug, idx);
+  await writeAuditOrgsIndex(getDataDir(), params.slug, idx);
   return { ok: true, index: idx };
 });
 
@@ -3195,7 +3309,7 @@ app.post("/api/books/:slug/audit/orgs/update", async (req, reply) => {
   });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const idx = await readAuditOrgsIndex(dataDir, params.slug);
+  const idx = await readAuditOrgsIndex(getDataDir(), params.slug);
   const name = body.name.trim();
   const i = (idx.orgs || []).findIndex((o: any) => String(o?.name || "").trim() === name);
   if (i < 0) return reply.code(404).send({ message: "组织不存在" });
@@ -3209,21 +3323,21 @@ app.post("/api/books/:slug/audit/orgs/update", async (req, reply) => {
     updatedAt: now
   };
   idx.updatedAt = now;
-  await writeAuditOrgsIndex(dataDir, params.slug, idx);
+  await writeAuditOrgsIndex(getDataDir(), params.slug, idx);
   return { ok: true, index: idx };
 });
 
 app.get("/api/books/:slug/audit/foreshadows", async (req) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const idx = await readAuditForeshadowsIndex(dataDir, params.slug);
+  const idx = await readAuditForeshadowsIndex(getDataDir(), params.slug);
   return { index: idx };
 });
 
 app.get("/api/books/:slug/audit/progress", async (req) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const idx = await readAuditProgressIndex(dataDir, params.slug);
+  const idx = await readAuditProgressIndex(getDataDir(), params.slug);
   return { index: idx };
 });
 
@@ -3232,7 +3346,7 @@ app.post("/api/books/:slug/audit/progress/mark", async (req, reply) => {
   const bodySchema = z.object({ id: z.string().min(1), status: z.enum(["open", "progress", "done"]) });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const idx = await readAuditProgressIndex(dataDir, params.slug);
+  const idx = await readAuditProgressIndex(getDataDir(), params.slug);
   const id = body.id.trim();
   const i = (idx.items || []).findIndex((x: any) => String(x?.id || "").trim() === id);
   if (i < 0) return reply.code(404).send({ message: "事项不存在" });
@@ -3240,18 +3354,18 @@ app.post("/api/books/:slug/audit/progress/mark", async (req, reply) => {
   const prev = idx.items[i] || {};
   idx.items[i] = { ...prev, id, status: body.status, updatedAt: now };
   idx.updatedAt = now;
-  await writeAuditProgressIndex(dataDir, params.slug, idx as any);
+  await writeAuditProgressIndex(getDataDir(), params.slug, idx as any);
   return { ok: true, index: idx };
 });
 
 app.post("/api/books/:slug/audit/progress/cleanupDone", async (req) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const idx = await readAuditProgressIndex(dataDir, params.slug);
+  const idx = await readAuditProgressIndex(getDataDir(), params.slug);
   const now = new Date().toISOString();
   idx.items = (idx.items || []).filter((x: any) => String(x?.status || "") !== "done");
   idx.updatedAt = now;
-  await writeAuditProgressIndex(dataDir, params.slug, idx as any);
+  await writeAuditProgressIndex(getDataDir(), params.slug, idx as any);
   return { ok: true, index: idx };
 });
 
@@ -3263,7 +3377,7 @@ app.get("/api/books/:slug/writing-pack", async (req, reply) => {
   if (!query.success) return reply.code(400).send({ message: "缺少 chapter" });
   const chapterFilename = query.data.chapter.trim();
   const chapterId = chapterFilename.replace(/\.md$/, "");
-  const pack = await readWritingPack(dataDir, params.slug, chapterId);
+  const pack = await readWritingPack(getDataDir(), params.slug, chapterId);
   return { pack };
 });
 
@@ -3279,7 +3393,7 @@ app.post("/api/books/:slug/writing-pack/generate", async (req, reply) => {
   const chapterId = chapterFilename.replace(/\.md$/, "");
 
   try {
-    const chapters = await listChapters(dataDir, params.slug);
+    const chapters = await listChapters(getDataDir(), params.slug);
     const targetMeta = chapters.find((c: any) => String(c?.filename || "").trim() === chapterFilename);
     const chapterNo = parseChapterNoFromFilename(chapterFilename);
     const chapterTitle = String(targetMeta?.title || "").trim() || chapterFilename.replace(/\.md$/, "");
@@ -3307,7 +3421,7 @@ app.post("/api/books/:slug/writing-pack/generate", async (req, reply) => {
     for (const m of prevMetas.slice(-N)) {
       const fn = String(m?.filename || "").trim();
       if (!fn) continue;
-      const run = await readAuditRun(dataDir, params.slug, fn).catch(() => null);
+      const run = await readAuditRun(getDataDir(), params.slug, fn).catch(() => null);
       const gist = String((run as any)?.gistL1 || "").trim();
       const chars = Array.isArray((run as any)?.entities?.characters) ? (run as any).entities.characters : [];
       const events = Array.isArray((run as any)?.entities?.events) ? (run as any).entities.events : [];
@@ -3355,12 +3469,12 @@ app.post("/api/books/:slug/writing-pack/generate", async (req, reply) => {
       });
     }
 
-    const timelineIndex = await readTimelineIndex(dataDir, params.slug).catch(() => null as any);
+    const timelineIndex = await readTimelineIndex(getDataDir(), params.slug).catch(() => null as any);
     const compressedRanges = Array.isArray(timelineIndex?.compressedRanges)
       ? timelineIndex.compressedRanges.slice(-M)
       : [];
 
-    const progressIndex = await readAuditProgressIndex(dataDir, params.slug).catch(() => ({ items: [] } as any));
+    const progressIndex = await readAuditProgressIndex(getDataDir(), params.slug).catch(() => ({ items: [] } as any));
     const progressAll = Array.isArray((progressIndex as any)?.items) ? (progressIndex as any).items : [];
     const progressOpen = progressAll.filter((x: any) => String(x?.status || "") !== "done");
     const relScore = (it: any) => {
@@ -3391,7 +3505,7 @@ app.post("/api/books/:slug/writing-pack/generate", async (req, reply) => {
       }))
       .filter((x: any) => x.id && x.title);
 
-    const foreshadowsIndex = await readAuditForeshadowsIndex(dataDir, params.slug).catch(() => null as any);
+    const foreshadowsIndex = await readAuditForeshadowsIndex(getDataDir(), params.slug).catch(() => null as any);
     const hidden = new Set((foreshadowsIndex?.hiddenIds || []).map((x: any) => String(x)));
     const foreshadowsAll = Array.isArray(foreshadowsIndex?.foreshadows) ? foreshadowsIndex.foreshadows : [];
     const foreshadowsOpen = foreshadowsAll.filter(
@@ -3476,7 +3590,7 @@ app.post("/api/books/:slug/writing-pack/generate", async (req, reply) => {
     };
 
     // 最终条数保护（progress<=4, foreshadows<=2, risks<=3 已限制）
-    await writeWritingPack(dataDir, params.slug, chapterId, pack);
+    await writeWritingPack(getDataDir(), params.slug, chapterId, pack);
     return { ok: true, pack };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || String(e) });
@@ -3501,7 +3615,7 @@ app.post("/api/books/:slug/chapters/:filename/title/suggest", async (req, reply)
     const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
     if (!cfg) throw new Error("未配置模型");
 
-    const raw = await readChapter(dataDir, params.slug, params.filename);
+    const raw = await readChapter(getDataDir(), params.slug, params.filename);
     const content = String(raw || "").slice(0, 12000);
     const n = body.count ?? 5;
     const style = body.style ?? "boom";
@@ -3569,7 +3683,7 @@ app.post("/api/books/:slug/chapters/:filename/title/suggest/batch", async (req, 
     const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
     if (!cfg) throw new Error("未配置模型");
 
-    const raw = await readChapter(dataDir, params.slug, params.filename);
+    const raw = await readChapter(getDataDir(), params.slug, params.filename);
     const content = String(raw || "").slice(0, 12000);
     const n = body.count ?? 5;
     const styles = body.styles?.length
@@ -3705,7 +3819,7 @@ app.post("/api/books/:slug/audit/foreshadows/create", async (req, reply) => {
   });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const idx = await readAuditForeshadowsIndex(dataDir, params.slug);
+  const idx = await readAuditForeshadowsIndex(getDataDir(), params.slug);
   const title = body.title.trim();
   const id = title.replace(/\s+/g, " ").slice(0, 160);
   if ((idx.foreshadows || []).some((f: any) => String(f?.id || "").trim() === id)) {
@@ -3728,7 +3842,7 @@ app.post("/api/books/:slug/audit/foreshadows/create", async (req, reply) => {
     updatedAt: now
   });
   idx.updatedAt = now;
-  await writeAuditForeshadowsIndex(dataDir, params.slug, idx);
+  await writeAuditForeshadowsIndex(getDataDir(), params.slug, idx);
   return { ok: true, index: idx };
 });
 
@@ -3744,7 +3858,7 @@ app.post("/api/books/:slug/audit/foreshadows/update", async (req, reply) => {
   });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const idx = await readAuditForeshadowsIndex(dataDir, params.slug);
+  const idx = await readAuditForeshadowsIndex(getDataDir(), params.slug);
   const id = body.id.trim();
   const i = (idx.foreshadows || []).findIndex((f: any) => String(f?.id || "").trim() === id);
   if (i < 0) return reply.code(404).send({ message: "伏笔不存在" });
@@ -3770,7 +3884,7 @@ app.post("/api/books/:slug/audit/foreshadows/update", async (req, reply) => {
     updatedAt: now
   };
   idx.updatedAt = now;
-  await writeAuditForeshadowsIndex(dataDir, params.slug, idx);
+  await writeAuditForeshadowsIndex(getDataDir(), params.slug, idx);
   return { ok: true, index: idx };
 });
 
@@ -3779,21 +3893,21 @@ app.post("/api/books/:slug/audit/foreshadows/hide", async (req) => {
   const bodySchema = z.object({ id: z.string().min(1), hidden: z.boolean() });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const idx = await readAuditForeshadowsIndex(dataDir, params.slug);
+  const idx = await readAuditForeshadowsIndex(getDataDir(), params.slug);
   const set = new Set((idx.hiddenIds || []).map((x: any) => String(x)));
   const id = body.id.trim();
   if (body.hidden) set.add(id);
   else set.delete(id);
   idx.hiddenIds = [...set];
   idx.updatedAt = new Date().toISOString();
-  await writeAuditForeshadowsIndex(dataDir, params.slug, idx);
+  await writeAuditForeshadowsIndex(getDataDir(), params.slug, idx);
   return { ok: true, index: idx };
 });
 
 app.get("/api/books/:slug/timeline/index", async (req) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const idx = await readTimelineIndex(dataDir, params.slug);
+  const idx = await readTimelineIndex(getDataDir(), params.slug);
   return { index: idx };
 });
 
@@ -3803,14 +3917,14 @@ app.post("/api/books/:slug/timeline/event/mark", async (req) => {
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
 
-  const idx = normalizeTimelineIndex(await readTimelineIndex(dataDir, params.slug));
+  const idx = normalizeTimelineIndex(await readTimelineIndex(getDataDir(), params.slug));
   const set = new Set(idx.manual?.doneEventIds ?? []);
   if (body.status === "done") set.add(body.id);
   else set.delete(body.id);
   idx.manual.doneEventIds = [...set];
   idx.updatedAt = new Date().toISOString();
-  await writeTimelineIndex(dataDir, params.slug, idx);
-  await writeStoryTimelineMarkdownFromIndex(dataDir, params.slug, idx);
+  await writeTimelineIndex(getDataDir(), params.slug, idx);
+  await writeStoryTimelineMarkdownFromIndex(getDataDir(), params.slug, idx);
   return { ok: true, index: idx };
 });
 
@@ -3832,7 +3946,7 @@ app.post("/api/books/:slug/timeline/compress", async (req, reply) => {
   const a = Math.min(body.startChapter, body.endChapter);
   const b = Math.max(body.startChapter, body.endChapter);
 
-  const idx = normalizeTimelineIndex(await readTimelineIndex(dataDir, params.slug));
+  const idx = normalizeTimelineIndex(await readTimelineIndex(getDataDir(), params.slug));
   const chapters = idx.chapters.filter((c) => c.chapter >= a && c.chapter <= b);
   if (chapters.length === 0) return reply.code(400).send({ message: "该区间没有已分析的章节摘要" });
 
@@ -3858,8 +3972,8 @@ app.post("/api/books/:slug/timeline/compress", async (req, reply) => {
   idx.compressedRanges.sort((x, y) => x.startChapter - y.startChapter || x.endChapter - y.endChapter);
   idx.updatedAt = now;
 
-  await writeTimelineIndex(dataDir, params.slug, idx);
-  await writeStoryTimelineMarkdownFromIndex(dataDir, params.slug, idx);
+  await writeTimelineIndex(getDataDir(), params.slug, idx);
+  await writeStoryTimelineMarkdownFromIndex(getDataDir(), params.slug, idx);
   return { ok: true, index: idx };
 });
 
@@ -3871,15 +3985,15 @@ app.post("/api/books/:slug/timeline/range/delete", async (req, reply) => {
 
   const a = Math.min(body.startChapter, body.endChapter);
   const b = Math.max(body.startChapter, body.endChapter);
-  const idx = normalizeTimelineIndex(await readTimelineIndex(dataDir, params.slug));
+  const idx = normalizeTimelineIndex(await readTimelineIndex(getDataDir(), params.slug));
 
   const before = idx.compressedRanges.length;
   idx.compressedRanges = idx.compressedRanges.filter((r) => !(r.startChapter === a && r.endChapter === b));
   if (idx.compressedRanges.length === before) return reply.code(404).send({ message: "区间不存在" });
 
   idx.updatedAt = new Date().toISOString();
-  await writeTimelineIndex(dataDir, params.slug, idx);
-  await writeStoryTimelineMarkdownFromIndex(dataDir, params.slug, idx);
+  await writeTimelineIndex(getDataDir(), params.slug, idx);
+  await writeStoryTimelineMarkdownFromIndex(getDataDir(), params.slug, idx);
   return { ok: true, index: idx };
 });
 
@@ -3894,7 +4008,7 @@ app.post("/api/books/:slug/timeline/range/delete", async (req, reply) => {
 app.get("/api/books/:slug/inspiration", async (req) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const idx = normalizeInspirationIndex(await readInspirationIndex(dataDir, params.slug));
+  const idx = normalizeInspirationIndex(await readInspirationIndex(getDataDir(), params.slug));
   return { index: idx };
 });
 
@@ -3917,7 +4031,7 @@ app.post("/api/books/:slug/inspiration/upsert", async (req, reply) => {
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
 
-  const idx = normalizeInspirationIndex(await readInspirationIndex(dataDir, params.slug));
+  const idx = normalizeInspirationIndex(await readInspirationIndex(getDataDir(), params.slug));
   const now = new Date().toISOString();
   const incoming = normalizeIdeaItem({ ...body.item, updatedAt: now, createdAt: (body.item as any).createdAt || now });
   if (!incoming) return reply.code(400).send({ message: "Invalid item" });
@@ -3928,7 +4042,7 @@ app.post("/api/books/:slug/inspiration/upsert", async (req, reply) => {
     idx.items.unshift(incoming);
   }
   idx.updatedAt = now;
-  await writeInspirationIndex(dataDir, params.slug, idx);
+  await writeInspirationIndex(getDataDir(), params.slug, idx);
   return { ok: true, index: idx, item: incoming };
 });
 
@@ -3941,25 +4055,25 @@ app.post("/api/books/:slug/inspiration/status", async (req) => {
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
 
-  const idx = normalizeInspirationIndex(await readInspirationIndex(dataDir, params.slug));
+  const idx = normalizeInspirationIndex(await readInspirationIndex(getDataDir(), params.slug));
   const i = idx.items.findIndex((x) => x.id === body.id);
   if (i < 0) return { ok: false, message: "Not found", index: idx };
   const now = new Date().toISOString();
   idx.items[i] = { ...idx.items[i], status: body.status, updatedAt: now };
   idx.updatedAt = now;
-  await writeInspirationIndex(dataDir, params.slug, idx);
+  await writeInspirationIndex(getDataDir(), params.slug, idx);
   return { ok: true, index: idx };
 });
 
 app.post("/api/books/:slug/inspiration/purge", async (req) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const idx = normalizeInspirationIndex(await readInspirationIndex(dataDir, params.slug));
+  const idx = normalizeInspirationIndex(await readInspirationIndex(getDataDir(), params.slug));
   const before = idx.items.length;
   idx.items = idx.items.filter((x) => x.status !== "deleted");
   const purged = before - idx.items.length;
   idx.updatedAt = new Date().toISOString();
-  await writeInspirationIndex(dataDir, params.slug, idx);
+  await writeInspirationIndex(getDataDir(), params.slug, idx);
   return { ok: true, index: idx, purged };
 });
 
@@ -3985,21 +4099,21 @@ app.post("/api/books/:slug/inspiration/generate", async (req, reply) => {
   const count = body.count ?? 3;
   const useMemory = Boolean(body.useMemory);
   const kind = body.kind;
-  const timelineIndex = await readTimelineIndex(dataDir, params.slug);
+  const timelineIndex = await readTimelineIndex(getDataDir(), params.slug);
   const memoryText = useMemory
     ? kind === "org"
       ? buildMultiChapterCompressedMemoryOnly(timelineIndex)
       : buildMemoryContextFromTimeline(timelineIndex)
     : "";
-  const knownCharacterNames = await listKnownCharacterNames(dataDir, params.slug);
-  const knownPlaceNames = await listKnownPlaceNames(dataDir, params.slug);
+  const knownCharacterNames = await listKnownCharacterNames(getDataDir(), params.slug);
+  const knownPlaceNames = await listKnownPlaceNames(getDataDir(), params.slug);
   const opts = body.options ?? {};
   const free = String(body.freeText || "").trim();
   const itemOwnerCharacterName =
     kind === "item" || kind === "technique" ? String(body.itemOwnerCharacterName || "").trim() : "";
   const itemOwnerInfo =
     kind === "item" || kind === "technique"
-      ? await resolveItemOwnerInfo(dataDir, params.slug, itemOwnerCharacterName || undefined)
+      ? await resolveItemOwnerInfo(getDataDir(), params.slug, itemOwnerCharacterName || undefined)
       : null;
 
   const prompt = buildInspirationPrompt({
@@ -4028,7 +4142,7 @@ app.post("/api/books/:slug/inspiration/generate", async (req, reply) => {
   const cards = Array.isArray(arr) ? arr : [];
   if (!cards.length) return reply.code(400).send({ message: "模型未返回有效 JSON 数组" });
 
-  const idx = normalizeInspirationIndex(await readInspirationIndex(dataDir, params.slug));
+  const idx = normalizeInspirationIndex(await readInspirationIndex(getDataDir(), params.slug));
   const now = new Date().toISOString();
   const items: IdeaItem[] = [];
   const stringifyInspKind =
@@ -4090,7 +4204,7 @@ app.post("/api/books/:slug/inspiration/generate", async (req, reply) => {
   if (!items.length) return reply.code(400).send({ message: "模型输出为空或不可用" });
   idx.items = [...items, ...idx.items];
   idx.updatedAt = now;
-  await writeInspirationIndex(dataDir, params.slug, idx);
+  await writeInspirationIndex(getDataDir(), params.slug, idx);
   return { ok: true, index: idx, items, debug: { prompt, rawText } };
 });
 
@@ -4116,14 +4230,14 @@ app.post("/api/books/:slug/inspiration/generate-preview", async (req, reply) => 
   const count = body.count ?? 3;
   const useMemory = Boolean(body.useMemory);
   const kind = body.kind;
-  const timelineIndex = await readTimelineIndex(dataDir, params.slug);
+  const timelineIndex = await readTimelineIndex(getDataDir(), params.slug);
   const memoryText = useMemory
     ? kind === "org"
       ? buildMultiChapterCompressedMemoryOnly(timelineIndex)
       : buildMemoryContextFromTimeline(timelineIndex)
     : "";
-  const knownCharacterNames = await listKnownCharacterNames(dataDir, params.slug);
-  const knownPlaceNames = await listKnownPlaceNames(dataDir, params.slug);
+  const knownCharacterNames = await listKnownCharacterNames(getDataDir(), params.slug);
+  const knownPlaceNames = await listKnownPlaceNames(getDataDir(), params.slug);
 
   const opts = body.options ?? {};
   const free = String(body.freeText || "").trim();
@@ -4131,7 +4245,7 @@ app.post("/api/books/:slug/inspiration/generate-preview", async (req, reply) => 
     kind === "item" || kind === "technique" ? String(body.itemOwnerCharacterName || "").trim() : "";
   const itemOwnerInfo =
     kind === "item" || kind === "technique"
-      ? await resolveItemOwnerInfo(dataDir, params.slug, itemOwnerCharacterName || undefined)
+      ? await resolveItemOwnerInfo(getDataDir(), params.slug, itemOwnerCharacterName || undefined)
       : null;
 
   const prompt = buildInspirationPrompt({
@@ -4238,7 +4352,7 @@ app.post("/api/books/:slug/inspiration/variant", async (req, reply) => {
   const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
   if (!cfg) return reply.code(400).send({ message: "未配置模型" });
 
-  const idx = normalizeInspirationIndex(await readInspirationIndex(dataDir, params.slug));
+  const idx = normalizeInspirationIndex(await readInspirationIndex(getDataDir(), params.slug));
   const base = idx.items.find((x) => x.id === body.id);
   if (!base) return reply.code(404).send({ message: "原条目不存在" });
 
@@ -4290,13 +4404,13 @@ app.post("/api/books/:slug/inspiration/variant", async (req, reply) => {
   if (!items.length) return reply.code(400).send({ message: "模型输出为空或不可用" });
   idx.items = [...items, ...idx.items];
   idx.updatedAt = now;
-  await writeInspirationIndex(dataDir, params.slug, idx);
+  await writeInspirationIndex(getDataDir(), params.slug, idx);
   return { ok: true, index: idx, items, debug: { prompt, rawText } };
 });
 
 // 兼容旧路由：novels -> books
 app.get("/api/novels", async () => {
-  const novels = await listNovels(dataDir);
+  const novels = await listNovels(getDataDir());
   return { novels };
 });
 
@@ -4311,7 +4425,7 @@ app.post("/api/novels", async (req, reply) => {
   if (!slug) return reply.code(400).send({ message: "Invalid slug/title" });
 
   try {
-    const meta = await createNovel(dataDir, slug, body.title, body.synopsis);
+    const meta = await createNovel(getDataDir(), slug, body.title, body.synopsis);
     return { novel: novelSummaryFromMeta(meta, 0, []) };
   } catch (e: any) {
     return reply.code(409).send({ message: e?.message || "Conflict" });
@@ -4321,7 +4435,7 @@ app.post("/api/novels", async (req, reply) => {
 app.get("/api/novels/:slug/chapters", async (req, reply) => {
   const paramsSchema = z.object({ slug: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const chapters = await listChapters(dataDir, params.slug);
+  const chapters = await listChapters(getDataDir(), params.slug);
   return { chapters };
 });
 
@@ -4334,7 +4448,7 @@ app.post("/api/novels/:slug/chapters", async (req, reply) => {
   });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const chapter = await createChapter(dataDir, params.slug, body.title, body.content, body.chapterIndex);
+  const chapter = await createChapter(getDataDir(), params.slug, body.title, body.content, body.chapterIndex);
   return { chapter };
 });
 
@@ -4345,7 +4459,7 @@ app.get("/api/novels/:slug/chapters/:filename", async (req, reply) => {
   });
   const params = paramsSchema.parse((req as any).params);
   try {
-    const content = await readChapter(dataDir, params.slug, params.filename);
+    const content = await readChapter(getDataDir(), params.slug, params.filename);
     return { content };
   } catch {
     return reply.code(404).send({ message: "Not found" });
@@ -4362,7 +4476,7 @@ app.put("/api/novels/:slug/chapters/:filename", async (req, reply) => {
   });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  await updateChapter(dataDir, params.slug, params.filename, body.content);
+  await updateChapter(getDataDir(), params.slug, params.filename, body.content);
   return { ok: true };
 });
 
@@ -4377,7 +4491,7 @@ app.patch("/api/novels/:slug/chapters/:filename", async (req, reply) => {
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
   try {
-    const chapter = await renameChapterTitle(dataDir, params.slug, params.filename, body.title);
+    const chapter = await renameChapterTitle(getDataDir(), params.slug, params.filename, body.title);
     return { chapter };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || "Rename failed" });
@@ -4391,7 +4505,7 @@ app.delete("/api/novels/:slug/chapters/:filename", async (req, reply) => {
   });
   const params = paramsSchema.parse((req as any).params);
   try {
-    await deleteChapter(dataDir, params.slug, params.filename);
+    await deleteChapter(getDataDir(), params.slug, params.filename);
     return { ok: true };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || "Delete failed" });

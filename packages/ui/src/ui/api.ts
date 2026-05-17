@@ -172,6 +172,44 @@ export async function putModelConfigs(input: { configs: ModelConfig[]; activeId:
   });
 }
 
+export type AppSettings = {
+  effectiveDataDir: string;
+  source: "env" | "file" | "default";
+  fileDataDir: string | null;
+  envLocked: boolean;
+};
+
+export async function getAppSettings() {
+  return await http<AppSettings>(`/api/settings/app`);
+}
+
+export type PutAppSettingsResult = {
+  ok: true;
+  effectiveDataDir: string;
+  migrated: boolean;
+  bookCount: number;
+  sourceDeleted?: boolean;
+  deleteSourceWarning?: string;
+};
+
+export async function putAppSettings(input: {
+  dataDir: string;
+  migrate?: boolean;
+  deleteSource?: boolean;
+}) {
+  return await http<PutAppSettingsResult>(`/api/settings/app`, {
+    method: "PUT",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function pickAppDataDirectory() {
+  return await http<{ cancelled: true } | { cancelled: false; path: string }>(
+    `/api/settings/app/pick-directory`,
+    { method: "POST" }
+  );
+}
+
 export async function auditChapter(slug: string, filename: string, modelConfigId: string | null) {
   return await http<{ run: any }>(`/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}/audit`, {
     method: "POST",

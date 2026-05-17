@@ -163,7 +163,7 @@ export function ChapterEditorContent({
             className="btnSort"
             disabled={busy || polishBusy || !okModelCount}
             onClick={() => void onPolishSelectedChapter()}
-            title={!okModelCount ? "请先在「模型配置」里测试连接" : "重新润色(覆盖右侧润色稿)"}
+            title={!okModelCount ? "请先在「设置」中配置模型并测试连接" : "重新润色(覆盖右侧润色稿)"}
           >
             重新润色
           </button>
