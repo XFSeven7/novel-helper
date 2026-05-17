@@ -1,5 +1,7 @@
 import type { IdeaItem } from "../api";
 
+export type InspTypeKey = "character" | "place" | "org" | "item" | "event" | "lore" | "technique";
+
 export type InspGenSlice = {
   previewItems: IdeaItem[];
   savedIdSet: Record<string, boolean>;
