@@ -206,6 +206,7 @@ code {
 
 .settingsDataDirHint {
   margin: 0;
+  margin-left: 16px;
   line-height: 1.5;
 }
 
@@ -291,6 +292,17 @@ code {
 
 .settingsDataDirMigrateCheck {
   margin: 12px 0 4px;
+}
+
+.settingsDataDirFeedback {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--accent) 88%, var(--text));
+}
+
+.settingsDataDirFeedbackErr {
+  color: color-mix(in srgb, #f87171 92%, var(--text));
 }
 
 .topbarRight {

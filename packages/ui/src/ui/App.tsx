@@ -2991,7 +2991,7 @@ export function App() {
                 <div className="renameHint">当前文件名需在文件夹中手动改名。</div>
               ) : null}
             </div>
-            {!activeBook && homeCenterTab !== "settings" ? (
+            {!activeBook && homeCenterTab === "settings" ? null : !activeBook ? (
               <div className="centerMeta muted">打开一本书后可查看书籍信息、简介与章节正文。</div>
             ) : showBookOverview && activeBookMeta ? (
               <div className="centerMeta centerMetaOverview">
@@ -3113,7 +3113,6 @@ export function App() {
                 dataDirPanel={
                   <SettingsDataDirPanel
                     busy={busy}
-                    onStatus={setStatus}
                     onDataDirChanged={async () => {
                       await refreshBooks();
                       setActiveBook("");

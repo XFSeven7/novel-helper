@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { getAppSettings, pickAppDataDirectory, putAppSettings, type AppSettings } from "../../api";
 import { DataDirMigrateModal } from "./DataDirMigrateModal";
+
+const FEEDBACK_MS = 3200;
 
 const SOURCE_LABEL: Record<AppSettings["source"], string> = {
   env: "环境变量",
@@ -15,16 +17,32 @@ function normalizePath(p: string) {
 
 export function SettingsDataDirPanel(props: {
   busy: boolean;
-  onStatus: (msg: string) => void;
   onDataDirChanged: () => void | Promise<void>;
 }) {
-  const { busy, onStatus, onDataDirChanged } = props;
+  const { busy, onDataDirChanged } = props;
   const [loading, setLoading] = useState(true);
   const [picking, setPicking] = useState(false);
   const [saving, setSaving] = useState(false);
   const [info, setInfo] = useState<AppSettings | null>(null);
   const [draft, setDraft] = useState("");
   const [migrateModal, setMigrateModal] = useState<{ sourceDir: string; targetDir: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ msg: string; kind: "ok" | "err" } | null>(null);
+  const feedbackTimerRef = useRef<number | null>(null);
+
+  function showFeedback(msg: string, kind: "ok" | "err" = "ok") {
+    if (feedbackTimerRef.current != null) window.clearTimeout(feedbackTimerRef.current);
+    setFeedback({ msg, kind });
+    feedbackTimerRef.current = window.setTimeout(() => {
+      setFeedback(null);
+      feedbackTimerRef.current = null;
+    }, FEEDBACK_MS);
+  }
+
+  useEffect(() => {
+    return () => {
+      if (feedbackTimerRef.current != null) window.clearTimeout(feedbackTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,14 +53,14 @@ export function SettingsDataDirPanel(props: {
         setInfo(s);
         setDraft(s.fileDataDir ?? s.effectiveDataDir);
       })
-      .catch((e: unknown) => onStatus(e instanceof Error ? e.message : String(e)))
+      .catch((e: unknown) => showFeedback(e instanceof Error ? e.message : String(e), "err"))
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
     };
-  }, [onStatus]);
+  }, []);
 
   async function onPickDirectory() {
     if (!info || info.envLocked) return;
@@ -51,7 +69,7 @@ export function SettingsDataDirPanel(props: {
       const result = await pickAppDataDirectory();
       if (!result.cancelled) setDraft(result.path);
     } catch (e: unknown) {
-      onStatus(e instanceof Error ? e.message : String(e));
+      showFeedback(e instanceof Error ? e.message : String(e), "err");
     } finally {
       setPicking(false);
     }
@@ -66,14 +84,14 @@ export function SettingsDataDirPanel(props: {
       if (result.deleteSourceWarning) {
         msg += ` 未能删除原目录：${result.deleteSourceWarning}，请手动清理。`;
       }
-      onStatus(msg);
+      showFeedback(msg, "ok");
       const next = await getAppSettings();
       setInfo(next);
       setDraft(next.fileDataDir ?? next.effectiveDataDir);
       setMigrateModal(null);
       await onDataDirChanged();
     } catch (e: unknown) {
-      onStatus(e instanceof Error ? e.message : String(e));
+      showFeedback(e instanceof Error ? e.message : String(e), "err");
     } finally {
       setSaving(false);
     }
@@ -84,7 +102,7 @@ export function SettingsDataDirPanel(props: {
     const target = draft.trim();
     if (!target) return;
     if (normalizePath(target) === normalizePath(info.effectiveDataDir)) {
-      onStatus("路径未变更。");
+      showFeedback("路径未变更。", "ok");
       return;
     }
     setMigrateModal({ sourceDir: info.effectiveDataDir, targetDir: target });
@@ -98,17 +116,15 @@ export function SettingsDataDirPanel(props: {
   return (
     <>
       <div className="settingsDataDirPanel">
-        <p className="muted settingsDataDirHint">
-          书籍与章节保存在下方目录中；每本书对应一个子文件夹（与 book/&lt;书名标识&gt;/ 结构相同）。
-        </p>
+        <p className="muted settingsDataDirHint">书籍数据保存地址</p>
         <div className="settingsDataDirContent">
           <div className="settingsDataDirRow">
-            <span className="muted">当前生效</span>
+            <span className="muted">当前地址</span>
             <code className="settingsDataDirPath">{info.effectiveDataDir}</code>
             <span className="settingsDataDirSource">{SOURCE_LABEL[info.source]}</span>
           </div>
           <div className="modelField">
-            <div className="navSubtitle">保存位置</div>
+            <div className="navSubtitle">书籍保存地址</div>
             <div className="settingsDataDirInputRow">
               <input
                 value={draft}
@@ -131,6 +147,14 @@ export function SettingsDataDirPanel(props: {
               ) : null}
             </div>
           </div>
+          {feedback ? (
+            <p
+              className={`settingsDataDirFeedback ${feedback.kind === "err" ? "settingsDataDirFeedbackErr" : ""}`}
+              role="status"
+            >
+              {feedback.msg}
+            </p>
+          ) : null}
           {info.envLocked ? (
             <p className="muted">已通过环境变量 NOVEL_HELPER_DATA_DIR 指定，无法在应用内修改。</p>
           ) : (

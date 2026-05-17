@@ -40,7 +40,7 @@ export function TopBar({
   return (
     <header className="topbar">
       <button type="button" className="brand brandButton" onClick={() => void onGoHome()} title="返回书架">
-        novel-helper
+        NovelHelper
       </button>
       <span className="topbarTagline">您的智能小说助理</span>
       <div className="topbarRight">
