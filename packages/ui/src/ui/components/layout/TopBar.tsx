@@ -1,6 +1,6 @@
 import React from "react";
-import type { ThemePreference } from "../../constants";
-import { IconFullscreenEnter, IconFullscreenExit, IconThemeMoon, IconThemeSun } from "./LayoutIcons";
+import { GITHUB_REPO_URL, type ThemePreference } from "../../constants";
+import { IconFullscreenEnter, IconFullscreenExit, IconGitHub, IconThemeMoon, IconThemeSun } from "./LayoutIcons";
 import { toggleDocumentFullscreen } from "./fullscreen";
 
 export type TopBarProps = {
@@ -71,6 +71,16 @@ export function TopBar({
         >
           {themePreference === "light" ? <IconThemeMoon /> : <IconThemeSun />}
         </button>
+        <a
+          href={GITHUB_REPO_URL}
+          className="btnGithubLink"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="打开 GitHub 仓库"
+          aria-label="打开 GitHub 仓库"
+        >
+          <IconGitHub />
+        </a>
         <button
           type="button"
           className={`btnFullscreenToggle ${fullscreenOn ? "active" : ""}`}

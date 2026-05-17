@@ -192,7 +192,8 @@ code {
 }
 
 .btnFullscreenToggle,
-.btnThemeToggle {
+.btnThemeToggle,
+.btnGithubLink {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -204,10 +205,13 @@ code {
   background: transparent;
   color: color-mix(in srgb, var(--text) 90%, transparent);
   cursor: pointer;
+  box-sizing: border-box;
+  text-decoration: none;
 }
 
 .btnFullscreenToggle:hover,
-.btnThemeToggle:hover {
+.btnThemeToggle:hover,
+.btnGithubLink:hover {
   background: transparent;
   color: var(--text);
 }
@@ -219,7 +223,8 @@ code {
 }
 
 .btnFullscreenToggle:focus-visible,
-.btnThemeToggle:focus-visible {
+.btnThemeToggle:focus-visible,
+.btnGithubLink:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent, #a78bfa) 55%, transparent);
   outline-offset: 2px;
 }

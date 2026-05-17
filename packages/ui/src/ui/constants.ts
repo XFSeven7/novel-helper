@@ -17,6 +17,8 @@ export const MOBILE_PRESETS: Array<{ id: MobilePresetId; label: string; w: numbe
 
 export type ThemePreference = "light" | "dark";
 
+export const GITHUB_REPO_URL = "https://github.com/XFSeven7/novel-helper";
+
 export const THEME_STORAGE_KEY = "novel-helper-theme";
 /** v2：默认左右栏均展开（false = 未收起） */
 export const NAV_COLLAPSED_STORAGE_KEY = "novel-helper-nav-collapsed-v2";
