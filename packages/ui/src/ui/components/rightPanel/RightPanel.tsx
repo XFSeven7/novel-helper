@@ -9,7 +9,6 @@ export type RightTabId = "chapterAnalysis" | "chapterEntities" | "writingPack";
 export type RightPanelProps = {
   busy: boolean;
   activeBook: string;
-  showBookOverview: boolean;
   selectedChapter: ChapterSelected;
   rightTab: RightTabId;
   setRightTab: React.Dispatch<React.SetStateAction<RightTabId>>;
@@ -50,7 +49,6 @@ export type RightPanelProps = {
 export function RightPanel({
   busy,
   activeBook,
-  showBookOverview,
   selectedChapter,
   rightTab,
   setRightTab,
@@ -170,8 +168,6 @@ export function RightPanel({
 
     {!activeBook ? (
       <div className="rightNeedBook muted">请选择一本书</div>
-    ) : showBookOverview ? (
-      <div className="rightNeedBook muted">当前未选择章节。请在左侧章节目录选择一章查看内容整理。</div>
     ) : (
       <>
         <div className="browserTabsBar" role="tablist" aria-label="内容整理页签">

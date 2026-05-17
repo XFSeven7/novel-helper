@@ -708,6 +708,8 @@ export type BookStats = {
   activeDaysLast30: number;
   avgNetWordsPerActiveDay30: number;
   weeklyActivity: { weekStart: string; activeDays: number; netWords: number }[];
+  writingActivity: { date: string; words: number; chapters: number }[];
+  availableYears: number[];
 };
 
 export async function getBookStats(slug: string) {

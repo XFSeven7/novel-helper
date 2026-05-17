@@ -31,7 +31,9 @@ import {
 } from "./utils/modelConfigStorage";
 import { clamp } from "./utils/math";
 import { ChapterEditorPanel } from "./components/editor/ChapterEditorPanel";
+import { BookSynopsisPanel } from "./components/rightPanel/BookSynopsisPanel";
 import { RightPanel, type RightTabId } from "./components/rightPanel/RightPanel";
+import { StatsPanel } from "./components/StatsPanel";
 import { AppModals } from "./components/modals/AppModals";
 import { GlobalInfoPanel, type GlobalTabId } from "./components/GlobalInfo/GlobalInfoPanel";
 import { InspirationTab } from "./components/inspiration/InspirationTab";
@@ -123,6 +125,10 @@ const CHARACTER_TAG_OPTIONS = ["盟友", "敌对", "家人", "同事", "组织",
 export function App() {
   const [leftTab, setLeftTab] = useState<"chapters" | "global" | "progress" | "inspiration">("chapters");
   const [globalTab, setGlobalTab] = useState<GlobalTabId>("auditCharacters");
+
+  useEffect(() => {
+    if ((globalTab as string) === "stats") setGlobalTab("auditCharacters");
+  }, [globalTab]);
   const [books, setBooks] = useState<BookMeta[]>([]);
   const [activeBook, setActiveBook] = useState<string>("");
   /** true:左侧显示书架;false:左侧显示当前书的章节 */
@@ -2747,7 +2753,6 @@ export function App() {
                           busy={busy}
                           activeBook={activeBook}
                           chapters={chapters}
-                          statsRefreshKey={statsRefreshKey}
                           globalTab={globalTab}
                           setGlobalTab={setGlobalTab}
                           auditCharactersIndex={auditCharactersIndex}
@@ -2863,14 +2868,7 @@ export function App() {
                     <div className="centerTitle">
                       《{activeBookMeta?.title ?? activeBook}》· 书籍概览
                     </div>
-                    <span
-                      className={`titleAutosave autosaveHint ${
-                        bookOverviewAutosaveHint === "保存失败" ? "autosaveErr" : ""
-                      }`}
-                      title="简介停顿约 1 秒后写入 meta.json"
-                    >
-                      {bookOverviewAutosaveHint}
-                    </span>
+                    <span className="titleAutosave autosaveHint" />
                   </>
                 ) : !selectedChapterMeta ? (
                   <>
@@ -2915,6 +2913,20 @@ export function App() {
                   </>
                 ) : (
                   <>
+                    {activeBookMeta ? (
+                      <>
+                        <button
+                          type="button"
+                          className="btnLinkMuted centerBookLink"
+                          disabled={busy}
+                          onClick={() => void goBookOverview()}
+                          title="查看本书统计与简介"
+                        >
+                          {activeBookMeta.title}
+                        </button>
+                        <span className="muted centerTitleSep">›</span>
+                      </>
+                    ) : null}
                     <div
                       className={`centerTitle ${canRenameChapterFilename ? "centerTitleEditable" : ""}`}
                       onDoubleClick={() => {
@@ -2968,10 +2980,6 @@ export function App() {
                 </span>
                 <span className="centerMetaSep">·</span>
                 <span>{activeBookMeta.status}</span>
-                <span className="centerMetaSep">·</span>
-                <span>{activeBookMeta.chapterCount} 章</span>
-                <span className="centerMetaSep">·</span>
-                <span>总字数:{bookTotalWordCount}</span>
                 <span className="centerMetaSep">·</span>
                 <span className="muted">标识 {activeBookMeta.slug}</span>
               </div>
@@ -3201,48 +3209,13 @@ export function App() {
               <div className="empty centerBodyHint">从左侧书架选择一本书开始。</div>
             )
           ) : showBookOverview ? (
-            <div className="bookOverview">
-              <div className="bookOverviewTopRow">
-                <div className="bookOverviewSynopsisLabel">简介</div>
-                {activeBookMeta ? (
-                  <div className="row bookOverviewActions">
-                    <button
-                      type="button"
-                      className="btnSort btnSuccess"
-                      disabled={busy || !activeBook}
-                      onClick={async () => {
-                        if (!activeBook) return;
-                        try {
-                          const { book } = await patchBookCompleted(activeBook, !Boolean((activeBookMeta as any)?.completed));
-                          setBooks((prev) => prev.map((b) => (b.slug === activeBook ? book : b)));
-                          setStatus(book.completed ? "已标记为已完结。" : "已取消完结标记。");
-                        } catch (e: any) {
-                          setStatus(e?.message || String(e));
-                        }
-                      }}
-                    >
-                      {activeBookMeta.completed ? "取消完结" : "完结书籍"}
-                    </button>
-                    <button
-                      type="button"
-                      className="btnSort btnDanger"
-                      disabled={busy || !activeBook}
-                      onClick={() => activeBookMeta && openDeleteBookModal(activeBookMeta)}
-                      title="软删除:书籍目录仍保留在本地"
-                    >
-                      废弃书籍
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-              <textarea
-                className="bookOverviewSynopsis"
-                value={synopsisDraft}
-                onChange={(e) => setSynopsisDraft(e.target.value)}
-                disabled={busy}
-                placeholder="写一句简介或内容简介...(保存到书籍 meta.json)"
-                aria-label="书籍简介"
-                rows={4}
+            <div className="centerBookStats">
+              <StatsPanel
+                busy={busy}
+                activeBook={activeBook}
+                chapters={chapters}
+                statsRefreshKey={statsRefreshKey}
+                onSetStatus={setStatus}
               />
             </div>
           ) : (
@@ -3298,10 +3271,33 @@ export function App() {
           }}
         />
 
+        {showBookOverview ? (
+          <BookSynopsisPanel
+            busy={busy}
+            activeBook={activeBook}
+            activeBookMeta={activeBookMeta}
+            synopsisDraft={synopsisDraft}
+            setSynopsisDraft={setSynopsisDraft}
+            bookOverviewAutosaveHint={bookOverviewAutosaveHint}
+            onToggleCompleted={async () => {
+              if (!activeBook) return;
+              try {
+                const { book } = await patchBookCompleted(
+                  activeBook,
+                  !Boolean(activeBookMeta?.completed)
+                );
+                setBooks((prev) => prev.map((b) => (b.slug === activeBook ? book : b)));
+                setStatus(book.completed ? "已标记为已完结。" : "已取消完结标记。");
+              } catch (e: any) {
+                setStatus(e?.message || String(e));
+              }
+            }}
+            onDeleteBook={() => activeBookMeta && openDeleteBookModal(activeBookMeta)}
+          />
+        ) : (
         <RightPanel
           busy={busy}
           activeBook={activeBook}
-          showBookOverview={showBookOverview}
           selectedChapter={selectedChapter}
           rightTab={rightTab}
           setRightTab={setRightTab}
@@ -3335,6 +3331,7 @@ export function App() {
           onJumpToRunningAuditChapter={() => void jumpToRunningAuditChapter()}
           onJumpToOrganize={jumpToOrganize}
         />
+        )}
       </div>
 
       <AppModals

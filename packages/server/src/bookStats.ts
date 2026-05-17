@@ -26,6 +26,10 @@ export type BookStats = {
   activeDaysLast30: number;
   avgNetWordsPerActiveDay30: number;
   weeklyActivity: { weekStart: string; activeDays: number; netWords: number }[];
+  /** 有写作记录的全部日期（稀疏，供年度贡献图） */
+  writingActivity: { date: string; words: number; chapters: number }[];
+  /** 可切换的年份列表（从最早写作年至今年） */
+  availableYears: number[];
 };
 
 function todayStr(): string {
@@ -116,6 +120,26 @@ function buildWeeklyActivity(log: WritingLog, today: string, weeks: number) {
     result.push({ weekStart: ws, activeDays, netWords });
   }
   return result;
+}
+
+function buildWritingActivity(log: WritingLog) {
+  return Object.entries(log.daily)
+    .filter(([, d]) => (d?.netWords ?? 0) > 0)
+    .map(([date, d]) => ({
+      date,
+      words: d!.netWords,
+      chapters: d!.saveCount
+    }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function buildAvailableYears(activity: { date: string }[], today: string): number[] {
+  const currentYear = Number(today.slice(0, 4));
+  if (activity.length === 0) return [currentYear];
+  const minYear = Number(activity[0]!.date.slice(0, 4));
+  const years: number[] = [];
+  for (let y = minYear; y <= currentYear + 1; y++) years.push(y);
+  return years;
 }
 
 function buildDailyBreakdown(log: WritingLog, maxDays: number) {
@@ -218,6 +242,8 @@ export async function computeBookStats(
   }
 
   const streak = computeStreak(log, today);
+  const writingActivity = buildWritingActivity(log);
+  const availableYears = buildAvailableYears(writingActivity, today);
   const dailyBreakdown = buildDailyBreakdown(log, 90);
 
   const from7 = addDays(today, -6);
@@ -251,6 +277,8 @@ export async function computeBookStats(
     activeDaysLast7,
     activeDaysLast30,
     avgNetWordsPerActiveDay30,
-    weeklyActivity: buildWeeklyActivity(log, today, 4)
+    weeklyActivity: buildWeeklyActivity(log, today, 4),
+    writingActivity,
+    availableYears
   };
 }

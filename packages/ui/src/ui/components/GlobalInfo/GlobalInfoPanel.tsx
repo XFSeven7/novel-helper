@@ -10,15 +10,13 @@ import {
 import { auditCharacterRoleClass } from "../../utils/auditCharacters";
 import { auditCharStateExtraRows, auditCharTopExtraRows } from "../../utils/auditDiff";
 import { MemoryPanel } from "./MemoryPanel";
-import { StatsPanel } from "../StatsPanel";
 
-export type GlobalTabId = "auditCharacters" | "relations" | "places" | "timeline" | "foreshadows" | "stats";
+export type GlobalTabId = "auditCharacters" | "relations" | "places" | "timeline" | "foreshadows";
 
 export type GlobalInfoPanelProps = {
   busy: boolean;
   activeBook: string;
   chapters: ChapterMeta[];
-  statsRefreshKey: number;
   globalTab: GlobalTabId;
   setGlobalTab: React.Dispatch<React.SetStateAction<GlobalTabId>>;
   auditCharactersIndex: any;
@@ -76,7 +74,6 @@ export function GlobalInfoPanel({
   busy,
   activeBook,
   chapters,
-  statsRefreshKey,
   globalTab,
   setGlobalTab,
   auditCharactersIndex,
@@ -182,16 +179,6 @@ export function GlobalInfoPanel({
           disabled={busy}
         >
           伏笔
-        </button>
-        <button
-          type="button"
-          role="tab"
-          className={`browserTab ${globalTab === "stats" ? "active" : ""}`}
-          aria-selected={globalTab === "stats"}
-          onClick={() => setGlobalTab("stats")}
-          disabled={busy}
-        >
-          统计
         </button>
         {/* 资料卡页签入口已移除：合并功能改在"编辑角色"弹窗内 */}
       </div>
@@ -882,14 +869,6 @@ export function GlobalInfoPanel({
           setTimelineBusy(false);
         }
       }}
-    />
-    ) : globalTab === "stats" ? (
-    <StatsPanel
-      busy={busy}
-      activeBook={activeBook}
-      chapters={chapters}
-      statsRefreshKey={statsRefreshKey}
-      onSetStatus={setStatus}
     />
     ) : (
     <div className="foreshadowPanel">

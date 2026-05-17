@@ -1258,6 +1258,25 @@ code {
   padding: 24px;
 }
 
+.centerBookStats {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px 16px;
+}
+
+.centerBookLink {
+  font-size: inherit;
+  font-weight: 600;
+  padding: 0;
+  border: none;
+  background: none;
+}
+
+.centerTitleSep {
+  margin: 0 6px;
+}
+
 .bookOverview {
   flex: 1;
   min-height: 0;
@@ -3997,34 +4016,317 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis) {
   margin-top: 4px;
 }
 
-.statsBarChart {
-  display: flex;
-  align-items: flex-end;
-  gap: 2px;
-  height: 100px;
-  padding: 4px 0;
+.statsChartHint {
+  font-size: 11px;
+  margin: 2px 0 6px;
 }
 
-.statsBarChart--short {
+.statsLineChart {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.statsLineChart--empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
+  font-size: 12px;
+}
+
+.statsLineChartPlot {
+  position: relative;
+  width: 100%;
+  height: 100px;
+  flex-shrink: 0;
+}
+
+.statsLineChart--short .statsLineChartPlot {
   height: 80px;
 }
 
-.statsBar {
-  flex: 1;
-  min-width: 3px;
-  background: var(--accent);
-  border-radius: 2px 2px 0 0;
+.statsLineChartSvg {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
 }
 
-.statsBarLabels {
+.statsLineChartLine {
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.statsLineChartHit {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  cursor: crosshair;
+}
+
+.statsLineChartGuide {
+  stroke: var(--accent);
+  stroke-width: 1;
+  stroke-opacity: 0.45;
+  vector-effect: non-scaling-stroke;
+}
+
+.statsLineChartTooltip {
+  position: absolute;
+  z-index: 4;
+  pointer-events: none;
+  transform: translate(-50%, calc(-100% - 10px));
+  padding: 5px 9px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--text);
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.28);
+}
+
+.statsLineChartDot {
+  position: absolute;
+  z-index: 3;
+  width: 7px;
+  height: 7px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--bg) 65%, var(--accent));
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  box-sizing: border-box;
+  transition: width 0.12s ease, height 0.12s ease;
+}
+
+.statsLineChartDot--active {
+  width: 9px;
+  height: 9px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.statsLineChartLabels {
   display: flex;
   justify-content: space-between;
   font-size: 11px;
-  margin-top: 2px;
+  line-height: 1.2;
 }
 
 .statsTotalHint {
   font-size: 11px;
   margin-top: 4px;
+}
+
+/* GitHub 式年度写作贡献图 */
+.contribCalendar {
+  margin-top: 4px;
+}
+
+.contribCalendarToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  margin-bottom: 8px;
+}
+
+.contribYearNav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.contribYearBtn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.contribYearBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.contribYearSelect {
+  min-width: 72px;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  font-size: 13px;
+}
+
+.contribYearSummary {
+  font-size: 12px;
+  margin: 0;
+  flex: 1;
+  min-width: 200px;
+}
+
+.contribCalendarBody {
+  width: 100%;
+  overflow: visible;
+}
+
+.contribCalendarInner {
+  width: 100%;
+  overflow: visible;
+}
+
+.contribMonthRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  margin-bottom: 4px;
+  width: 100%;
+  overflow: visible;
+}
+
+.contribWeekdaySpacer {
+  width: 14px;
+  flex-shrink: 0;
+}
+
+.contribMonthTrack {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  overflow: visible;
+}
+
+.contribMonthCell {
+  text-align: left;
+  overflow: visible;
+  white-space: nowrap;
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--muted);
+  position: relative;
+  z-index: 1;
+}
+
+.contribGridWrap {
+  display: flex;
+  gap: 4px;
+  width: 100%;
+}
+
+.contribWeekdayCol {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex-shrink: 0;
+  width: 14px;
+  padding-top: 0;
+}
+
+.contribWeekdayLabel {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.contribWeekdayLabel--dim {
+  visibility: hidden;
+}
+
+.contribGrid {
+  flex: 1;
+  min-width: 0;
+  width: 100%;
+  display: grid;
+  grid-template-rows: repeat(7, minmax(0, 1fr));
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 2px;
+  aspect-ratio: calc(var(--contrib-weeks, 53) / 7);
+}
+
+.contribCell {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--border));
+  border: 1px solid transparent;
+  box-sizing: border-box;
+}
+
+.contribCell[data-level="0"]:not(.contribCell--pad):not(.contribCell--future) {
+  background: color-mix(in srgb, var(--panel2) 70%, var(--bg));
+  border-color: color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.contribCalendar[data-no-activity] .contribCell:not(.contribCell--pad) {
+  background: color-mix(in srgb, var(--panel) 85%, var(--bg));
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.contribCalendar[data-no-activity] .contribCell--future {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--panel) 45%, var(--bg));
+}
+
+.contribCell--pad {
+  background: transparent;
+  border-color: transparent;
+}
+
+.contribCell--future {
+  background: color-mix(in srgb, var(--panel) 50%, var(--bg));
+  border: 1px dashed color-mix(in srgb, var(--border) 65%, transparent);
+  box-sizing: border-box;
+}
+
+.contribCell[data-level="1"] {
+  background: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.contribCell[data-level="2"] {
+  background: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+
+.contribCell[data-level="3"] {
+  background: color-mix(in srgb, var(--accent) 75%, var(--border));
+}
+
+.contribCell[data-level="4"] {
+  background: var(--accent);
+}
+
+.contribLegend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  margin-top: 8px;
+}
+
+.contribLegend .contribCell {
+  flex-shrink: 0;
+  width: 11px;
+  height: 11px;
+  aspect-ratio: auto;
 }
 

@@ -33,7 +33,8 @@ milestones:
       - 分析功能优化
 
   - name: v1.3 写作统计看板
-    status: active
+    status: done
+    completed: 2026-05-17
     features:
       - 每日写作量趋势柱状图
       - 每章字数分布
