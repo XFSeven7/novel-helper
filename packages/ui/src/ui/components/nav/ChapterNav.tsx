@@ -9,6 +9,7 @@ export type ChapterNavProps = {
   chapterSortDesc: boolean;
   chapterTitle: string;
   auditedChapterFilenames: ReadonlySet<string>;
+  auditChangedChapterFilenames: ReadonlySet<string>;
   onToggleSort: () => void;
   onChapterTitleChange: (title: string) => void;
   onOpenChapter: (chapter: ChapterMeta) => void;
@@ -23,6 +24,7 @@ export function ChapterNav({
   chapterSortDesc,
   chapterTitle,
   auditedChapterFilenames,
+  auditChangedChapterFilenames,
   onToggleSort,
   onChapterTitleChange,
   onOpenChapter,
@@ -47,7 +49,10 @@ export function ChapterNav({
             {chapters.length === 0 ? (
               <div className="empty">暂无章节,请在下方新建。</div>
             ) : (
-              displayedChapters.map((c) => (
+              displayedChapters.map((c) => {
+                const isAudited = auditedChapterFilenames.has(c.filename);
+                const hasChanges = auditChangedChapterFilenames.has(c.filename);
+                return (
                 <button
                   key={c.filename}
                   type="button"
@@ -59,15 +64,17 @@ export function ChapterNav({
                   <span className="chapterNavRightMeta">
                     <span
                       className={`chapterNavAuditStatus ${
-                        auditedChapterFilenames.has(c.filename) ? "ok" : "miss"
+                        isAudited ? "ok" : "miss"
                       }`}
                     >
-                      {auditedChapterFilenames.has(c.filename) ? "已分析" : "未分析"}
+                      {hasChanges ? <span className="chapterNavAuditChanged">有改动 </span> : null}
+                      {isAudited ? "已分析" : "未分析"}
                     </span>
                     <span className="chapterNavWordCount">{c.wordCount ?? 0} 字</span>
                   </span>
                 </button>
-              ))
+              );
+              })
             )}
           </div>
         </div>

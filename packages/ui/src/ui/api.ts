@@ -223,6 +223,19 @@ export async function getAuditLatest(slug: string, chapterFilename: string) {
   );
 }
 
+export type AuditChapterStaleEntry = {
+  filename: string;
+  stale: boolean;
+  currentHash: string;
+  auditedHash: string;
+};
+
+export async function getAuditChapterStale(slug: string) {
+  return await http<{ chapters: AuditChapterStaleEntry[] }>(
+    `/api/books/${encodeURIComponent(slug)}/audit/stale-chapters`
+  );
+}
+
 export async function getAuditAnalysis(slug: string, chapterFilename: string) {
   return await http<{ text: string }>(
     `/api/books/${encodeURIComponent(slug)}/audit/analysis?chapter=${encodeURIComponent(chapterFilename)}`

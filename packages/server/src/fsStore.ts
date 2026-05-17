@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -558,6 +559,53 @@ export async function readAuditRun(dataDir: string, novelSlug: string, chapterFi
   if (!(await exists(p))) return null;
   const raw = await fs.readFile(p, "utf8");
   return JSON.parse(raw) as AuditRun;
+}
+
+export function chapterContentSha1(text: string): string {
+  const normalized = String(text || "").replace(/\r/g, "");
+  return crypto.createHash("sha1").update(normalized, "utf8").digest("hex");
+}
+
+export type AuditChapterStaleEntry = {
+  filename: string;
+  stale: boolean;
+  currentHash: string;
+  auditedHash: string;
+};
+
+/** 对比各章 audit run 快照 hash 与当前正文，供章节目录「有改动」展示 */
+export async function listAuditChapterStale(
+  dataDir: string,
+  novelSlug: string
+): Promise<AuditChapterStaleEntry[]> {
+  const dir = path.join(auditDir(dataDir, novelSlug), "auditRuns");
+  let files: string[] = [];
+  try {
+    files = await fs.readdir(dir);
+  } catch {
+    return [];
+  }
+  const out: AuditChapterStaleEntry[] = [];
+  for (const file of files) {
+    if (!file.endsWith(".json")) continue;
+    const filename = file.slice(0, -5);
+    const run = await readAuditRun(dataDir, novelSlug, filename);
+    const auditedHash = String(run?.source?.contentHash || "").trim();
+    if (!auditedHash) continue;
+    try {
+      const raw = await readChapter(dataDir, novelSlug, filename);
+      const currentHash = chapterContentSha1(raw);
+      out.push({
+        filename,
+        stale: currentHash !== auditedHash,
+        currentHash,
+        auditedHash
+      });
+    } catch {
+      /* 章节文件缺失时跳过 */
+    }
+  }
+  return out;
 }
 
 function auditAnalysisDir(dataDir: string, novelSlug: string) {

@@ -910,6 +910,11 @@ code {
   color: color-mix(in srgb, var(--muted) 92%, transparent);
 }
 
+.chapterNavAuditChanged {
+  color: color-mix(in srgb, #f5c542 88%, var(--text));
+  font-weight: 600;
+}
+
 .tree.navListDense .treeChild.bookShelfRow {
   display: flex;
   flex-direction: column;
@@ -2786,6 +2791,13 @@ code {
 .auditDirtyMeta {
   margin-left: 6px;
   font-weight: 400;
+}
+
+.auditDirtyActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .tabDirtyStar {

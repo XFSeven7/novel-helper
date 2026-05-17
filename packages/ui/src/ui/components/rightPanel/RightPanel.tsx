@@ -31,6 +31,7 @@ export type RightPanelProps = {
   setStatus: (msg: string) => void;
   auditDirty: boolean;
   auditDirtyDelta: { abs: number; ratio: number } | null;
+  onIgnoreAuditStale: () => void;
   auditBusy: boolean;
   auditRun: any;
   onAuditSelectedChapter: () => void | Promise<void>;
@@ -71,6 +72,7 @@ export function RightPanel({
   setStatus,
   auditDirty,
   auditDirtyDelta,
+  onIgnoreAuditStale,
   auditBusy,
   auditRun,
   onAuditSelectedChapter,
@@ -82,6 +84,40 @@ export function RightPanel({
   onJumpToRunningAuditChapter,
   onJumpToOrganize
 }: RightPanelProps) {
+  const auditDirtyBar =
+    auditDirty ? (
+      <div className="auditDirtyBar" role="status" aria-label="分析可能过期提示">
+        <div className="auditDirtyText">
+          正文已修改,分析可能过期
+          {auditDirtyDelta ? (
+            <span className="auditDirtyMeta muted">
+              (约 {auditDirtyDelta.abs} 字变动 · {(auditDirtyDelta.ratio * 100).toFixed(0)}%)
+            </span>
+          ) : null}
+        </div>
+        <div className="auditDirtyActions">
+          <button
+            type="button"
+            className="btnSort"
+            disabled={busy || auditBusy}
+            onClick={onIgnoreAuditStale}
+            title="暂不重新分析,正文再改时会再次提示"
+          >
+            忽略
+          </button>
+          <button
+            type="button"
+            className="btnSquare"
+            disabled={busy || auditBusy || !okModelConfigs.length}
+            onClick={() => void onAuditSelectedChapter()}
+            title={!okModelConfigs.length ? "请先在「设置」中配置模型并测试连接" : "重新分析本章以同步内容整理"}
+          >
+            重新分析
+          </button>
+        </div>
+      </div>
+    ) : null;
+
   return (
     <aside className="right">
       <section className="panel">
@@ -339,27 +375,7 @@ export function RightPanel({
           ) : rightTab === "chapterAnalysis" ? (
             <div className="auditPanel">
               <div className="auditPanelBody">
-                {auditDirty ? (
-                  <div className="auditDirtyBar" role="status" aria-label="分析可能过期提示">
-                    <div className="auditDirtyText">
-                      正文已修改,分析可能过期
-                      {auditDirtyDelta ? (
-                        <span className="auditDirtyMeta muted">
-                          (约 {auditDirtyDelta.abs} 字变动 · {(auditDirtyDelta.ratio * 100).toFixed(0)}%)
-                        </span>
-                      ) : null}
-                    </div>
-                    <button
-                      type="button"
-                      className="btnSquare"
-                      disabled={busy || auditBusy || !okModelConfigs.length}
-                      onClick={() => void onAuditSelectedChapter()}
-                      title={!okModelConfigs.length ? "请先在「设置」中配置模型并测试连接" : "重新分析本章以同步内容整理"}
-                    >
-                      重新分析
-                    </button>
-                  </div>
-                ) : null}
+                {auditDirtyBar}
                 <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
                   <div className="auditPanelTitle">
                     {auditRunningChapter &&
@@ -587,27 +603,7 @@ export function RightPanel({
                 }
                 return (
                   <>
-                    {auditDirty ? (
-                      <div className="auditDirtyBar" role="status" aria-label="分析可能过期提示">
-                        <div className="auditDirtyText">
-                          正文已修改,分析可能过期
-                          {auditDirtyDelta ? (
-                            <span className="auditDirtyMeta muted">
-                              (约 {auditDirtyDelta.abs} 字变动 · {(auditDirtyDelta.ratio * 100).toFixed(0)}%)
-                            </span>
-                          ) : null}
-                        </div>
-                        <button
-                          type="button"
-                          className="btnSquare"
-                          disabled={busy || auditBusy || !okModelConfigs.length}
-                          onClick={() => void onAuditSelectedChapter()}
-                          title={!okModelConfigs.length ? "请先在「设置」中配置模型并测试连接" : "重新分析本章以同步内容整理"}
-                        >
-                          重新分析
-                        </button>
-                      </div>
-                    ) : null}
+                    {auditDirtyBar}
                     <div className="auditPanel">
                       <div className="auditPanelBody">
                         <div className="auditPanelTitle">本章角色</div>

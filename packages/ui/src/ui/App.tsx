@@ -31,6 +31,13 @@ import {
   loadThemePreference
 } from "./utils/modelConfigStorage";
 import { clamp } from "./utils/math";
+import {
+  auditDirtyIgnoreKey,
+  clearAuditDirtyIgnoreEntry,
+  filterStaleChaptersWithIgnore,
+  readAuditDirtyIgnoreStore,
+  setAuditDirtyIgnoreEntry
+} from "./utils/auditDirtyIgnore";
 import { ChapterEditorPanel } from "./components/editor/ChapterEditorPanel";
 import { BookSynopsisPanel } from "./components/rightPanel/BookSynopsisPanel";
 import { RightPanel, type RightTabId } from "./components/rightPanel/RightPanel";
@@ -71,6 +78,7 @@ import {
   putModelConfigs,
   auditChapter,
   getAuditLatest,
+  getAuditChapterStale,
   getAuditAnalysis,
   saveAuditAnalysis,
   getAuditLedger,
@@ -478,6 +486,7 @@ export function App() {
       setChapters((prev) => prev.map((c) => (c.filename === sel.filename ? { ...c, wordCount: w } : c)));
       setStatsRefreshKey((k) => k + 1);
       setChapterAutosaveHint("已保存");
+      void refreshAuditChapterStale(sel.bookSlug);
       window.setTimeout(() => {
         setChapterAutosaveHint((s) => (s === "已保存" ? "" : s));
       }, 2000);
@@ -713,6 +722,8 @@ export function App() {
   const [auditRun, setAuditRun] = useState<any | null>(null);
   const [auditDirty, setAuditDirty] = useState(false);
   const [auditDirtyDelta, setAuditDirtyDelta] = useState<{ abs: number; ratio: number } | null>(null);
+  /** 用户点击「忽略」：按书+章节记录当时正文 hash，切换章节再回来仍有效 */
+  const auditDirtyIgnoreRef = useRef<Record<string, string>>(readAuditDirtyIgnoreStore());
   const [auditLedger, setAuditLedger] = useState<any | null>(null);
   const [auditCharactersIndex, setAuditCharactersIndex] = useState<any | null>(null);
   const [auditPlacesIndex, setAuditPlacesIndex] = useState<any | null>(null);
@@ -752,18 +763,22 @@ export function App() {
   useEffect(() => {
     const auditedHash = String((auditRun as any)?.source?.contentHash || "").trim();
     const auditedLenRaw = Number((auditRun as any)?.source?.contentLength);
-    if (!selectedChapter || !auditedHash) {
+    if (!activeBook || !selectedChapter || !auditedHash) {
       setAuditDirty(false);
       setAuditDirtyDelta(null);
       return;
     }
     let cancelled = false;
     const current = String(chapterContentRef.current || "");
+    const chapterFilename = selectedChapter.filename;
+    const bookSlug = activeBook;
     void (async () => {
       try {
         const curHash = await sha1Hex(current);
         if (cancelled) return;
-        const dirty = curHash !== auditedHash;
+        const ignoredHash = auditDirtyIgnoreRef.current[auditDirtyIgnoreKey(bookSlug, chapterFilename)];
+        const ignoredAtCurrentContent = ignoredHash === curHash;
+        const dirty = curHash !== auditedHash && !ignoredAtCurrentContent;
         setAuditDirty(dirty);
         const curLen = String(current || "").replace(/\r/g, "").length;
         const baseLen = Number.isFinite(auditedLenRaw) ? auditedLenRaw : 0;
@@ -780,7 +795,33 @@ export function App() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- auditedHash/len 来自 auditRun
-  }, [selectedChapter?.filename, auditRun, chapterContent]);
+  }, [activeBook, selectedChapter?.filename, auditRun, chapterContent]);
+
+  const onIgnoreAuditStale = () => {
+    const fn = selectedChapter?.filename;
+    if (!activeBook || !fn) return;
+    void (async () => {
+      try {
+        const curHash = await sha1Hex(String(chapterContentRef.current || ""));
+        auditDirtyIgnoreRef.current = setAuditDirtyIgnoreEntry(
+          auditDirtyIgnoreRef.current,
+          activeBook,
+          fn,
+          curHash
+        );
+        setAuditChapterStaleFilenames((prev) => {
+          const next = new Set(prev);
+          next.delete(fn);
+          return next;
+        });
+        setAuditDirty(false);
+        setAuditDirtyDelta(null);
+      } catch {
+        setAuditDirty(false);
+        setAuditDirtyDelta(null);
+      }
+    })();
+  };
 
   const [foreshadowCreateOpen, setForeshadowCreateOpen] = useState(false);
   const [foreshadowCreateTitle, setForeshadowCreateTitle] = useState("");
@@ -867,6 +908,10 @@ export function App() {
     }
     return s;
   }, [timelineIndex]);
+  const [auditChapterStaleFilenames, setAuditChapterStaleFilenames] = useState<ReadonlySet<string>>(
+    () => new Set()
+  );
+  const auditChapterStaleHashRef = useRef<Record<string, string>>({});
   const okModelConfigs = useMemo(() => modelConfigs.filter((c) => c.lastTestOk), [modelConfigs]);
   const [auditModelPickerOpen, setAuditModelPickerOpen] = useState(false);
   const [auditModelSearch, setAuditModelSearch] = useState("");
@@ -1427,6 +1472,25 @@ export function App() {
     await onOpenChapter(m);
   }
 
+  async function refreshAuditChapterStale(slug: string) {
+    try {
+      const { chapters } = await getAuditChapterStale(slug);
+      const hashByFilename: Record<string, string> = {};
+      const staleRaw = new Set<string>();
+      for (const c of chapters) {
+        hashByFilename[c.filename] = c.currentHash;
+        if (c.stale) staleRaw.add(c.filename);
+      }
+      auditChapterStaleHashRef.current = hashByFilename;
+      setAuditChapterStaleFilenames(
+        filterStaleChaptersWithIgnore(slug, staleRaw, hashByFilename, auditDirtyIgnoreRef.current)
+      );
+    } catch {
+      auditChapterStaleHashRef.current = {};
+      setAuditChapterStaleFilenames(new Set());
+    }
+  }
+
   async function loadGlobalArtifacts(slug: string) {
     try {
       const [{ index }, { index: timelineIdx }, { index: placesIdx }, { index: foreshadowsIdx }, { index: progressIdx }] =
@@ -1442,6 +1506,7 @@ export function App() {
       setAuditPlacesIndex(placesIdx);
       setAuditForeshadowsIndex(foreshadowsIdx);
       setAuditProgressIndex(progressIdx);
+      void refreshAuditChapterStale(slug);
     } catch {
       // ignore
     }
@@ -2129,7 +2194,14 @@ export function App() {
               setAuditProgress({ step, total, label });
             }
             if (payload?.type === "done") {
-              if (payload.run) setAuditRun(payload.run);
+              if (payload.run) {
+                auditDirtyIgnoreRef.current = clearAuditDirtyIgnoreEntry(
+                  auditDirtyIgnoreRef.current,
+                  runningBookSlug,
+                  runningChapterFilename
+                );
+                setAuditRun(payload.run);
+              }
                 const reportText = String(payload?.run?.humanAuditReport ?? "");
                 if (reportText.trim()) {
                   resetAuditThinkingReveal();
@@ -2698,6 +2770,7 @@ export function App() {
                       chapterSortDesc={chapterSortDesc}
                       chapterTitle={chapterTitle}
                       auditedChapterFilenames={auditedChapterFilenameSet}
+                      auditChangedChapterFilenames={auditChapterStaleFilenames}
                       onToggleSort={() => setChapterSortDesc((v) => !v)}
                       onChapterTitleChange={setChapterTitle}
                       onOpenChapter={(c) => void onOpenChapter(c)}
@@ -3228,6 +3301,7 @@ export function App() {
           setStatus={setStatus}
           auditDirty={auditDirty}
           auditDirtyDelta={auditDirtyDelta}
+          onIgnoreAuditStale={onIgnoreAuditStale}
           auditBusy={auditBusy}
           auditRun={auditRun}
           onAuditSelectedChapter={() => void onAuditSelectedChapter()}

@@ -27,6 +27,7 @@ import {
   restoreNovel,
   writeAuditRun,
   readAuditRun,
+  listAuditChapterStale,
   readAuditAnalysisText,
   readAuditLedger,
   writeAuditLedger,
@@ -2521,6 +2522,13 @@ app.get("/api/books/:slug/audit/latest", async (req, reply) => {
   } catch {
     return reply.code(404).send({ message: "Not found" });
   }
+});
+
+app.get("/api/books/:slug/audit/stale-chapters", async (req) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const params = paramsSchema.parse((req as any).params);
+  const chapters = await listAuditChapterStale(getDataDir(), params.slug);
+  return { chapters };
 });
 
 app.get("/api/books/:slug/audit/analysis", async (req, reply) => {
