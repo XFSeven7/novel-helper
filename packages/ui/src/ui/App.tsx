@@ -11,7 +11,51 @@ import {
   THEME_STORAGE_KEY,
   type ThemePreference
 } from "./constants";
-import { auditCharacterNewBadgeClass, auditCharacterRoleClass, formatAuditCharField } from "./utils/auditCharacters";
+import { auditCharacterNewBadgeClass, auditCharacterRoleClass } from "./utils/auditCharacters";
+import {
+  auditCharStateExtraRows,
+  auditCharTopExtraRows,
+  buildAuditTargets,
+  diffChars,
+  splitParagraphs,
+  type AuditLinkTarget
+} from "./utils/auditDiff";
+import {
+  AUTOSAVE_DEBOUNCE_MS,
+  CHAPTER_TITLE_RENAME_FILE_RE,
+  approximateWordCount,
+  formatBookCreatedAt,
+  formatMissingChapterList,
+  normalizeChapterGapList
+} from "./utils/chapterFormat";
+import {
+  emptyInspGenSlice,
+  type InspGenSlice,
+  type InspirationEventContent,
+  type InspirationItemContent,
+  type InspirationLoreContent,
+  type InspirationOrgContent,
+  type InspirationPlaceContent,
+  type InspirationTechniqueContent,
+  inspirationEventCollapsedBlurb,
+  inspirationItemCollapsedBlurb,
+  inspirationLoreCollapsedBlurb,
+  inspirationOrgCollapsedBlurb,
+  inspirationPlaceCollapsedBlurb,
+  inspirationTechniqueCollapsedBlurb,
+  parseInspirationEventContent,
+  parseInspirationItemContent,
+  parseInspirationLoreContent,
+  parseInspirationOrgContent,
+  parseInspirationPlaceContent,
+  parseInspirationTechniqueContent
+} from "./utils/inspirationParse";
+import {
+  BUILTIN_MODEL_PROVIDERS,
+  defaultConfigFor,
+  loadModelConfigs,
+  loadThemePreference
+} from "./utils/modelConfigStorage";
 import { clamp } from "./utils/math";
 import { MemoryPanel } from "./components/GlobalInfo/MemoryPanel";
 import { StatsPanel } from "./components/StatsPanel";
@@ -82,168 +126,16 @@ import {
   type InspirationIndex,
   type IdeaItem,
   getBookStats,
-  type BookStats
+  type BookStats,
+  type ModelConfig,
+  type ModelProviderId
 } from "./api";
 import type { BookSearchGroup, BookSearchHit } from "./api";
 
 type InspTypeKey = "character" | "place" | "org" | "item" | "event" | "lore" | "technique";
 
-type InspGenSlice = {
-  previewItems: IdeaItem[];
-  savedIdSet: Record<string, boolean>;
-  expanded: Record<string, boolean>;
-  editingId: string | null;
-  editTitle: string;
-  editContent: string;
-  freeText: string;
-  useMemory: boolean;
-  count: number;
-  /** 道具生成:持有者角色名;空字符串表示无主/待定 */
-  itemOwnerCharacterName: string;
-};
-
-function emptyInspGenSlice(): InspGenSlice {
-  return {
-    previewItems: [],
-    savedIdSet: {},
-    expanded: {},
-    editingId: null,
-    editTitle: "",
-    editContent: "",
-    freeText: "",
-    useMemory: true,
-    count: 3,
-    itemOwnerCharacterName: ""
-  };
-}
-
 type SelectedChapter = { bookSlug: string; filename: string } | null;
 type SelectedCard = { bookSlug: string; path: string } | null;
-
-/** 灵感库 · 地点生成落库的 JSON content 结构 */
-type InspirationPlaceContent = {
-  atmosphere?: string;
-  layout?: string;
-  functions?: string;
-  hazards?: string;
-  hidden_hooks?: string;
-  sensory_fingerprints?: { sound?: string; visual?: string; smell?: string };
-  relationship_hooks?: Array<{ target?: string; nature?: string; description?: string }>;
-};
-
-function parseInspirationPlaceContent(raw: string): InspirationPlaceContent | null {
-  const t = String(raw || "").trim();
-  if (!t.startsWith("{")) return null;
-  try {
-    const o = JSON.parse(t) as Record<string, unknown>;
-    if (!o || typeof o !== "object" || Array.isArray(o)) return null;
-    const keys = [
-      "atmosphere",
-      "layout",
-      "functions",
-      "hazards",
-      "hidden_hooks",
-      "sensory_fingerprints",
-      "relationship_hooks"
-    ];
-    if (!keys.some((k) => Object.prototype.hasOwnProperty.call(o, k))) return null;
-    return o as InspirationPlaceContent;
-  } catch {
-    return null;
-  }
-}
-
-function inspirationPlaceCollapsedBlurb(data: InspirationPlaceContent, title: string): string {
-  const a = String(data.atmosphere || "").trim();
-  if (a) return a.length > 140 ? `${a.slice(0, 140)}...` : a;
-  const l = String(data.layout || "").trim();
-  if (l) return l.length > 140 ? `${l.slice(0, 140)}...` : l;
-  return title ? `「${title}」` : "地点卡";
-}
-
-/** 灵感库 · 道具生成落库的 JSON content 结构 */
-type InspirationItemContent = {
-  appearance?: string;
-  ownership_status?: string;
-  functions?: string;
-  limitations?: string;
-  origin?: string;
-  narrative_hooks?: string;
-  relationship_hooks?: Array<{ target?: string; nature?: string; description?: string }>;
-};
-
-function parseInspirationItemContent(raw: string): InspirationItemContent | null {
-  const t = String(raw || "").trim();
-  if (!t.startsWith("{")) return null;
-  try {
-    const o = JSON.parse(t) as Record<string, unknown>;
-    if (!o || typeof o !== "object" || Array.isArray(o)) return null;
-    const keys = [
-      "appearance",
-      "ownership_status",
-      "functions",
-      "limitations",
-      "origin",
-      "narrative_hooks",
-      "relationship_hooks"
-    ];
-    if (!keys.some((k) => Object.prototype.hasOwnProperty.call(o, k))) return null;
-    return o as InspirationItemContent;
-  } catch {
-    return null;
-  }
-}
-
-function inspirationItemCollapsedBlurb(data: InspirationItemContent, title: string): string {
-  const a = String(data.appearance || "").trim();
-  if (a) return a.length > 140 ? `${a.slice(0, 140)}...` : a;
-  const f = String(data.functions || "").trim();
-  if (f) return f.length > 140 ? `${f.slice(0, 140)}...` : f;
-  return title ? `「${title}」` : "道具卡";
-}
-
-/** 灵感库 · 组织/势力卡落库的 JSON content 结构 */
-type InspirationOrgContent = {
-  doctrine?: string;
-  hidden_agenda?: string;
-  hierarchy?: string;
-  power_base?: string;
-  internal_factions?: string;
-  entry_exit_cost?: string;
-  relationship_hooks?: Array<{ target?: string; nature?: string; description?: string }>;
-};
-
-function parseInspirationOrgContent(raw: string): InspirationOrgContent | null {
-  const t = String(raw || "").trim();
-  if (!t.startsWith("{")) return null;
-  try {
-    const o = JSON.parse(t) as Record<string, unknown>;
-    if (!o || typeof o !== "object" || Array.isArray(o)) return null;
-    const keys = [
-      "doctrine",
-      "hidden_agenda",
-      "hierarchy",
-      "power_base",
-      "internal_factions",
-      "entry_exit_cost",
-      "relationship_hooks"
-    ];
-    if (!keys.some((k) => Object.prototype.hasOwnProperty.call(o, k))) return null;
-    return o as InspirationOrgContent;
-  } catch {
-    return null;
-  }
-}
-
-function inspirationOrgCollapsedBlurb(data: InspirationOrgContent, title: string): string {
-  const d = String(data.doctrine || "").trim();
-  if (d) return d.length > 140 ? `${d.slice(0, 140)}...` : d;
-  const h = String(data.hidden_agenda || "").trim();
-  if (h) return h.length > 140 ? `${h.slice(0, 140)}...` : h;
-  const p = String(data.power_base || "").trim();
-  if (p) return p.length > 140 ? `${p.slice(0, 140)}...` : p;
-  return title ? `「${title}」` : "组织卡";
-}
 
 function InspirationOrgStructuredView({ data }: { data: InspirationOrgContent }) {
   const hooks = Array.isArray(data.relationship_hooks) ? data.relationship_hooks : [];
@@ -325,38 +217,6 @@ function InspirationItemStructuredView({ data }: { data: InspirationItemContent 
   );
 }
 
-/** 灵感库 · 事件卡 */
-type InspirationEventContent = {
-  trigger?: string;
-  description?: string;
-  impact?: string;
-  dilemma?: string;
-  karma_delta?: string;
-  relationship_hooks?: Array<{ target?: string; change?: string }>;
-};
-
-function parseInspirationEventContent(raw: string): InspirationEventContent | null {
-  const t = String(raw || "").trim();
-  if (!t.startsWith("{")) return null;
-  try {
-    const o = JSON.parse(t) as Record<string, unknown>;
-    if (!o || typeof o !== "object" || Array.isArray(o)) return null;
-    const keys = ["trigger", "description", "impact", "dilemma", "karma_delta", "relationship_hooks"];
-    if (!keys.some((k) => Object.prototype.hasOwnProperty.call(o, k))) return null;
-    return o as InspirationEventContent;
-  } catch {
-    return null;
-  }
-}
-
-function inspirationEventCollapsedBlurb(data: InspirationEventContent, title: string): string {
-  const d = String(data.description || "").trim();
-  if (d) return d.length > 140 ? `${d.slice(0, 140)}...` : d;
-  const tr = String(data.trigger || "").trim();
-  if (tr) return tr.length > 140 ? `${tr.slice(0, 140)}...` : tr;
-  return title ? `「${title}」` : "事件卡";
-}
-
 function InspirationEventStructuredView({ data }: { data: InspirationEventContent }) {
   const hooks = Array.isArray(data.relationship_hooks) ? data.relationship_hooks : [];
   const row = (label: string, body: string) =>
@@ -395,37 +255,6 @@ function InspirationEventStructuredView({ data }: { data: InspirationEventConten
   );
 }
 
-/** 灵感库 · 秘闻卡 */
-type InspirationLoreContent = {
-  surface_rumor?: string;
-  hidden_truth?: string;
-  evidence_trace?: string;
-  danger_level?: string;
-  narrative_value?: string;
-};
-
-function parseInspirationLoreContent(raw: string): InspirationLoreContent | null {
-  const t = String(raw || "").trim();
-  if (!t.startsWith("{")) return null;
-  try {
-    const o = JSON.parse(t) as Record<string, unknown>;
-    if (!o || typeof o !== "object" || Array.isArray(o)) return null;
-    const keys = ["surface_rumor", "hidden_truth", "evidence_trace", "danger_level", "narrative_value"];
-    if (!keys.some((k) => Object.prototype.hasOwnProperty.call(o, k))) return null;
-    return o as InspirationLoreContent;
-  } catch {
-    return null;
-  }
-}
-
-function inspirationLoreCollapsedBlurb(data: InspirationLoreContent, title: string): string {
-  const s = String(data.surface_rumor || "").trim();
-  if (s) return s.length > 140 ? `${s.slice(0, 140)}...` : s;
-  const h = String(data.hidden_truth || "").trim();
-  if (h) return h.length > 140 ? `${h.slice(0, 140)}...` : h;
-  return title ? `「${title}」` : "秘闻卡";
-}
-
 function InspirationLoreStructuredView({ data }: { data: InspirationLoreContent }) {
   const row = (label: string, body: string) =>
     body.trim() ? (
@@ -443,37 +272,6 @@ function InspirationLoreStructuredView({ data }: { data: InspirationLoreContent 
       {row("叙事价值", String(data.narrative_value || ""))}
     </div>
   );
-}
-
-/** 灵感库 · 功法卡 */
-type InspirationTechniqueContent = {
-  logic_flow?: string;
-  effect?: string;
-  backlash?: string;
-  requirement?: string;
-  lore_origin?: string;
-};
-
-function parseInspirationTechniqueContent(raw: string): InspirationTechniqueContent | null {
-  const t = String(raw || "").trim();
-  if (!t.startsWith("{")) return null;
-  try {
-    const o = JSON.parse(t) as Record<string, unknown>;
-    if (!o || typeof o !== "object" || Array.isArray(o)) return null;
-    const keys = ["logic_flow", "effect", "backlash", "requirement", "lore_origin"];
-    if (!keys.some((k) => Object.prototype.hasOwnProperty.call(o, k))) return null;
-    return o as InspirationTechniqueContent;
-  } catch {
-    return null;
-  }
-}
-
-function inspirationTechniqueCollapsedBlurb(data: InspirationTechniqueContent, title: string): string {
-  const e = String(data.effect || "").trim();
-  if (e) return e.length > 140 ? `${e.slice(0, 140)}...` : e;
-  const l = String(data.logic_flow || "").trim();
-  if (l) return l.length > 140 ? `${l.slice(0, 140)}...` : l;
-  return title ? `「${title}」` : "功法卡";
 }
 
 function InspirationTechniqueStructuredView({ data }: { data: InspirationTechniqueContent }) {
@@ -545,493 +343,9 @@ function InspirationPlaceStructuredView({ data }: { data: InspirationPlaceConten
   );
 }
 
-function friendlyAuditFieldKey(k: string): string {
-  const map: Record<string, string> = {
-    personality: "性格",
-    motivation: "动机",
-    speechStyle: "说话风格",
-    relationships: "关系",
-    appearance: "外貌",
-    contrast: "反差",
-    known: "已知信息",
-    unknown: "未知 / 伏笔",
-    summary: "概要",
-    notes: "备注",
-    currentScene: "当前戏份",
-    emotion: "情绪",
-    arcHint: "弧线提示",
-    goal: "目标",
-    faction: "阵营",
-    age: "年龄",
-    aliases: "别名"
-  };
-  return map[k] ?? k;
-}
-
-type AuditLinkKind = "character" | "place" | "org" | "timelineEvent" | "storyFile";
-type AuditLinkTarget = {
-  kind: AuditLinkKind;
-  id: string;
-  display: string;
-  summaryLines: string[];
-  jump: { tab: "chapterAnalysis" | "auditCharacters" | "places" | "orgs" | "timeline" | "story"; key: string };
-};
-
-function splitParagraphs(raw: string): string[] {
-  const t = (raw || "").replace(/\r/g, "").trim();
-  if (!t) return [];
-  return t
-    .split(/\n{2,}/g)
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-type DiffSeg = { t: "eq" | "ins" | "del"; s: string };
-
-function diffChars(aRaw: string, bRaw: string): DiffSeg[] {
-  const a = (aRaw || "").replace(/\r/g, "");
-  const b = (bRaw || "").replace(/\r/g, "");
-  if (!a && !b) return [];
-  if (!a) return [{ t: "ins", s: b }];
-  if (!b) return [{ t: "del", s: a }];
-  if (a === b) return [{ t: "eq", s: a }];
-
-  const A = Array.from(a);
-  const B = Array.from(b);
-  const n = A.length;
-  const m = B.length;
-
-  // LCS DP(n*m)-章节润色一般可接受;用于"标记修改"预览,不影响保存逻辑
-  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
-  for (let i = n - 1; i >= 0; i--) {
-    for (let j = m - 1; j >= 0; j--) {
-      dp[i][j] = A[i] === B[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
-    }
-  }
-
-  const out: DiffSeg[] = [];
-  let i = 0;
-  let j = 0;
-  const push = (t: DiffSeg["t"], s: string) => {
-    if (!s) return;
-    const last = out[out.length - 1];
-    if (last && last.t === t) last.s += s;
-    else out.push({ t, s });
-  };
-  while (i < n && j < m) {
-    if (A[i] === B[j]) {
-      push("eq", A[i]);
-      i++;
-      j++;
-      continue;
-    }
-    if (dp[i + 1][j] >= dp[i][j + 1]) {
-      push("del", A[i]);
-      i++;
-    } else {
-      push("ins", B[j]);
-      j++;
-    }
-  }
-  while (i < n) {
-    push("del", A[i]);
-    i++;
-  }
-  while (j < m) {
-    push("ins", B[j]);
-    j++;
-  }
-
-  // 仅展示"润色后的文本"时,删除段无处显示;这里保留 del 以便未来扩展,但 UI 只高亮 ins
-  return out;
-}
-
-function toPrettyJsonLines(v: any): string[] {
-  if (v === null || v === undefined) return [];
-  if (typeof v === "string") {
-    const t = v.trim();
-    return t ? t.split("\n") : [];
-  }
-  try {
-    const s = JSON.stringify(v, null, 2);
-    if (!s) return [];
-    return s.split("\n");
-  } catch {
-    try {
-      return [String(v)];
-    } catch {
-      return [];
-    }
-  }
-}
-
-function stateKeyLabel(k: string): string {
-  const key = String(k || "").trim();
-  if (!key) return "";
-  if (key === "location") return "地点";
-  if (key === "injuries") return "伤势与状态";
-  if (key === "items") return "随身物品";
-  if (key === "moneyChange") return "金钱变动";
-  if (key === "money") return "金钱";
-  if (key === "goal") return "目标";
-  return key;
-}
-
-function toStateFieldLines(state: any): string[] {
-  if (!state || typeof state !== "object") return [];
-
-  const out: string[] = [];
-  const pushKV = (k: string, v: any) => {
-    const label = stateKeyLabel(k);
-    if (!label) return;
-    if (v === null || v === undefined) return;
-    if (typeof v === "string") {
-      const t = v.trim();
-      if (!t) return;
-      out.push(`${label}:${t}`);
-      return;
-    }
-    if (typeof v === "number" || typeof v === "boolean") {
-      out.push(`${label}:${String(v)}`);
-      return;
-    }
-    if (Array.isArray(v)) {
-      const items = v.map((x) => String(x ?? "").trim()).filter(Boolean);
-      if (!items.length) return;
-      out.push(`${label}:${items.join("、")}`);
-      return;
-    }
-    if (typeof v === "object") {
-      // 扁平化一层:用 "父字段.子字段" 形式,避免 JSON 花括号
-      const entries = Object.entries(v as Record<string, any>)
-        .map(([kk, vv]) => [String(kk).trim(), vv] as const)
-        .filter(([kk]) => kk);
-      if (!entries.length) return;
-      for (const [kk, vv] of entries) {
-        const childLabel = `${label}.${kk}`;
-        if (vv === null || vv === undefined) continue;
-        const s = typeof vv === "string" ? vv.trim() : Array.isArray(vv) ? vv.map(String).join("、") : String(vv);
-        if (!String(s).trim()) continue;
-        out.push(`${childLabel}:${s}`);
-      }
-    }
-  };
-
-  const keys = Object.keys(state as Record<string, any>).sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
-  for (const k of keys) pushKV(k, (state as any)[k]);
-  return out;
-}
-
-function buildAuditTargets(input: {
-  auditCharactersIndex: any;
-  auditPlacesIndex: any;
-  auditOrgsIndex: any;
-  timelineIndex: any;
-  storyFiles: StoryFile[];
-}): AuditLinkTarget[] {
-  const out: AuditLinkTarget[] = [];
-  const push = (t: AuditLinkTarget) => {
-    if (!t.id || !t.display) return;
-    out.push(t);
-  };
-
-  const chars = Array.isArray(input.auditCharactersIndex?.characters) ? input.auditCharactersIndex.characters : [];
-  const hiddenChars = new Set(
-    Array.isArray(input.auditCharactersIndex?.hiddenNames) ? input.auditCharactersIndex.hiddenNames.map(String) : []
-  );
-  for (const c of chars) {
-    const name = String(c?.name || "").trim();
-    if (!name || hiddenChars.has(name)) continue;
-    const role = String(c?.role || "").trim();
-    const tags = Array.isArray(c?.tags) ? c.tags.map(String).filter(Boolean) : [];
-    const personality = String(c?.personalityAnalysis || "").trim();
-    const lines: string[] = [];
-    lines.push(`姓名:${name}`);
-    if (role) lines.push(`身份:${role}`);
-    if (tags.length) lines.push(`标签:${tags.join("、")}`);
-    if (personality) lines.push(`性格分析:${personality}`);
-    const stateFields = toStateFieldLines(c?.state);
-    for (const l of stateFields) lines.push(l);
-    const compact = lines.map((s) => String(s)).filter((s) => s.trim().length > 0);
-    push({
-      kind: "character",
-      id: name,
-      display: name,
-      summaryLines: compact.length ? compact : ["角色卡(未补充更多信息)"],
-      jump: { tab: "auditCharacters", key: name }
-    });
-  }
-
-  const places = Array.isArray(input.auditPlacesIndex?.places) ? input.auditPlacesIndex.places : [];
-  const hiddenPlaces = new Set(
-    Array.isArray(input.auditPlacesIndex?.hiddenNames) ? input.auditPlacesIndex.hiddenNames.map(String) : []
-  );
-  for (const p of places) {
-    const name = String(p?.name || "").trim();
-    if (!name || hiddenPlaces.has(name)) continue;
-    const desc = String(p?.description || "").trim();
-    const note = String(p?.lastNote || "").trim();
-    const last = p?.lastChapter ? `最近:第 ${p.lastChapter} 章` : "";
-    push({
-      kind: "place",
-      id: name,
-      display: name,
-      summaryLines: [desc ? `简述:${desc}` : "", note ? `发生:${note}` : "", last].filter(Boolean).slice(0, 6),
-      jump: { tab: "places", key: name }
-    });
-  }
-
-  const events = Array.isArray(input.timelineIndex?.events) ? input.timelineIndex.events : [];
-  for (const e of events) {
-    const id = String(e?.id || "").trim();
-    const title = String(e?.title || "").trim();
-    if (!id || !title) continue;
-    const sum = String(e?.summary || "").trim();
-    push({
-      kind: "timelineEvent",
-      id,
-      display: title,
-      summaryLines: [sum ? `摘要:${sum}` : "", e?.startChapter ? `范围:第 ${e.startChapter}${e.endChapter && e.endChapter !== e.startChapter ? `-${e.endChapter}` : ""} 章` : ""].filter(Boolean),
-      jump: { tab: "timeline", key: id }
-    });
-  }
-
-  for (const f of input.storyFiles || []) {
-    if (!f?.title || !f?.path) continue;
-    push({
-      kind: "storyFile",
-      id: String(f.path),
-      display: String(f.title),
-      summaryLines: [`资料:${f.title}`],
-      jump: { tab: "story", key: String(f.path) }
-    });
-  }
-
-  // 组织:暂用 story/characters 之外没有正式索引;后续在 server-orgs-index-optional 中补齐
-  const orgs = Array.isArray(input.auditOrgsIndex?.orgs) ? input.auditOrgsIndex.orgs : [];
-  const hiddenOrgs = new Set(
-    Array.isArray(input.auditOrgsIndex?.hiddenNames) ? input.auditOrgsIndex.hiddenNames.map(String) : []
-  );
-  for (const o of orgs) {
-    const name = String(o?.name || "").trim();
-    if (!name || hiddenOrgs.has(name)) continue;
-    const desc = String(o?.description || "").trim();
-    const note = String(o?.lastNote || "").trim();
-    const last = o?.lastChapter ? `最近:第 ${o.lastChapter} 章` : "";
-    push({
-      kind: "org",
-      id: name,
-      display: name,
-      summaryLines: [desc ? `简述:${desc}` : "", note ? `动态:${note}` : "", last].filter(Boolean).slice(0, 6),
-      jump: { tab: "orgs", key: name }
-    });
-  }
-  return out;
-}
-
-function auditCharStateExtraRows(st: Record<string, unknown>): Array<[string, string]> {
-  const skip = new Set(["location", "injuries", "items", "moneyChange"]);
-  const rows: Array<[string, string]> = [];
-  for (const [k, v] of Object.entries(st)) {
-    if (skip.has(k)) continue;
-    const val = formatAuditCharField(v);
-    if (!val) continue;
-    rows.push([friendlyAuditFieldKey(k), val]);
-  }
-  return rows;
-}
-
-function auditCharTopExtraRows(c: Record<string, unknown>): Array<[string, string]> {
-  const skip = new Set([
-    "name",
-    "role",
-    "tags",
-    "newOrExisting",
-    "state",
-    "evidenceQuotes",
-    "updatedAt",
-    // 角色画像字段:已在 UI 以分组方式专门渲染,避免这里把 object 展示成一行导致"格式乱"
-    "socialTags",
-    "historicalDebts",
-    "occurredNotes",
-    "narrativeDrives",
-    "fingerprints",
-    "relationalHooks",
-    "personalityAnalysis"
-  ]);
-  const rows: Array<[string, string]> = [];
-  for (const [k, v] of Object.entries(c)) {
-    if (skip.has(k)) continue;
-    const val = formatAuditCharField(v);
-    if (!val) continue;
-    rows.push([friendlyAuditFieldKey(k), val]);
-  }
-  return rows;
-}
 
 const CHARACTER_TAG_OPTIONS = ["盟友", "敌对", "家人", "同事", "组织", "阵营"] as const;
 
-type ModelProviderId = "openai" | "deepseek" | "gemini" | "qwen" | "ollama" | "custom";
-
-type ModelConfig = {
-  id: string;
-  label: string;
-  provider: ModelProviderId;
-  baseUrl: string;
-  apiKey: string;
-  testUrl: string;
-  model?: string;
-  extraHeadersJson?: string;
-  /** 最近一次测试是否通过(仅用于 UI 展示) */
-  lastTestOk?: boolean;
-  /** 仅部分 provider 可提供:最近一次测试拿到的模型列表(如 Ollama /api/tags) */
-  lastModels?: string[];
-};
-
-const BUILTIN_MODEL_PROVIDERS: Array<{ id: ModelProviderId; label: string }> = [
-  { id: "openai", label: "OpenAI" },
-  { id: "deepseek", label: "DeepSeek" },
-  { id: "gemini", label: "Gemini" },
-  { id: "qwen", label: "千问(通义千问)" },
-  { id: "ollama", label: "Ollama(本地)" },
-  { id: "custom", label: "自定义服务" }
-];
-
-function defaultConfigFor(provider: ModelProviderId): ModelConfig {
-  const id = `${provider}-${Date.now()}`;
-  if (provider === "openai")
-    return {
-      id,
-      label: "OpenAI",
-      provider,
-      baseUrl: "https://api.openai.com/v1",
-      apiKey: "",
-      testUrl: "https://api.openai.com/v1/models",
-      model: "gpt-4.1-mini"
-    };
-  if (provider === "deepseek")
-    return {
-      id,
-      label: "DeepSeek",
-      provider,
-      baseUrl: "https://api.deepseek.com/v1",
-      apiKey: "",
-      testUrl: "https://api.deepseek.com/v1/models",
-      model: "deepseek-chat"
-    };
-  if (provider === "gemini")
-    return {
-      id,
-      label: "Gemini",
-      provider,
-      baseUrl: "https://generativelanguage.googleapis.com/v1beta",
-      apiKey: "",
-      testUrl: "https://generativelanguage.googleapis.com/v1beta/models",
-      model: "gemini-1.5-flash"
-    };
-  if (provider === "qwen")
-    return {
-      id,
-      label: "千问",
-      provider,
-      baseUrl: "https://dashscope.aliyuncs.com/api/v1",
-      apiKey: "",
-      testUrl: "https://dashscope.aliyuncs.com/api/v1/models",
-      model: "qwen-plus"
-    };
-  if (provider === "ollama")
-    return {
-      id,
-      label: "Ollama(本地)",
-      provider,
-      baseUrl: "http://127.0.0.1:11434",
-      apiKey: "",
-      testUrl: "http://127.0.0.1:11434/api/tags",
-      model: ""
-    };
-  return {
-    id,
-    label: "自定义",
-    provider: "custom",
-    baseUrl: "",
-    apiKey: "",
-    testUrl: "",
-    model: "",
-    extraHeadersJson: "{}"
-  };
-}
-
-function loadModelConfigs(): { configs: ModelConfig[]; activeId: string | null } {
-  try {
-    const raw = localStorage.getItem(MODEL_CONFIGS_STORAGE_KEY);
-    const activeId = localStorage.getItem(MODEL_ACTIVE_ID_STORAGE_KEY);
-    const parsed = raw ? (JSON.parse(raw) as ModelConfig[]) : [];
-    const byProvider = new Map<ModelProviderId, ModelConfig>();
-    if (Array.isArray(parsed)) {
-      for (const c of parsed) {
-        if (!c?.provider) continue;
-        if (!byProvider.has(c.provider)) byProvider.set(c.provider, c);
-      }
-    }
-    const configs = BUILTIN_MODEL_PROVIDERS.map((p) => byProvider.get(p.id) ?? defaultConfigFor(p.id));
-    return { configs, activeId: activeId || configs[0]?.id || null };
-  } catch {
-    const configs = BUILTIN_MODEL_PROVIDERS.map((p) => defaultConfigFor(p.id));
-    return { configs, activeId: configs[0]?.id || null };
-  }
-}
-
-function migrateLegacyTheme(raw: string | null): ThemePreference {
-  if (raw === "system" || raw === "light" || raw === "dark") return raw;
-  if (!raw) return "system";
-  const darkLegacy = new Set(["default", "midnight", "forest", "sunset", "ocean", "loam"]);
-  const lightLegacy = new Set(["paper", "sepia", "village", "meadow", "clay"]);
-  if (darkLegacy.has(raw)) return "dark";
-  if (lightLegacy.has(raw)) return "light";
-  return "system";
-}
-
-function loadThemePreference(): ThemePreference {
-  try {
-    return migrateLegacyTheme(localStorage.getItem(THEME_STORAGE_KEY));
-  } catch {
-    return "system";
-  }
-}
-
-/** 停止输入约多久后写入磁盘(毫秒) */
-const AUTOSAVE_DEBOUNCE_MS = 900;
-
-/** 允许在线改标题的文件名:`序号_任意标题.md` */
-const CHAPTER_TITLE_RENAME_FILE_RE = /^(\d+)_.+\.md$/;
-
-/** 与服务端一致的近似字数(列表与编辑器共用) */
-function approximateWordCount(s: string): number {
-  const zh = (s.match(/[\u4e00-\u9fa5]/g) || []).length;
-  const en = (s.replace(/[\u4e00-\u9fa5]/g, " ").match(/[A-Za-z0-9]+/g) || []).length;
-  return zh + en;
-}
-
-function normalizeChapterGapList(raw: number[]): number[] {
-  return [...new Set(raw)].filter((n) => Number.isFinite(n) && n >= 1).sort((a, b) => a - b);
-}
-
-/** 展示用:「第 4 章、第 7 章」 */
-function formatMissingChapterList(gaps: number[]): string {
-  return normalizeChapterGapList(gaps)
-    .map((n) => `第 ${n} 章`)
-    .join("、");
-}
-
-function formatBookCreatedAt(iso: string): string {
-  try {
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString("zh-CN", { dateStyle: "medium", timeStyle: "short" });
-  } catch {
-    return iso;
-  }
-}
 
 /** 左侧栏展开/收起(收起时令图标水平镜像) */
 function SidebarToggleIcon({ mirrored }: { mirrored: boolean }) {
