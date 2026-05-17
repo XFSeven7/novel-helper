@@ -10,6 +10,10 @@ export type TopBarProps = {
   fullscreenOn: boolean;
   onGoHome: () => void;
   onFullscreenError: (message: string) => void;
+  navCollapsed: boolean;
+  onToggleNav: () => void;
+  rightCollapsed: boolean;
+  onToggleRight: () => void;
 };
 
 export function TopBar({
@@ -18,7 +22,11 @@ export function TopBar({
   onThemeChange,
   fullscreenOn,
   onGoHome,
-  onFullscreenError
+  onFullscreenError,
+  navCollapsed,
+  onToggleNav,
+  rightCollapsed,
+  onToggleRight
 }: TopBarProps) {
   return (
     <header className="topbar">
@@ -29,6 +37,30 @@ export function TopBar({
         默认写入 <code>book/</code>(可用 <code>NOVEL_HELPER_DATA_DIR</code> 指定根目录)
       </div>
       <div className="topbarRight">
+        <div className="layoutSideToggles" role="group" aria-label="侧栏布局">
+          <button
+            type="button"
+            className={`layoutSideToggle ${navCollapsed ? "is-off" : "is-on"}`}
+            onClick={onToggleNav}
+            disabled={busy}
+            aria-label={navCollapsed ? "展开左栏" : "收起左栏"}
+            aria-pressed={!navCollapsed}
+            title={navCollapsed ? "展开左栏" : "收起左栏"}
+          >
+            左栏
+          </button>
+          <button
+            type="button"
+            className={`layoutSideToggle ${rightCollapsed ? "is-off" : "is-on"}`}
+            onClick={onToggleRight}
+            disabled={busy}
+            aria-label={rightCollapsed ? "展开右栏" : "收起右栏"}
+            aria-pressed={!rightCollapsed}
+            title={rightCollapsed ? "展开右栏" : "收起右栏"}
+          >
+            右栏
+          </button>
+        </div>
         <div className="themeLabel">外观</div>
         <select
           className="select"

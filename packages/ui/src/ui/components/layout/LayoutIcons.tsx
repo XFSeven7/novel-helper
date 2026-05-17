@@ -1,10 +1,9 @@
 import React from "react";
 
-/** 左侧栏展开/收起(收起时令图标水平镜像) */
-export function SidebarToggleIcon({ mirrored }: { mirrored: boolean }) {
+function SidebarToggleSvg({ mirrored, flip }: { mirrored: boolean; flip?: boolean }) {
   return (
     <svg
-      className={`sidebarToggleSvg ${mirrored ? "sidebarToggleSvgMirrored" : ""}`}
+      className={`sidebarToggleSvg ${mirrored ? "sidebarToggleSvgMirrored" : ""} ${flip ? "sidebarToggleSvgFlip" : ""}`}
       viewBox="0 0 1024 1024"
       width={20}
       height={20}
@@ -16,6 +15,16 @@ export function SidebarToggleIcon({ mirrored }: { mirrored: boolean }) {
       />
     </svg>
   );
+}
+
+/** 左侧栏展开/收起（收起时箭头指向展开方向） */
+export function SidebarToggleIcon({ mirrored }: { mirrored: boolean }) {
+  return <SidebarToggleSvg mirrored={mirrored} />;
+}
+
+/** 右侧栏展开/收起（图形水平翻转，与左栏区分） */
+export function RightSidebarToggleIcon({ mirrored }: { mirrored: boolean }) {
+  return <SidebarToggleSvg mirrored={mirrored} flip />;
 }
 
 /** 进入全屏(四角外扩) */

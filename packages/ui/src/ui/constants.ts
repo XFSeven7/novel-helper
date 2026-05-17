@@ -18,7 +18,9 @@ export const MOBILE_PRESETS: Array<{ id: MobilePresetId; label: string; w: numbe
 export type ThemePreference = "system" | "light" | "dark";
 
 export const THEME_STORAGE_KEY = "novel-helper-theme";
-export const NAV_COLLAPSED_STORAGE_KEY = "novel-helper-nav-collapsed";
+/** v2：默认左右栏均展开（false = 未收起） */
+export const NAV_COLLAPSED_STORAGE_KEY = "novel-helper-nav-collapsed-v2";
+export const RIGHT_COLLAPSED_STORAGE_KEY = "novel-helper-right-collapsed-v3";
 export const LAYOUT3_SPLIT_STORAGE_KEY = "novel-helper-layout3-splits";
 export const MODEL_CONFIGS_STORAGE_KEY = "novel-helper-model-configs";
 export const MODEL_ACTIVE_ID_STORAGE_KEY = "novel-helper-model-active-id";

@@ -5,6 +5,7 @@ import {
   MODEL_ACTIVE_ID_STORAGE_KEY,
   MODEL_CONFIGS_STORAGE_KEY,
   NAV_COLLAPSED_STORAGE_KEY,
+  RIGHT_COLLAPSED_STORAGE_KEY,
   THEME_STORAGE_KEY,
   type ThemePreference
 } from "./constants";
@@ -38,7 +39,6 @@ import { AppModals } from "./components/modals/AppModals";
 import { GlobalInfoPanel, type GlobalTabId } from "./components/GlobalInfo/GlobalInfoPanel";
 import { InspirationTab } from "./components/inspiration/InspirationTab";
 import { getFullscreenElement } from "./components/layout/fullscreen";
-import { SidebarToggleIcon } from "./components/layout/LayoutIcons";
 import { TopBar } from "./components/layout/TopBar";
 import { BookShelfNav } from "./components/nav/BookShelfNav";
 import { ChapterNav } from "./components/nav/ChapterNav";
@@ -235,6 +235,12 @@ export function App() {
   const [homeCenterTab, setHomeCenterTab] = useState<"welcome" | "model">("welcome");
   const [navCollapsed, setNavCollapsed] = useLocalStorageState<boolean>({
     key: NAV_COLLAPSED_STORAGE_KEY,
+    defaultValue: false,
+    parse: (raw) => raw === "1",
+    serialize: (v) => (v ? "1" : "0")
+  });
+  const [rightCollapsed, setRightCollapsed] = useLocalStorageState<boolean>({
+    key: RIGHT_COLLAPSED_STORAGE_KEY,
     defaultValue: false,
     parse: (raw) => raw === "1",
     serialize: (v) => (v ? "1" : "0")
@@ -1128,6 +1134,7 @@ export function App() {
     await flushCardSave();
     await flushSynopsisSave();
     setNavHome(true);
+    setRightCollapsed(false);
     setHomeCenterTab("welcome");
     setActiveBook("");
     setSelectedChapter(null);
@@ -1148,6 +1155,8 @@ export function App() {
     await flushSynopsisSave();
     setActiveBook(b.slug);
     setNavHome(false);
+    setNavCollapsed(false);
+    setRightCollapsed(false);
     setSelectedChapter(null);
     setSelectedCard(null);
     setChapterContent("");
@@ -1181,6 +1190,8 @@ export function App() {
       await refreshBooks();
       setActiveBook(book.slug);
       setNavHome(false);
+      setNavCollapsed(false);
+      setRightCollapsed(false);
       setStatus(`已创建书籍:${book.title}`);
       void loadInspiration(book.slug);
     } catch (e: any) {
@@ -1246,6 +1257,8 @@ export function App() {
       if (bookSlug !== activeBook) {
         setActiveBook(bookSlug);
         setNavHome(false);
+        setNavCollapsed(false);
+        setRightCollapsed(false);
         setSelectedCard(null);
         setCardContent("");
         cardBaselineRef.current = "";
@@ -2558,14 +2571,18 @@ export function App() {
         fullscreenOn={fullscreenOn}
         onGoHome={goNavHome}
         onFullscreenError={setStatus}
+        navCollapsed={navCollapsed}
+        onToggleNav={() => setNavCollapsed((v) => !v)}
+        rightCollapsed={rightCollapsed}
+        onToggleRight={() => setRightCollapsed((v) => !v)}
       />
 
       <div
-        className={`layout3 ${navCollapsed ? "layout3NavCollapsed" : ""}`}
+        className={`layout3 ${navCollapsed ? "layout3NavCollapsed" : ""} ${rightCollapsed ? "layout3RightCollapsed" : ""}`}
         style={
           {
             ["--layout3-nav" as any]: navCollapsed ? "0px" : `${layout3NavW}px`,
-            ["--layout3-right" as any]: `${layout3RightW}px`
+            ["--layout3-right" as any]: rightCollapsed ? "0px" : `${layout3RightW}px`
           } as React.CSSProperties
         }
       >
@@ -2866,19 +2883,6 @@ export function App() {
           <div className="centerTop">
             <div className="centerTitleBlock">
               <div className="centerTitleRow">
-                {activeBook || navHome ? (
-                  <button
-                    type="button"
-                    className="btnSidebarToggle"
-                    onClick={() => setNavCollapsed((v) => !v)}
-                    disabled={busy}
-                    aria-label={navCollapsed ? "展开左侧栏" : "收起左侧栏"}
-                    aria-pressed={navCollapsed}
-                    title={navCollapsed ? "展开左侧栏" : "收起左侧栏"}
-                  >
-                    <SidebarToggleIcon mirrored={!navCollapsed} />
-                  </button>
-                ) : null}
                 {!activeBook ? (
                   <>
                     <div className="centerTitle">请从书架打开一本书</div>
@@ -3281,18 +3285,19 @@ export function App() {
         </main>
 
         <div
-          className={`layoutDivider ${layout3Dragging === "right" ? "dragging" : ""}`}
+          className={`layoutDivider ${rightCollapsed ? "hidden" : ""} ${layout3Dragging === "right" ? "dragging" : ""}`}
           role="separator"
           aria-orientation="vertical"
           aria-label="调整右侧栏宽度"
           onMouseDown={(e) => {
+            if (rightCollapsed) return;
             e.preventDefault();
             layout3DragStartRef.current = { kind: "right", x: e.clientX, navW: layout3NavW, rightW: layout3RightW };
             setLayout3Dragging("right");
           }}
         />
 
-        {showBookOverview ? (
+        {!rightCollapsed && showBookOverview ? (
           <BookSynopsisPanel
             busy={busy}
             activeBook={activeBook}
@@ -3315,7 +3320,7 @@ export function App() {
             }}
             onDeleteBook={() => activeBookMeta && openDeleteBookModal(activeBookMeta)}
           />
-        ) : (
+        ) : !rightCollapsed ? (
         <RightPanel
           busy={busy}
           activeBook={activeBook}
@@ -3352,7 +3357,7 @@ export function App() {
           onJumpToRunningAuditChapter={() => void jumpToRunningAuditChapter()}
           onJumpToOrganize={jumpToOrganize}
         />
-        )}
+        ) : null}
       </div>
 
       <AppModals

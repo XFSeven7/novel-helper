@@ -247,9 +247,69 @@ code {
   grid-template-columns: 0 0 minmax(520px, 1fr) 8px var(--layout3-right, 420px);
 }
 
+.layout3.layout3RightCollapsed {
+  grid-template-columns: var(--layout3-nav, 320px) 8px minmax(520px, 1fr) 0 0;
+}
+
+.layout3.layout3NavCollapsed.layout3RightCollapsed {
+  grid-template-columns: 0 0 minmax(520px, 1fr) 0 0;
+}
+
 .layout3.layout3NavCollapsed > .nav {
   min-width: 0;
   overflow: hidden;
+}
+
+.layoutSideToggles {
+  display: inline-flex;
+  align-items: stretch;
+  margin-right: 10px;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  border-radius: 8px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.layoutSideToggle {
+  margin: 0;
+  padding: 6px 14px;
+  border: none;
+  border-right: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.layoutSideToggle:last-child {
+  border-right: none;
+}
+
+.layoutSideToggle.is-on {
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel2, var(--panel)) 92%, var(--panel));
+}
+
+.layoutSideToggle.is-off {
+  color: color-mix(in srgb, var(--muted) 92%, transparent);
+  background: color-mix(in srgb, var(--bg, #0a0a0a) 55%, var(--panel));
+}
+
+.layoutSideToggle:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.layoutSideToggle:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.layoutSideToggle:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent, #a78bfa) 55%, transparent);
+  z-index: 1;
 }
 
 .layoutDivider {
@@ -1172,6 +1232,14 @@ code {
 
 .sidebarToggleSvgMirrored {
   transform: scaleX(-1);
+}
+
+.sidebarToggleSvgFlip {
+  transform: scaleX(-1);
+}
+
+.sidebarToggleSvgFlip.sidebarToggleSvgMirrored {
+  transform: scaleX(1);
 }
 
 .centerTitle {
