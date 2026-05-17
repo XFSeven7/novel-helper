@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 
 export type MemoryTabId = "chapters" | "ranges";
 
@@ -26,7 +26,6 @@ export function MemoryPanel(props: {
   timelineCompressEnd: string;
   setTimelineCompressEnd: (v: string) => void;
 
-  onRefresh: () => void;
   onSetStatus: (msg: string) => void;
   onCompressRangeWithMerge: (a: number, b: number) => void;
   onDeleteRange: (a: number, b: number) => Promise<void>;
@@ -51,20 +50,53 @@ export function MemoryPanel(props: {
     setTimelineCompressStart,
     timelineCompressEnd,
     setTimelineCompressEnd,
-    onRefresh,
     onSetStatus,
     onCompressRangeWithMerge,
     onDeleteRange,
     onMarkTimelineEventStatus
   } = props;
 
+  const expandableKeys = useMemo(() => {
+    if (memoryTab === "chapters") {
+      return ([...(timelineIndex?.chapters ?? [])] as any[])
+        .slice()
+        .sort((a: any, b: any) => {
+          const x = Number(a?.chapter);
+          const y = Number(b?.chapter);
+          const d = (Number.isFinite(x) ? x : 0) - (Number.isFinite(y) ? y : 0);
+          return memoryChaptersSortDesc ? -d : d;
+        })
+        .slice(0, 120)
+        .map((c: any) => {
+          const txt = String(c.gistL1 || "").trim();
+          return txt.length >= 60 ? `chapter:${c.filename}` : null;
+        })
+        .filter((k: string | null): k is string => Boolean(k));
+    }
+    return (timelineIndex?.compressedRanges ?? [])
+      .map((r: any) => {
+        const txt = String(r.summary || "").trim();
+        return txt.length >= 60 ? `range:${r.startChapter}-${r.endChapter}` : null;
+      })
+      .filter((k: string | null): k is string => Boolean(k));
+  }, [memoryTab, timelineIndex, memoryChaptersSortDesc]);
+
+  const allSummariesExpanded =
+    expandableKeys.length > 0 && expandableKeys.every((k: string) => Boolean(memoryExpanded[k]));
+
+  const toggleExpandAllSummaries = () => {
+    const nextExpanded = !allSummariesExpanded;
+    setMemoryExpanded((prev) => {
+      const next = { ...prev };
+      for (const k of expandableKeys) next[k] = nextExpanded;
+      return next;
+    });
+  };
+
   return (
     <div className="timelinePanel">
       <div className="timelineTopRow">
-        <button type="button" className="btnSort" disabled={busy || timelineBusy || !activeBook} onClick={onRefresh}>
-          刷新
-        </button>
-        <div className="row">
+        <div className="timelineTopRowLeft">
           <button
             type="button"
             className={`btnSort ${memoryTab === "chapters" ? "active" : ""}`}
@@ -81,11 +113,22 @@ export function MemoryPanel(props: {
           >
             多章概要
           </button>
+        </div>
+        <div className="timelineTopRowRight">
           <button
             type="button"
-            className="btnSort"
+            className="btnSort btnSortCompact"
+            disabled={busy || expandableKeys.length === 0}
+            onClick={toggleExpandAllSummaries}
+            title={allSummariesExpanded ? "收起当前列表中的全部概要" : "展开当前列表中的全部概要"}
+          >
+            {allSummariesExpanded ? "收起全部" : "展开全部"}
+          </button>
+          <button
+            type="button"
+            className="btnSort btnSortCompact"
             disabled={busy}
-            onClick={() => setMemoryChaptersSortDesc((v) => (memoryTab === "chapters" ? !v : v))}
+            onClick={() => setMemoryChaptersSortDesc((v) => !v)}
             style={{ display: memoryTab === "chapters" ? undefined : "none" }}
             title="切换章节概要排序"
           >
@@ -93,9 +136,9 @@ export function MemoryPanel(props: {
           </button>
           <button
             type="button"
-            className="btnSort"
+            className="btnSort btnSortCompact"
             disabled={busy}
-            onClick={() => setMemoryRangesSortDesc((v) => (memoryTab === "ranges" ? !v : v))}
+            onClick={() => setMemoryRangesSortDesc((v) => !v)}
             style={{ display: memoryTab === "ranges" ? undefined : "none" }}
             title="切换多章概要排序"
           >

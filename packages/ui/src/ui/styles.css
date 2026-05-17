@@ -1017,6 +1017,13 @@ code {
   cursor: not-allowed;
 }
 
+.btnSort.btnSortCompact {
+  padding-left: 5px;
+  padding-right: 5px;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
 .btnSuccess {
   border-color: color-mix(in srgb, #22c55e 52%, var(--border));
   background: color-mix(in srgb, #22c55e 18%, transparent);
@@ -2437,7 +2444,24 @@ code {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  flex-wrap: nowrap;
+  gap: 8px;
+  margin-top: 14px;
+  margin-bottom: 10px;
+  overflow-x: auto;
+}
+
+.timelineTopRowLeft,
+.timelineTopRowRight {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.timelineTopRowRight {
+  margin-left: auto;
 }
 
 .timelineToggle {

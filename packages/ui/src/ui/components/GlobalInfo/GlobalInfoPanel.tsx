@@ -842,7 +842,6 @@ export function GlobalInfoPanel({
       setTimelineCompressStart={setTimelineCompressStart}
       timelineCompressEnd={timelineCompressEnd}
       setTimelineCompressEnd={setTimelineCompressEnd}
-      onRefresh={() => activeBook && void onRefreshTimeline()}
       onSetStatus={setStatus}
       onCompressRangeWithMerge={(a, b) => void onCompressRangeWithMerge(a, b)}
       onDeleteRange={async (a, b) => {
