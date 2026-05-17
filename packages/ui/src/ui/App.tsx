@@ -38,6 +38,12 @@ import {
   readAuditDirtyIgnoreStore,
   setAuditDirtyIgnoreEntry
 } from "./utils/auditDirtyIgnore";
+import { mergeDraftOutOfSyncSet, isDraftOutOfSync } from "./utils/chapterDraftSync";
+import {
+  ChapterHistoryPane,
+  CHAPTER_HISTORY_CURRENT_ID
+} from "./components/editor/ChapterHistoryPane";
+import { ChapterSaveDraftModal } from "./components/modals/ChapterSaveDraftModal";
 import { ChapterEditorPanel } from "./components/editor/ChapterEditorPanel";
 import { BookSynopsisPanel } from "./components/rightPanel/BookSynopsisPanel";
 import { RightPanel, type RightTabId } from "./components/rightPanel/RightPanel";
@@ -123,7 +129,13 @@ import {
   getBookStats,
   type BookStats,
   type ModelConfig,
-  type ModelProviderId
+  type ModelProviderId,
+  getChapterDraftStatus,
+  listChapterVersions,
+  createChapterVersion,
+  getChapterVersion,
+  restoreChapterVersion,
+  type ChapterVersionMeta
 } from "./api";
 import type { BookSearchGroup, BookSearchHit } from "./api";
 
@@ -235,6 +247,18 @@ export function App() {
   const [auditReadModeOn, setAuditReadModeOn] = useState(false);
   const [polishModeOn, setPolishModeOn] = useState(false);
   const [expandModeOn, setExpandModeOn] = useState(false);
+  const [historyPaneOpen, setHistoryPaneOpen] = useState(false);
+  const [chapterVersions, setChapterVersions] = useState<ChapterVersionMeta[]>([]);
+  const [selectedHistoryVersionId, setSelectedHistoryVersionId] = useState<string | null>(null);
+  const [versionContentCache, setVersionContentCache] = useState<Record<string, string>>({});
+  const [chaptersDraftOutOfSync, setChaptersDraftOutOfSync] = useState<ReadonlySet<string>>(() => new Set());
+  const [latestHistoryHashByChapter, setLatestHistoryHashByChapter] = useState<Record<string, string | null>>({});
+  const [chapterSaveDraftModalOpen, setChapterSaveDraftModalOpen] = useState(false);
+  const [chapterSaveDraftBusy, setChapterSaveDraftBusy] = useState(false);
+  const [currentChapterEditorHash, setCurrentChapterEditorHash] = useState<string | null>(null);
+  const serverDraftOutOfSyncRef = useRef<string[]>([]);
+  const latestHistoryHashByChapterRef = useRef<Record<string, string | null>>({});
+  const currentChapterEditorHashRef = useRef<string | null>(null);
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => loadThemePreference());
   const [fullscreenOn, setFullscreenOn] = useState(false);
   const [{ configs: modelConfigs, activeId: activeModelId }, setModelState] = useState(() =>
@@ -440,6 +464,13 @@ export function App() {
 
   const chapterWordCount = useMemo(() => approximateWordCount(chapterContent || ""), [chapterContent]);
 
+  const currentChapterDraftOutOfSync = useMemo(() => {
+    if (!selectedChapter) return true;
+    const latest = latestHistoryHashByChapter[selectedChapter.filename] ?? null;
+    if (!currentChapterEditorHash) return true;
+    return isDraftOutOfSync(latest, currentChapterEditorHash);
+  }, [selectedChapter, latestHistoryHashByChapter, currentChapterEditorHash]);
+
   const bookTotalWordCount = useMemo(() => {
     const list = Array.isArray(chapters) ? chapters : [];
     return list.reduce((sum, c) => sum + (Number(c?.wordCount) || 0), 0);
@@ -487,6 +518,7 @@ export function App() {
       setStatsRefreshKey((k) => k + 1);
       setChapterAutosaveHint("已保存");
       void refreshAuditChapterStale(sel.bookSlug);
+      void refreshChapterDraftStatus(sel.bookSlug);
       window.setTimeout(() => {
         setChapterAutosaveHint((s) => (s === "已保存" ? "" : s));
       }, 2000);
@@ -663,11 +695,24 @@ export function App() {
       if (searchOpen && e.key === "Escape") {
         e.preventDefault();
         setSearchOpen(false);
+        return;
+      }
+      const mod = mac ? e.metaKey : e.ctrlKey;
+      if (mod && e.shiftKey && !e.altKey && key === "s" && selectedChapterRef.current) {
+        if (!searchOpen && shouldIgnoreTarget(e.target)) return;
+        e.preventDefault();
+        setChapterSaveDraftModalOpen(true);
+        return;
+      }
+      if (mod && e.shiftKey && !e.altKey && key === "h" && selectedChapterRef.current) {
+        if (!searchOpen && shouldIgnoreTarget(e.target)) return;
+        e.preventDefault();
+        toggleHistoryPane();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [busy, searchOpen]);
+  }, [busy, searchOpen, historyPaneOpen]);
 
   useEffect(() => {
     if (!createBookModalOpen) return;
@@ -757,6 +802,152 @@ export function App() {
     const digest = await crypto.subtle.digest("SHA-1", buf);
     const bytes = Array.from(new Uint8Array(digest));
     return bytes.map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  useEffect(() => {
+    latestHistoryHashByChapterRef.current = latestHistoryHashByChapter;
+  }, [latestHistoryHashByChapter]);
+
+  useEffect(() => {
+    currentChapterEditorHashRef.current = currentChapterEditorHash;
+  }, [currentChapterEditorHash]);
+
+  const applyChapterDraftOutOfSyncMerge = useCallback(() => {
+    const slug = activeBookRef.current;
+    const sel = selectedChapterRef.current;
+    const fn = sel?.bookSlug === slug ? sel.filename : null;
+    setChaptersDraftOutOfSync(
+      mergeDraftOutOfSyncSet(
+        serverDraftOutOfSyncRef.current,
+        fn,
+        fn ? currentChapterEditorHashRef.current : null,
+        fn ? latestHistoryHashByChapterRef.current[fn] ?? null : null
+      )
+    );
+  }, []);
+
+  const refreshChapterDraftStatus = useCallback(
+    async (slug: string) => {
+      if (!slug) return;
+      try {
+        const { outOfSync } = await getChapterDraftStatus(slug);
+        serverDraftOutOfSyncRef.current = outOfSync;
+        applyChapterDraftOutOfSyncMerge();
+      } catch {
+        // ignore
+      }
+    },
+    [applyChapterDraftOutOfSyncMerge]
+  );
+
+  const loadChapterVersionsForCurrent = useCallback(async () => {
+    const sel = selectedChapterRef.current;
+    if (!sel) return;
+    try {
+      const { versions, latestContentHash } = await listChapterVersions(sel.bookSlug, sel.filename);
+      setChapterVersions(versions);
+      setLatestHistoryHashByChapter((prev) => ({ ...prev, [sel.filename]: latestContentHash }));
+      applyChapterDraftOutOfSyncMerge();
+      if (versions.length > 0) {
+        const firstId = versions[0].id;
+        setSelectedHistoryVersionId(firstId);
+        try {
+          const { content } = await getChapterVersion(sel.bookSlug, sel.filename, firstId);
+          setVersionContentCache((prev) => ({ ...prev, [firstId]: content }));
+        } catch (e: any) {
+          setStatus(e?.message || String(e));
+        }
+      }
+    } catch (e: any) {
+      setStatus(e?.message || String(e));
+    }
+  }, [applyChapterDraftOutOfSyncMerge]);
+
+  async function onSelectHistoryVersion(versionId: string) {
+    setSelectedHistoryVersionId(versionId);
+    if (versionId === CHAPTER_HISTORY_CURRENT_ID) return;
+    const sel = selectedChapterRef.current;
+    if (!sel) return;
+    if (versionContentCache[versionId] !== undefined) return;
+    try {
+      const { content } = await getChapterVersion(sel.bookSlug, sel.filename, versionId);
+      setVersionContentCache((prev) => ({ ...prev, [versionId]: content }));
+    } catch (e: any) {
+      setStatus(e?.message || String(e));
+    }
+  }
+
+  async function confirmChapterSaveDraft(label: string) {
+    const sel = selectedChapterRef.current;
+    if (!sel) return;
+    setChapterSaveDraftBusy(true);
+    setStatus("");
+    try {
+      await flushChapterSave();
+      const { version } = await createChapterVersion(sel.bookSlug, sel.filename, {
+        label: label || undefined
+      });
+      setLatestHistoryHashByChapter((prev) => ({ ...prev, [sel.filename]: version.contentHash }));
+      setCurrentChapterEditorHash(version.contentHash);
+      currentChapterEditorHashRef.current = version.contentHash;
+      await refreshChapterDraftStatus(sel.bookSlug);
+      if (historyPaneOpen) await loadChapterVersionsForCurrent();
+      setChapterSaveDraftModalOpen(false);
+      setStatus("");
+    } catch (e: any) {
+      const raw = String(e?.message || e);
+      try {
+        const j = JSON.parse(raw) as { message?: string };
+        setStatus(j.message || raw);
+      } catch {
+        setStatus(raw);
+      }
+    } finally {
+      setChapterSaveDraftBusy(false);
+    }
+  }
+
+  async function onRestoreChapterVersion(versionId: string) {
+    const sel = selectedChapterRef.current;
+    if (!sel) return;
+    setBusy(true);
+    setStatus("");
+    try {
+      await restoreChapterVersion(sel.bookSlug, sel.filename, versionId);
+      const { content } = await readChapter(sel.bookSlug, sel.filename);
+      setChapterContent(content);
+      chapterBaselineRef.current = content;
+      setVersionContentCache({});
+      setSelectedHistoryVersionId(null);
+      await loadChapterVersionsForCurrent();
+      await refreshChapterDraftStatus(sel.bookSlug);
+      setStatus("已还原到所选历史存稿");
+    } catch (e: any) {
+      setStatus(e?.message || String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openHistoryPane() {
+    setMobileReading(false);
+    setPolishModeOn(false);
+    setExpandModeOn(false);
+    setSelectedHistoryVersionId(null);
+    setVersionContentCache({});
+    setHistoryPaneOpen(true);
+    setRightCollapsed(false);
+    void loadChapterVersionsForCurrent();
+  }
+
+  function closeHistoryPane() {
+    setHistoryPaneOpen(false);
+    setSelectedHistoryVersionId(null);
+  }
+
+  function toggleHistoryPane() {
+    if (historyPaneOpen) closeHistoryPane();
+    else openHistoryPane();
   }
 
   // 正文改动后:判断"本章分析是否过期"(分析结果绑定 auditedHash)
@@ -1105,7 +1296,43 @@ export function App() {
     if (!activeBook) return;
     refreshChapters(activeBook).catch((e) => setStatus(String(e?.message || e)));
     refreshStory(activeBook).catch((e) => setStatus(String(e?.message || e)));
+    void refreshChapterDraftStatus(activeBook);
+  }, [activeBook, refreshChapterDraftStatus]);
+
+  useEffect(() => {
+    if (!activeBook) {
+      setChaptersDraftOutOfSync(new Set());
+      serverDraftOutOfSyncRef.current = [];
+      return;
+    }
   }, [activeBook]);
+
+  useEffect(() => {
+    if (!activeBook || !selectedChapter) return;
+    let cancelled = false;
+    void (async () => {
+      const hash = await sha1Hex(chapterContent);
+      if (cancelled) return;
+      setCurrentChapterEditorHash(hash);
+      currentChapterEditorHashRef.current = hash;
+      applyChapterDraftOutOfSyncMerge();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [chapterContent, selectedChapter?.filename, activeBook, latestHistoryHashByChapter, applyChapterDraftOutOfSyncMerge]);
+
+  useEffect(() => {
+    if (!historyPaneOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeHistoryPane();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [historyPaneOpen]);
 
   useEffect(() => {
     if (!activeBook) {
@@ -1425,6 +1652,10 @@ export function App() {
     try {
       await flushSynopsisSave();
       await flushChapterSave();
+      setHistoryPaneOpen(false);
+      setChapterVersions([]);
+      setSelectedHistoryVersionId(null);
+      setVersionContentCache({});
       setSelectedChapter({ bookSlug: activeBook, filename: c.filename });
       const { content } = await readChapter(activeBook, c.filename);
       setChapterContent(content);
@@ -1507,6 +1738,7 @@ export function App() {
       setAuditForeshadowsIndex(foreshadowsIdx);
       setAuditProgressIndex(progressIdx);
       void refreshAuditChapterStale(slug);
+      void refreshChapterDraftStatus(slug);
     } catch {
       // ignore
     }
@@ -2771,6 +3003,7 @@ export function App() {
                       chapterTitle={chapterTitle}
                       auditedChapterFilenames={auditedChapterFilenameSet}
                       auditChangedChapterFilenames={auditChapterStaleFilenames}
+                      chaptersDraftOutOfSync={chaptersDraftOutOfSync}
                       onToggleSort={() => setChapterSortDesc((v) => !v)}
                       onChapterTitleChange={setChapterTitle}
                       onOpenChapter={(c) => void onOpenChapter(c)}
@@ -3104,6 +3337,7 @@ export function App() {
                     setMobileReading(false);
                     setAuditReadModeOn(false);
                     setExpandModeOn(false);
+                    setHistoryPaneOpen(false);
                     setPolishModeOn((v) => {
                       const next = !v;
                       if (next) {
@@ -3142,6 +3376,24 @@ export function App() {
                   title={auditReadModeOn ? "退出审计阅读模式" : "进入审计阅读模式(高亮内容整理关联)"}
                 >
                   {auditReadModeOn ? "退出审计" : "审计"}
+                </button>
+                <button
+                  type="button"
+                  className="btnAuditRead"
+                  disabled={busy || chapterSaveDraftBusy}
+                  onClick={() => setChapterSaveDraftModalOpen(true)}
+                  title="将当前正文保存为历史存稿 (⌘⇧S / Ctrl+Shift+S)"
+                >
+                  {currentChapterDraftOutOfSync ? "存稿*" : "存稿"}
+                </button>
+                <button
+                  type="button"
+                  className={`btnAuditRead ${historyPaneOpen ? "active" : ""}`}
+                  disabled={busy}
+                  onClick={() => toggleHistoryPane()}
+                  title="在编辑区右侧查看历史存稿与对比 (⌘⇧H / Ctrl+Shift+H)"
+                >
+                  {historyPaneOpen ? "收起历史" : "历史版本"}
                 </button>
                 {/* 移动端预览固定 iPhone 14 尺寸,不再提供机型切换 */}
               </div>
@@ -3202,6 +3454,19 @@ export function App() {
             <ChapterEditorPanel
               mobileReading={mobileReading}
               mobileViewport={mobileViewport}
+              historyPaneOpen={historyPaneOpen}
+              historyPane={
+                selectedChapter ? (
+                  <ChapterHistoryPane
+                    versions={chapterVersions}
+                    selectedVersionId={selectedHistoryVersionId}
+                    versionContentCache={versionContentCache}
+                    currentChapterContent={chapterContent}
+                    busy={busy}
+                    onClose={closeHistoryPane}
+                  />
+                ) : null
+              }
               busy={busy}
               selectedChapter={selectedChapter}
               chapterContent={chapterContent}
@@ -3312,9 +3577,25 @@ export function App() {
           auditProgress={auditProgress}
           onJumpToRunningAuditChapter={() => void jumpToRunningAuditChapter()}
           onJumpToOrganize={jumpToOrganize}
+          historyPaneOpen={historyPaneOpen}
+          chapterVersions={chapterVersions}
+          selectedHistoryVersionId={selectedHistoryVersionId}
+          versionContentCache={versionContentCache}
+          currentChapterContent={chapterContent}
+          onSelectHistoryVersion={(id) => void onSelectHistoryVersion(id)}
+          onRestoreHistoryVersion={(id) => void onRestoreChapterVersion(id)}
         />
         ) : null}
       </div>
+
+      <ChapterSaveDraftModal
+        open={chapterSaveDraftModalOpen}
+        busy={chapterSaveDraftBusy}
+        onClose={() => {
+          if (!chapterSaveDraftBusy) setChapterSaveDraftModalOpen(false);
+        }}
+        onConfirm={(label) => confirmChapterSaveDraft(label)}
+      />
 
       <AppModals
         books={books}

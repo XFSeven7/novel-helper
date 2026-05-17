@@ -1,8 +1,9 @@
 import React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { WritingPack } from "../../api";
+import type { ChapterVersionMeta, WritingPack } from "../../api";
 import type { ChapterSelected } from "../editor/ChapterEditorContent";
+import { ChapterHistoryVersionList } from "./ChapterHistoryVersionList";
 
 export type RightTabId = "chapterAnalysis" | "chapterEntities" | "writingPack";
 
@@ -45,6 +46,13 @@ export type RightPanelProps = {
     tab: "chapterAnalysis" | "chapterEntities" | "auditCharacters" | "places" | "timeline" | "foreshadows" | "story" | "orgs",
     key: string
   ) => void;
+  historyPaneOpen?: boolean;
+  chapterVersions?: ChapterVersionMeta[];
+  selectedHistoryVersionId?: string | null;
+  versionContentCache?: Record<string, string>;
+  currentChapterContent?: string;
+  onSelectHistoryVersion?: (versionId: string) => void;
+  onRestoreHistoryVersion?: (versionId: string) => void | Promise<void>;
 };
 
 export function RightPanel({
@@ -82,7 +90,14 @@ export function RightPanel({
   auditRunningChapter,
   auditProgress,
   onJumpToRunningAuditChapter,
-  onJumpToOrganize
+  onJumpToOrganize,
+  historyPaneOpen = false,
+  chapterVersions = [],
+  selectedHistoryVersionId = null,
+  versionContentCache = {},
+  currentChapterContent = "",
+  onSelectHistoryVersion,
+  onRestoreHistoryVersion
 }: RightPanelProps) {
   const auditDirtyBar =
     auditDirty ? (
@@ -122,7 +137,8 @@ export function RightPanel({
     <aside className="right">
       <section className="panel">
     <div className="contentOrganizeHeader">
-      <div className="panelTitle contentOrganizeTitle">内容整理</div>
+      <div className="panelTitle contentOrganizeTitle">{historyPaneOpen ? "历史存稿" : "内容整理"}</div>
+      {!historyPaneOpen ? (
       <div className="auditModelPicker auditModelPickerHeader">
         <button
           type="button"
@@ -200,10 +216,21 @@ export function RightPanel({
           </div>
         ) : null}
       </div>
+      ) : null}
     </div>
 
     {!activeBook ? (
       <div className="rightNeedBook muted">请选择一本书</div>
+    ) : historyPaneOpen && selectedChapter ? (
+      <ChapterHistoryVersionList
+        versions={chapterVersions}
+        selectedVersionId={selectedHistoryVersionId}
+        versionContentCache={versionContentCache}
+        currentChapterContent={currentChapterContent}
+        busy={busy}
+        onSelectVersion={(id) => onSelectHistoryVersion?.(id)}
+        onRestore={(id) => void onRestoreHistoryVersion?.(id)}
+      />
     ) : (
       <>
         <div className="browserTabsBar" role="tablist" aria-label="内容整理页签">

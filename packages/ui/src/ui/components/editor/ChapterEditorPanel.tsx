@@ -4,9 +4,25 @@ import { ChapterEditorContent, type ChapterEditorContentProps } from "./ChapterE
 export type ChapterEditorPanelProps = ChapterEditorContentProps & {
   mobileReading: boolean;
   mobileViewport: { w: number; h: number };
+  historyPaneOpen: boolean;
+  historyPane: React.ReactNode | null;
 };
 
-export function ChapterEditorPanel({ mobileReading, mobileViewport, textareaClassName, ...contentProps }: ChapterEditorPanelProps) {
+export function ChapterEditorPanel({
+  mobileReading,
+  mobileViewport,
+  historyPaneOpen,
+  historyPane,
+  textareaClassName,
+  ...contentProps
+}: ChapterEditorPanelProps) {
+  const showHistory =
+    historyPaneOpen && !mobileReading && !contentProps.polishModeOn && !contentProps.expandModeOn;
+
+  if (showHistory && historyPane) {
+    return <>{historyPane}</>;
+  }
+
   const content = (
     <ChapterEditorContent
       {...contentProps}

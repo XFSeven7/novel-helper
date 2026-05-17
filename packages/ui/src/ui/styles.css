@@ -868,17 +868,36 @@ code {
 .tree.navListDense .treeChild.chapterNavItem {
   display: flex;
   flex-direction: row;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 8px;
   width: 100%;
   text-align: left;
 }
 
+.chapterNavDraftMark {
+  width: 1em;
+  flex-shrink: 0;
+  color: color-mix(in srgb, #f5c542 88%, var(--text));
+  font-weight: 600;
+}
+
+.chapterNavItemMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0;
+}
+
 .chapterNavItemTitle {
+  flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
 }
 
 .chapterNavRightMeta {
@@ -2135,6 +2154,261 @@ code {
   font-weight: 650;
   padding-left: 12px;
   color: var(--text);
+}
+
+.chapterHistorySplit {
+  width: 100%;
+  height: 100%;
+}
+
+.chapterHistorySidePanel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chapterHistorySideIntro {
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  padding: 0 2px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.chapterHistorySideListScroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0 -2px;
+  padding: 6px 2px;
+}
+
+.chapterHistorySideList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chapterHistorySideList li {
+  margin: 0;
+  padding: 0;
+}
+
+.chapterHistorySideEmpty {
+  padding: 12px 8px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.chapterHistorySideItem {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 8px;
+  border-radius: 0;
+}
+
+.chapterHistorySideItemMain {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.chapterHistorySideItemTime {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.chapterHistorySideItemLabel {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chapterHistorySideItemMeta {
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.chapterHistorySideFooter {
+  flex-shrink: 0;
+  padding-top: 10px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.chapterHistorySideFooter .btnSquare {
+  width: 100%;
+}
+
+.chapterHistoryVersionBar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 10px;
+  overflow-x: auto;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.chapterHistoryVersionEmpty {
+  flex-shrink: 0;
+  font-size: 12px;
+  padding: 4px 0;
+}
+
+.chapterHistoryVersionChip {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 280px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  background: color-mix(in srgb, var(--panel2) 75%, transparent);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chapterHistoryVersionChip:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.chapterHistoryVersionChip.active {
+  border-color: color-mix(in srgb, #8b5cf6 55%, var(--border));
+  background: rgba(139, 92, 246, 0.16);
+}
+
+.chapterHistoryVersionChipMeta {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.chapterHistoryColPlaceholder {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 14px;
+  font-size: 14px;
+  line-height: 1.6;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+}
+
+.chapterHistoryCols {
+  gap: 0;
+  padding: 0;
+}
+
+.chapterHistorySplit .chapterHistoryCol {
+  min-width: 0;
+  border-radius: 0;
+  background: transparent;
+  border-top: none;
+  border-bottom: none;
+}
+
+.chapterHistorySplit .chapterHistoryCol:first-child {
+  border-left: none;
+  border-right: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+.chapterHistorySplit .chapterHistoryCol:last-child {
+  border-right: none;
+}
+
+.chapterHistorySplit .polishColTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.chapterHistoryCompareBody {
+  font-size: 14px;
+  line-height: 1.6;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+  padding: 14px;
+}
+
+.chapterHistorySplit .polishDiffPreview.chapterHistoryCompareBody,
+.chapterHistorySplit .polishTextarea.chapterHistoryCompareBody {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.chapterHistoryCompareEditable {
+  cursor: text;
+}
+
+.chapterHistoryCompareEditable:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  outline-offset: -2px;
+}
+
+.chapterHistoryDiffLegend {
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.chapterHistoryDiffLegendDel {
+  color: color-mix(in srgb, #ef4444 85%, var(--muted));
+}
+
+.chapterHistoryDiffLegendIns {
+  color: color-mix(in srgb, #22c55e 85%, var(--muted));
+}
+
+.chapterHistorySplit .polishDiffIns,
+.chapterHistorySplit .polishDiffDel {
+  border-radius: 0;
+  padding: 0 1px;
+}
+
+.chapterHistoryScrollSync {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  overflow: auto;
+}
+
+.chapterHistoryScrollSync .polishDiffPreview,
+.chapterHistoryScrollSync .chapterHistoryColPlaceholder {
+  flex: none;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-height: 0;
+  overflow: visible;
+}
+
+.polishDiffDel {
+  background: color-mix(in srgb, #ef4444 18%, transparent);
+  color: color-mix(in srgb, #ef4444 92%, var(--text));
+  border-radius: 6px;
+  padding: 0 2px;
 }
 
 .auditStream {

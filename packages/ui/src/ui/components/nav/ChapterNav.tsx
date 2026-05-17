@@ -10,6 +10,7 @@ export type ChapterNavProps = {
   chapterTitle: string;
   auditedChapterFilenames: ReadonlySet<string>;
   auditChangedChapterFilenames: ReadonlySet<string>;
+  chaptersDraftOutOfSync: ReadonlySet<string>;
   onToggleSort: () => void;
   onChapterTitleChange: (title: string) => void;
   onOpenChapter: (chapter: ChapterMeta) => void;
@@ -25,6 +26,7 @@ export function ChapterNav({
   chapterTitle,
   auditedChapterFilenames,
   auditChangedChapterFilenames,
+  chaptersDraftOutOfSync,
   onToggleSort,
   onChapterTitleChange,
   onOpenChapter,
@@ -52,6 +54,7 @@ export function ChapterNav({
               displayedChapters.map((c) => {
                 const isAudited = auditedChapterFilenames.has(c.filename);
                 const hasChanges = auditChangedChapterFilenames.has(c.filename);
+                const draftOut = chaptersDraftOutOfSync.has(c.filename);
                 return (
                 <button
                   key={c.filename}
@@ -60,7 +63,15 @@ export function ChapterNav({
                   onClick={() => void onOpenChapter(c)}
                   disabled={busy}
                 >
-                  <span className="chapterNavItemTitle">{c.id}</span>
+                  <span className="chapterNavItemMain">
+                    <span
+                      className="chapterNavDraftMark"
+                      title={draftOut ? "相对最新存稿有变动或尚未存稿" : undefined}
+                    >
+                      {draftOut ? "*" : "\u00a0"}
+                    </span>
+                    <span className="chapterNavItemTitle">{c.id}</span>
+                  </span>
                   <span className="chapterNavRightMeta">
                     <span
                       className={`chapterNavAuditStatus ${

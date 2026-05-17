@@ -223,6 +223,51 @@ export async function getAuditLatest(slug: string, chapterFilename: string) {
   );
 }
 
+export type ChapterVersionMeta = {
+  id: string;
+  createdAt: string;
+  label: string;
+  wordCount: number;
+  contentHash: string;
+  source: "manual";
+};
+
+export async function getChapterDraftStatus(slug: string) {
+  return await http<{ outOfSync: string[] }>(
+    `/api/books/${encodeURIComponent(slug)}/chapters/draft-status`
+  );
+}
+
+export async function listChapterVersions(slug: string, filename: string) {
+  return await http<{ versions: ChapterVersionMeta[]; latestContentHash: string | null }>(
+    `/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}/versions`
+  );
+}
+
+export async function createChapterVersion(
+  slug: string,
+  filename: string,
+  input: { label?: string }
+) {
+  return await http<{ version: ChapterVersionMeta }>(
+    `/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}/versions`,
+    { method: "POST", body: JSON.stringify(input) }
+  );
+}
+
+export async function getChapterVersion(slug: string, filename: string, versionId: string) {
+  return await http<{ version: ChapterVersionMeta; content: string }>(
+    `/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}/versions/${encodeURIComponent(versionId)}`
+  );
+}
+
+export async function restoreChapterVersion(slug: string, filename: string, versionId: string) {
+  return await http<{ wordCount: number }>(
+    `/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}/versions/${encodeURIComponent(versionId)}/restore`,
+    { method: "POST", body: JSON.stringify({}) }
+  );
+}
+
 export type AuditChapterStaleEntry = {
   filename: string;
   stale: boolean;

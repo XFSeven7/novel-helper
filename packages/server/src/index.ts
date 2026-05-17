@@ -55,6 +55,14 @@ import {
   IdeaItem
 } from "./fsStore.js";
 import {
+  ChapterVersionError,
+  listChapterVersions,
+  createChapterVersion,
+  readChapterVersionContent,
+  restoreChapterVersion,
+  listChapterFilenamesOutOfSyncWithLatestDraft
+} from "./chapterVersions.js";
+import {
   readAppConfigFile,
   writeAppConfigFile,
   resolveDataDirWithSource,
@@ -2529,6 +2537,75 @@ app.get("/api/books/:slug/audit/stale-chapters", async (req) => {
   const params = paramsSchema.parse((req as any).params);
   const chapters = await listAuditChapterStale(getDataDir(), params.slug);
   return { chapters };
+});
+
+app.get("/api/books/:slug/chapters/draft-status", async (req) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const params = paramsSchema.parse((req as any).params);
+  const outOfSync = await listChapterFilenamesOutOfSyncWithLatestDraft(getDataDir(), params.slug);
+  return { outOfSync };
+});
+
+app.get("/api/books/:slug/chapters/:filename/versions", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1), filename: z.string().min(1) });
+  const params = paramsSchema.parse((req as any).params);
+  try {
+    return await listChapterVersions(getDataDir(), params.slug, params.filename);
+  } catch (e: any) {
+    if (e instanceof ChapterVersionError) return reply.code(e.statusCode).send({ message: e.message });
+    return reply.code(400).send({ message: e?.message || String(e) });
+  }
+});
+
+app.post("/api/books/:slug/chapters/:filename/versions", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1), filename: z.string().min(1) });
+  const bodySchema = z.object({ label: z.string().optional() });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body ?? {});
+  try {
+    const version = await createChapterVersion(getDataDir(), params.slug, params.filename, {
+      label: body.label
+    });
+    return { version };
+  } catch (e: any) {
+    if (e instanceof ChapterVersionError) return reply.code(e.statusCode).send({ message: e.message });
+    return reply.code(400).send({ message: e?.message || String(e) });
+  }
+});
+
+app.get("/api/books/:slug/chapters/:filename/versions/:versionId", async (req, reply) => {
+  const paramsSchema = z.object({
+    slug: z.string().min(1),
+    filename: z.string().min(1),
+    versionId: z.string().min(1)
+  });
+  const params = paramsSchema.parse((req as any).params);
+  try {
+    return await readChapterVersionContent(
+      getDataDir(),
+      params.slug,
+      params.filename,
+      params.versionId
+    );
+  } catch (e: any) {
+    if (e instanceof ChapterVersionError) return reply.code(e.statusCode).send({ message: e.message });
+    return reply.code(400).send({ message: e?.message || String(e) });
+  }
+});
+
+app.post("/api/books/:slug/chapters/:filename/versions/:versionId/restore", async (req, reply) => {
+  const paramsSchema = z.object({
+    slug: z.string().min(1),
+    filename: z.string().min(1),
+    versionId: z.string().min(1)
+  });
+  const params = paramsSchema.parse((req as any).params);
+  try {
+    return await restoreChapterVersion(getDataDir(), params.slug, params.filename, params.versionId);
+  } catch (e: any) {
+    if (e instanceof ChapterVersionError) return reply.code(e.statusCode).send({ message: e.message });
+    return reply.code(400).send({ message: e?.message || String(e) });
+  }
 });
 
 app.get("/api/books/:slug/audit/analysis", async (req, reply) => {

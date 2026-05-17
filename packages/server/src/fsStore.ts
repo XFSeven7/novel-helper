@@ -1374,6 +1374,8 @@ export async function deleteChapter(dataDir: string, novelSlug: string, filename
   if (!(await exists(filePath))) throw new Error("章节不存在");
   await fs.unlink(filePath);
   await removeChapterFromWritingLog(dataDir, novelSlug, safeName);
+  const { deleteChapterVersionsDir } = await import("./chapterVersions.js");
+  await deleteChapterVersionsDir(dataDir, novelSlug, safeName);
 }
 
 /** 保留序号，仅改「下划线后的标题」并重命名文件；同步正文首行 `# 标题`。 */
@@ -1417,6 +1419,8 @@ export async function renameChapterTitle(
   await fs.writeFile(newPath, nextBody, "utf8");
   await fs.unlink(oldPath);
   await renameChapterInWritingLog(dataDir, novelSlug, oldFilename, newFilename, nextBody);
+  const { renameChapterVersionsDir } = await import("./chapterVersions.js");
+  await renameChapterVersionsDir(dataDir, novelSlug, oldFilename, newFilename);
 
   return metaWithCount(newFilename);
 }
