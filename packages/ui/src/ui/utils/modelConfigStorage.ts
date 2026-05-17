@@ -99,20 +99,29 @@ export function loadModelConfigs(): { configs: ModelConfig[]; activeId: string |
   }
 }
 
+function resolveSystemTheme(): ThemePreference {
+  try {
+    return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+  } catch {
+    return "dark";
+  }
+}
+
 export function migrateLegacyTheme(raw: string | null): ThemePreference {
-  if (raw === "system" || raw === "light" || raw === "dark") return raw;
-  if (!raw) return "system";
+  if (raw === "light" || raw === "dark") return raw;
+  if (raw === "system") return resolveSystemTheme();
+  if (!raw) return resolveSystemTheme();
   const darkLegacy = new Set(["default", "midnight", "forest", "sunset", "ocean", "loam"]);
   const lightLegacy = new Set(["paper", "sepia", "village", "meadow", "clay"]);
   if (darkLegacy.has(raw)) return "dark";
   if (lightLegacy.has(raw)) return "light";
-  return "system";
+  return resolveSystemTheme();
 }
 
 export function loadThemePreference(): ThemePreference {
   try {
     return migrateLegacyTheme(localStorage.getItem(THEME_STORAGE_KEY));
   } catch {
-    return "system";
+    return "dark";
   }
 }

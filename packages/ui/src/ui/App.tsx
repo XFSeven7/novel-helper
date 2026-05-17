@@ -663,7 +663,7 @@ export function App() {
 
   useLayoutEffect(() => {
     const root = document.documentElement;
-    root.classList.remove("theme-system", "theme-light", "theme-dark");
+    root.classList.remove("theme-light", "theme-dark");
     root.classList.add(`theme-${themePreference}`);
   }, [themePreference]);
 

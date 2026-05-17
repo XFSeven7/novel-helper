@@ -1,6 +1,6 @@
 import React from "react";
-import { THEME_OPTIONS, type ThemePreference } from "../../constants";
-import { IconFullscreenEnter, IconFullscreenExit } from "./LayoutIcons";
+import type { ThemePreference } from "../../constants";
+import { IconFullscreenEnter, IconFullscreenExit, IconThemeMoon, IconThemeSun } from "./LayoutIcons";
 import { toggleDocumentFullscreen } from "./fullscreen";
 
 export type TopBarProps = {
@@ -61,20 +61,16 @@ export function TopBar({
             右栏
           </button>
         </div>
-        <div className="themeLabel">外观</div>
-        <select
-          className="select"
-          value={themePreference}
-          onChange={(e) => onThemeChange(e.target.value as ThemePreference)}
+        <button
+          type="button"
+          className="btnThemeToggle"
+          onClick={() => onThemeChange(themePreference === "light" ? "dark" : "light")}
           disabled={busy}
-          title="跟随系统:随操作系统浅色/深色自动切换"
+          title={themePreference === "light" ? "当前为白天，点击切换为黑夜" : "当前为黑夜，点击切换为白天"}
+          aria-label={themePreference === "light" ? "切换为黑夜" : "切换为白天"}
         >
-          {THEME_OPTIONS.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.label}
-            </option>
-          ))}
-        </select>
+          {themePreference === "light" ? <IconThemeMoon /> : <IconThemeSun />}
+        </button>
         <button
           type="button"
           className={`btnFullscreenToggle ${fullscreenOn ? "active" : ""}`}

@@ -191,12 +191,8 @@ code {
   flex-wrap: wrap;
 }
 
-.themeLabel {
-  color: var(--muted);
-  font-size: 12px;
-}
-
-.btnFullscreenToggle {
+.btnFullscreenToggle,
+.btnThemeToggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -210,17 +206,20 @@ code {
   cursor: pointer;
 }
 
-.btnFullscreenToggle:hover {
+.btnFullscreenToggle:hover,
+.btnThemeToggle:hover {
   background: transparent;
   color: var(--text);
 }
 
-.btnFullscreenToggle.active {
+.btnFullscreenToggle.active,
+.btnThemeToggle.active {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
   color: var(--text);
 }
 
-.btnFullscreenToggle:focus-visible {
+.btnFullscreenToggle:focus-visible,
+.btnThemeToggle:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent, #a78bfa) 55%, transparent);
   outline-offset: 2px;
 }
@@ -3092,7 +3091,7 @@ code {
 .panelTitle {
   font-weight: 650;
   margin-bottom: 10px;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--text);
 }
 
 .rightTabs {

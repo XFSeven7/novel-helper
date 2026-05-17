@@ -15,7 +15,7 @@ export const MOBILE_PRESETS: Array<{ id: MobilePresetId; label: string; w: numbe
   { id: "ipad-mini", label: "iPad mini (768×1024)", w: 768, h: 1024 }
 ];
 
-export type ThemePreference = "system" | "light" | "dark";
+export type ThemePreference = "light" | "dark";
 
 export const THEME_STORAGE_KEY = "novel-helper-theme";
 /** v2：默认左右栏均展开（false = 未收起） */
@@ -24,12 +24,6 @@ export const RIGHT_COLLAPSED_STORAGE_KEY = "novel-helper-right-collapsed-v3";
 export const LAYOUT3_SPLIT_STORAGE_KEY = "novel-helper-layout3-splits";
 export const MODEL_CONFIGS_STORAGE_KEY = "novel-helper-model-configs";
 export const MODEL_ACTIVE_ID_STORAGE_KEY = "novel-helper-model-active-id";
-
-export const THEME_OPTIONS: Array<{ id: ThemePreference; label: string }> = [
-  { id: "system", label: "跟随系统" },
-  { id: "light", label: "白天" },
-  { id: "dark", label: "黑夜" }
-];
 
 export const CHARACTER_ROLE_OPTIONS = ["主角", "配角", "反派", "盟友", "路人", "其他"] as const;
 export type CharacterRole = (typeof CHARACTER_ROLE_OPTIONS)[number];
