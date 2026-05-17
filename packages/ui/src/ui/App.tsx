@@ -2933,20 +2933,6 @@ export function App() {
                   </>
                 ) : (
                   <>
-                    {activeBookMeta ? (
-                      <>
-                        <button
-                          type="button"
-                          className="btnLinkMuted centerBookLink"
-                          disabled={busy}
-                          onClick={() => void goBookOverview()}
-                          title="查看本书统计与简介"
-                        >
-                          {activeBookMeta.title}
-                        </button>
-                        <span className="muted centerTitleSep">›</span>
-                      </>
-                    ) : null}
                     <div
                       className={`centerTitle ${canRenameChapterFilename ? "centerTitleEditable" : ""}`}
                       onDoubleClick={() => {
@@ -2967,8 +2953,6 @@ export function App() {
                     {canRenameChapterFilename ? (
                       <button
                         type="button"
-                        className="btnSquare"
-                        style={{ marginLeft: 8 }}
                         disabled={busy || chapterTitleSuggestBusy}
                         onClick={() => void openChapterTitleSuggestModal()}
                         title="根据本章正文生成多个标题候选"
@@ -3026,15 +3010,18 @@ export function App() {
                 >
                   下一章
                 </button>
-                <label className="toggle">
-                  <input
-                    type="checkbox"
-                    checked={mobileReading}
-                    onChange={(e) => setMobileReading(e.target.checked)}
-                    disabled={busy || polishModeOn || expandModeOn}
-                  />
-                  移动端阅读
-                </label>
+                <button
+                  type="button"
+                  className={`btnAuditRead ${mobileReading ? "active" : ""}`}
+                  disabled={busy || polishModeOn || expandModeOn}
+                  onClick={() => {
+                    if (busy || polishModeOn || expandModeOn) return;
+                    setMobileReading((v) => !v);
+                  }}
+                  title={mobileReading ? "退出移动端阅读预览" : "以手机尺寸预览本章"}
+                >
+                  {mobileReading ? "退出移动预览" : "移动端预览"}
+                </button>
                 <button
                   type="button"
                   className={`btnAuditRead ${polishModeOn ? "active" : ""}`}

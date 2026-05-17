@@ -1296,10 +1296,37 @@ code {
   white-space: nowrap;
 }
 
-.btnReadingNav {
-  padding: 8px 10px;
-  border-radius: 10px;
+.centerTop button {
+  flex-shrink: 0;
+  box-sizing: border-box;
+  height: 32px;
+  min-height: 32px;
+  padding: 0 12px;
   font-size: 12px;
+  line-height: 1;
+  border-radius: 8px !important;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.06);
+  color: color-mix(in srgb, var(--text) 92%, transparent);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.centerTop button:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--panel2) 70%, transparent);
+}
+
+.centerTop button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.centerTop button.active {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  color: var(--text);
 }
 
 .toggle {
@@ -1568,33 +1595,6 @@ code {
 .btnAuditChapter.active {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
   background: color-mix(in srgb, var(--accent) 22%, transparent);
-  color: var(--text);
-}
-
-.btnAuditRead {
-  flex-shrink: 0;
-  align-self: center;
-  padding: 6px 12px;
-  font-size: 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.06);
-  color: color-mix(in srgb, var(--text) 92%, transparent);
-  cursor: pointer;
-}
-
-.btnAuditRead:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--panel2) 70%, transparent);
-}
-
-.btnAuditRead:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.btnAuditRead.active {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
   color: var(--text);
 }
 

@@ -2996,7 +2996,7 @@ export function App() {
                     onChange={(e) => setMobileReading(e.target.checked)}
                     disabled={busy || polishModeOn || expandModeOn}
                   />
-                  移动端阅读
+                  移动端预览
                 </label>
                 <button
                   type="button"
