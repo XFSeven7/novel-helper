@@ -1122,3 +1122,210 @@ export function buildInspirationVariantsPrompt(input: {
     "现在输出 JSON 数组："
   ].join("\n");
 }
+
+// --- outline ---
+export function buildOutlineSnowflakePrompt(input: {
+  logline: string;
+  instruction?: string;
+  bookSynopsis?: string;
+  worldExcerpt?: string;
+  targetVolumes?: number;
+  structureFramework?: string;
+}) {
+  const schema = {
+    book: {
+      logline: "一句话梗概",
+      synopsis: { setup: "", development: "", twist: "", climax: "", ending: "" },
+      targetWords: 0,
+      targetChapters: 0,
+      structureFramework: "三幕式",
+      mainlineStages: [{ id: "stage-1", label: "阶段名", chapterRange: "1-20", note: "" }]
+    },
+    volumes: [{ id: "vol-1", title: "第一卷标题", order: 1, synopsis: "卷摘要", chapterFilenames: [] }]
+  };
+  return [
+    "你是网文长篇结构编辑。根据作者提供的一句话梗概，用雪花法扩展全书结构与分卷规划。",
+    "不要写正文，只输出结构化大纲 JSON。",
+    "",
+    "硬性要求：",
+    "- 严格输出 JSON（不要解释、不要 markdown、不要代码块）。",
+    "- chapterFilenames 必须为空数组 []（尚未建章）。",
+    "- volumes 数量参考 targetVolumes；每卷 synopsis 含：主要情节、核心冲突、人物成长、伏笔安排、卷末状态。",
+    "- 五段式 synopsis 对应：起因/发展/转折/高潮/结局。",
+    "",
+    `logline: ${input.logline}`,
+    input.instruction ? `作者补充: ${input.instruction}` : "",
+    input.bookSynopsis ? `书籍简介: ${truncateForPrompt(input.bookSynopsis, 2000)}` : "",
+    input.worldExcerpt ? `世界观摘录: ${input.worldExcerpt}` : "",
+    input.structureFramework ? `结构框架: ${input.structureFramework}` : "",
+    input.targetVolumes ? `建议分卷数: ${input.targetVolumes}` : "",
+    "",
+    "输出 schema 示例：",
+    JSON.stringify(schema, null, 2),
+    "",
+    "现在输出 JSON："
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+export function buildOutlineFromChaptersPrompt(input: {
+  instruction?: string;
+  bookSynopsis?: string;
+  currentOutline?: unknown;
+  chapters: Array<{ filename: string; id: string; title: string; excerpt: string }>;
+  timelineCompressed?: string[];
+  foreshadows?: Array<{ id: string; title: string; status: string }>;
+}) {
+  const schema = {
+    volumes: [{ id: "vol-1", title: "", order: 1, synopsis: "", chapterFilenames: ["0001_标题.md"] }],
+    ungroupedFilenames: [] as string[],
+    chapterPlans: {
+      "0001_标题.md": {
+        core: "",
+        scenes: "",
+        beats: ["要点1", "要点2"],
+        foreshadowPlant: [],
+        foreshadowPayoff: [],
+        hook: ""
+      }
+    }
+  };
+  const allowed = input.chapters.map((c) => c.filename);
+  return [
+    "你是网文结构编辑。根据已有章节标题与正文摘录，反推分卷归属与各章章纲。",
+    "",
+    "硬性要求：",
+    "- 严格输出 JSON（不要解释、不要 markdown、不要代码块）。",
+    `- chapterFilenames 与 chapterPlans 的 key 只能来自以下列表，禁止虚构：${JSON.stringify(allowed)}`,
+    "- 每章必须最多归属一个分卷；未归属的放入 ungroupedFilenames。",
+    "- beats 每条一句话，3-5 条为宜。",
+    "",
+    input.instruction ? `作者补充: ${input.instruction}` : "",
+    input.bookSynopsis ? `书籍简介: ${truncateForPrompt(input.bookSynopsis, 1500)}` : "",
+    input.currentOutline ? `当前大纲（可参考）: ${truncateForPrompt(JSON.stringify(input.currentOutline), 3000)}` : "",
+    input.timelineCompressed?.length
+      ? `时间线压缩: ${input.timelineCompressed.join("\n")}`
+      : "",
+    input.foreshadows?.length ? `伏笔索引: ${JSON.stringify(input.foreshadows.slice(0, 30))}` : "",
+    "",
+    "章节摘录：",
+    JSON.stringify(input.chapters, null, 2),
+    "",
+    "输出 schema 示例：",
+    JSON.stringify(schema, null, 2),
+    "",
+    "现在输出 JSON："
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+export function buildOutlineRefineChapterPlanPrompt(input: {
+  instruction?: string;
+  chapter: { filename: string; id: string; title: string; excerpt: string };
+  currentPlan?: unknown;
+  bookLogline?: string;
+  volumeSynopsis?: string;
+  foreshadows?: Array<{ id: string; title: string; status: string }>;
+}) {
+  const schema = {
+    chapterPlans: {
+      [input.chapter.filename]: {
+        core: "",
+        scenes: "",
+        pov: "",
+        time: "",
+        beats: [],
+        foreshadowPlant: [],
+        foreshadowPayoff: [],
+        hook: ""
+      }
+    }
+  };
+  return [
+    "你是网文章纲编辑。为单章生成或润色章纲（不是正文）。",
+    "",
+    "硬性要求：",
+    "- 严格输出 JSON（不要解释、不要 markdown、不要代码块）。",
+    `- 只输出 chapterPlans，且 key 必须为: ${input.chapter.filename}`,
+    "- 若已有章纲字段非空且作者未要求推翻，保留原意仅补全空缺。",
+    "",
+    input.instruction ? `作者指令: ${input.instruction}` : "",
+    input.bookLogline ? `全书 logline: ${input.bookLogline}` : "",
+    input.volumeSynopsis ? `所属卷摘要: ${truncateForPrompt(input.volumeSynopsis, 1500)}` : "",
+    input.currentPlan ? `当前章纲: ${JSON.stringify(input.currentPlan)}` : "",
+    input.foreshadows?.length ? `相关伏笔: ${JSON.stringify(input.foreshadows.slice(0, 20))}` : "",
+    "",
+    "目标章节：",
+    JSON.stringify(input.chapter, null, 2),
+    "",
+    "输出 schema：",
+    JSON.stringify(schema, null, 2),
+    "",
+    "现在输出 JSON："
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+export function buildOutlineVolumeChapterPlansPrompt(input: {
+  instruction?: string;
+  volume: { id: string; title: string; synopsis?: string; chapterFilenames: string[] };
+  chapters: Array<{ filename: string; id: string; title: string; excerpt: string }>;
+  existingPlans?: Record<string, unknown>;
+}) {
+  const schema = {
+    chapterPlans: Object.fromEntries(
+      input.chapters.map((c) => [
+        c.filename,
+        { core: "", beats: [], hook: "" }
+      ])
+    )
+  };
+  return [
+    "你是网文章纲编辑。为指定分卷内多章批量生成章纲草案。",
+    "",
+    "硬性要求：",
+    "- 严格输出 JSON（不要解释、不要 markdown、不要代码块）。",
+    "- 只输出 chapterPlans；key 必须来自本卷章节列表。",
+    "- 已有较完整章纲的章节可略过或仅补空字段。",
+    "",
+    input.instruction ? `作者补充: ${input.instruction}` : "",
+    `分卷: ${JSON.stringify({ id: input.volume.id, title: input.volume.title, synopsis: input.volume.synopsis })}`,
+    input.existingPlans ? `已有章纲: ${truncateForPrompt(JSON.stringify(input.existingPlans), 4000)}` : "",
+    "",
+    "章节摘录：",
+    JSON.stringify(input.chapters, null, 2),
+    "",
+    "输出 schema：",
+    JSON.stringify(schema, null, 2),
+    "",
+    "现在输出 JSON："
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+export function buildOutlineForeshadowAuditPrompt(input: {
+  outline: unknown;
+  foreshadows: Array<{ id: string; title: string; status: string; chapters?: number[]; note?: string }>;
+  chapterPlans: Record<string, { foreshadowPlant?: string[]; foreshadowPayoff?: string[] }>;
+}) {
+  return [
+    "你是网文伏笔顾问。对照全书大纲章纲与伏笔索引，输出体检报告。",
+    "",
+    "输出要求：",
+    "- 使用 Markdown（可含小标题与列表）。",
+    "- 包含：未收伏笔、可能重复埋设、章纲与索引不一致、建议优先处理的 3-5 条。",
+    "- 不要编造书中不存在的伏笔 id。",
+    "",
+    "伏笔索引：",
+    JSON.stringify(input.foreshadows.slice(0, 80), null, 2),
+    "",
+    "大纲与章纲埋收笔：",
+    truncateForPrompt(JSON.stringify({ outline: input.outline, chapterPlans: input.chapterPlans }), 8000),
+    "",
+    "现在输出 Markdown 报告："
+  ].join("\n");
+}

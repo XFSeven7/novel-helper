@@ -716,3 +716,106 @@ export async function getBookStats(slug: string) {
   return await http<{ stats: BookStats }>(`/api/books/${encodeURIComponent(slug)}/stats`);
 }
 
+export type BookOutline = {
+  logline?: string;
+  synopsis?: {
+    setup?: string;
+    development?: string;
+    twist?: string;
+    climax?: string;
+    ending?: string;
+  };
+  targetWords?: number;
+  targetChapters?: number;
+  structureFramework?: string;
+  mainlineStages?: Array<{
+    id: string;
+    label: string;
+    chapterRange?: string;
+    note?: string;
+  }>;
+};
+
+export type VolumeOutline = {
+  id: string;
+  title: string;
+  order: number;
+  synopsis?: string;
+  chapterFilenames: string[];
+};
+
+export type ChapterPlan = {
+  updatedAt?: string;
+  core?: string;
+  scenes?: string;
+  pov?: string;
+  time?: string;
+  beats?: string[];
+  foreshadowPlant?: string[];
+  foreshadowPayoff?: string[];
+  hook?: string;
+  coolPoint?: string;
+  rhythmNote?: string;
+};
+
+export type OutlineIndex = {
+  version: 1;
+  updatedAt: string;
+  book: BookOutline;
+  volumes: VolumeOutline[];
+  ungroupedFilenames: string[];
+  chapterPlans: Record<string, ChapterPlan>;
+};
+
+export type OutlineAiMode =
+  | "snowflake"
+  | "fromChapters"
+  | "refineChapterPlan"
+  | "volumeChapterPlans"
+  | "foreshadowAudit";
+
+export async function getOutline(slug: string) {
+  return await http<{ outline: OutlineIndex }>(`/api/books/${encodeURIComponent(slug)}/outline`);
+}
+
+export async function patchOutline(slug: string, outline: OutlineIndex) {
+  return await http<{ outline: OutlineIndex }>(`/api/books/${encodeURIComponent(slug)}/outline`, {
+    method: "PATCH",
+    body: JSON.stringify({ outline })
+  });
+}
+
+export async function generateOutlineAi(
+  slug: string,
+  body: {
+    mode: OutlineAiMode;
+    modelConfigId?: string | null;
+    instruction?: string;
+    volumeId?: string;
+    chapterFilename?: string;
+    options?: {
+      useWorld?: boolean;
+      useForeshadows?: boolean;
+      useTimeline?: boolean;
+      targetVolumes?: number;
+      logline?: string;
+      overwrite?: boolean;
+    };
+  }
+) {
+  return await http<{ preview: Partial<OutlineIndex> | { report: string }; warnings?: string[] }>(
+    `/api/books/${encodeURIComponent(slug)}/outline/ai`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export async function applyOutlineAiPreview(
+  slug: string,
+  body: { preview: Partial<OutlineIndex> | { report: string }; overwrite?: boolean }
+) {
+  return await http<{ outline: OutlineIndex; warnings?: string[] }>(
+    `/api/books/${encodeURIComponent(slug)}/outline/ai/apply`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+

@@ -56,6 +56,15 @@ import {
 import { resolveDataDir, safeSlug } from "./paths.js";
 import { computeBookStats } from "./bookStats.js";
 import {
+  ensureOutlineIndex,
+  writeOutlineIndex,
+  validateOutlineAgainstChapters,
+  mergeOutlinePreview,
+  normalizeOutlineIndex,
+  type OutlineIndex
+} from "./outlineStore.js";
+import { runOutlineAi, type OutlineAiMode } from "./outlineAi.js";
+import {
   truncateForPrompt,
   buildInspirationPrompt,
   buildInspirationVariantsPrompt,
@@ -1916,6 +1925,8 @@ app.post("/api/books/:slug/chapters", async (req) => {
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
   const chapter = await createChapter(dataDir, params.slug, body.title, body.content, body.chapterIndex);
+  const allChapters = await listChapters(dataDir, params.slug);
+  await ensureOutlineIndex(dataDir, params.slug, allChapters);
   return { chapter };
 });
 
@@ -1973,9 +1984,121 @@ app.delete("/api/books/:slug/chapters/:filename", async (req, reply) => {
   const params = paramsSchema.parse((req as any).params);
   try {
     await deleteChapter(dataDir, params.slug, params.filename);
+    const allChapters = await listChapters(dataDir, params.slug);
+    await ensureOutlineIndex(dataDir, params.slug, allChapters);
     return { ok: true };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || "Delete failed" });
+  }
+});
+
+app.get("/api/books/:slug/outline", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const params = paramsSchema.parse((req as any).params);
+  try {
+    const chapters = await listChapters(dataDir, params.slug);
+    const outline = await ensureOutlineIndex(dataDir, params.slug, chapters);
+    return { outline };
+  } catch (e: any) {
+    return reply.code(400).send({ message: e?.message || String(e) });
+  }
+});
+
+app.patch("/api/books/:slug/outline", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const params = paramsSchema.parse((req as any).params);
+  const body = (req as any).body;
+  try {
+    const chapters = await listChapters(dataDir, params.slug);
+    const filenames = chapters.map((c) => c.filename);
+    const idx = normalizeOutlineIndex(body?.outline ?? body);
+    const warnings = validateOutlineAgainstChapters(idx, filenames);
+    if (warnings.length) return reply.code(400).send({ message: warnings.join("；") });
+    const saved = await writeOutlineIndex(dataDir, params.slug, idx);
+    return { outline: saved };
+  } catch (e: any) {
+    return reply.code(400).send({ message: e?.message || String(e) });
+  }
+});
+
+app.post("/api/books/:slug/outline/ai", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({
+    mode: z.enum(["snowflake", "fromChapters", "refineChapterPlan", "volumeChapterPlans", "foreshadowAudit"]),
+    modelConfigId: z.string().nullable().optional(),
+    instruction: z.string().optional(),
+    volumeId: z.string().optional(),
+    chapterFilename: z.string().optional(),
+    options: z
+      .object({
+        useWorld: z.boolean().optional(),
+        useForeshadows: z.boolean().optional(),
+        useTimeline: z.boolean().optional(),
+        targetVolumes: z.number().int().min(1).max(20).optional(),
+        logline: z.string().optional(),
+        overwrite: z.boolean().optional()
+      })
+      .optional()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+
+  try {
+    const settings = await readModelSettings();
+    const activeId = body.modelConfigId || settings.activeId;
+    const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+    if (!cfg) return reply.code(400).send({ message: "未配置模型" });
+
+    const chapters = await listChapters(dataDir, params.slug);
+    const outline = await ensureOutlineIndex(dataDir, params.slug, chapters);
+    const { preview, prompt, warnings } = await runOutlineAi({
+      dataDir,
+      slug: params.slug,
+      mode: body.mode as OutlineAiMode,
+      outline,
+      cfg,
+      createAiSdkModel,
+      instruction: body.instruction,
+      volumeId: body.volumeId,
+      chapterFilename: body.chapterFilename,
+      options: body.options
+    });
+
+    const debug = String((req as any).query?.debug || "") === "1" ? { prompt } : undefined;
+    return { preview, warnings, debug };
+  } catch (e: any) {
+    return reply.code(400).send({ message: e?.message || String(e) });
+  }
+});
+
+app.post("/api/books/:slug/outline/ai/apply", async (req, reply) => {
+  const paramsSchema = z.object({ slug: z.string().min(1) });
+  const bodySchema = z.object({
+    preview: z.any(),
+    overwrite: z.boolean().optional()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+  try {
+    const chapters = await listChapters(dataDir, params.slug);
+    const filenames = chapters.map((c) => c.filename);
+    const validFilenames = new Set(filenames);
+    const current = await ensureOutlineIndex(dataDir, params.slug, chapters);
+
+    if (body.preview?.report) {
+      return reply.code(400).send({ message: "伏笔体检报告不可应用到大纲" });
+    }
+
+    const { merged, warnings } = mergeOutlinePreview(current, body.preview as Partial<OutlineIndex>, {
+      overwrite: Boolean(body.overwrite),
+      validFilenames
+    });
+    const valWarnings = validateOutlineAgainstChapters(merged, filenames);
+    if (valWarnings.length) return reply.code(400).send({ message: valWarnings.join("；") });
+    const saved = await writeOutlineIndex(dataDir, params.slug, merged);
+    return { outline: saved, warnings: [...warnings, ...valWarnings] };
+  } catch (e: any) {
+    return reply.code(400).send({ message: e?.message || String(e) });
   }
 });
 
@@ -3759,6 +3882,10 @@ app.post("/api/books/:slug/timeline/range/delete", async (req, reply) => {
   await writeStoryTimelineMarkdownFromIndex(dataDir, params.slug, idx);
   return { ok: true, index: idx };
 });
+
+// -----------------------------
+// 大纲（outline.json）
+// -----------------------------
 
 // -----------------------------
 // 灵感库（meta/inspiration.json）

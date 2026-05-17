@@ -7,7 +7,7 @@ description: 本地写小说的网页端工具
 started: 2026-05-04
 updated: 2026-05-16
 
-current_focus: 新增写作统计看板
+current_focus: v1.4 大纲与 AI 规划
 
 milestones:
   - name: v1.0 基础写作功能
@@ -41,6 +41,13 @@ milestones:
       - 累积字数趋势
       - 连续/停更天数提示
       - 概览统计卡片
+
+  - name: v1.4 长篇大纲
+    status: in_progress
+    features:
+      - outline.json 全书/分卷/章纲
+      - 左栏大纲 Tab
+      - AI 雪花/反推/章纲/伏笔体检
 
 tasks: []
 blockers: []

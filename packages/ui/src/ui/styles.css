@@ -3826,6 +3826,214 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis) {
     monospace;
 }
 
+/* 大纲：左侧栏内单一滚动，输入框随内容增高、无框内滚动条 */
+.navSectionMain:has(.outlinePanel) {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.outlinePanel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+}
+
+.outlineHeader {
+  flex-shrink: 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+.outlineBody {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 8px 2px 12px 0;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent;
+}
+
+.outlineBody::-webkit-scrollbar {
+  width: 6px;
+}
+
+.outlineBody::-webkit-scrollbar-thumb {
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--muted) 40%, transparent);
+}
+
+.outlineToolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0 6px;
+  flex-wrap: wrap;
+}
+
+.outlineStatus {
+  flex: 1;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outlineAiSelect,
+.outlineInstruction,
+.outlineInput {
+  font-size: 12px;
+}
+
+.outlineInstruction {
+  display: block;
+  margin: 6px 0 4px;
+  width: 100%;
+  box-sizing: border-box;
+  flex: none;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel2, var(--panel)) 70%, transparent);
+  color: var(--text);
+  font-family: inherit;
+}
+
+.outlineForm {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.outlineSplit {
+  display: grid;
+  grid-template-columns: minmax(108px, 34%) 1fr;
+  gap: 10px;
+  min-width: 0;
+  align-items: start;
+}
+
+.outlineSplitLeft {
+  position: sticky;
+  top: 0;
+  align-self: start;
+  max-height: 100%;
+  overflow: visible;
+  border-right: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  padding-right: 8px;
+}
+
+.outlineSplitRight {
+  min-width: 0;
+  overflow: visible;
+}
+
+.outlineLabel {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin: 10px 0 4px;
+}
+
+.outlinePanel .outlineInput {
+  width: 100%;
+  box-sizing: border-box;
+  flex: none;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel2, var(--panel)) 70%, transparent);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.outlinePanel textarea.outlineTextarea {
+  flex: none;
+  width: 100%;
+  box-sizing: border-box;
+  display: block;
+  margin: 0 0 4px;
+  padding: 8px 10px;
+  min-height: 2.75em;
+  overflow: hidden;
+  resize: none;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel2, var(--panel)) 70%, transparent);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.5;
+  field-sizing: content;
+}
+
+.outlineRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0 4px;
+}
+
+.outlineInline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.outlineInline input[type="number"] {
+  width: 3.2em;
+  padding: 4px 6px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel2, var(--panel)) 70%, transparent);
+  color: var(--text);
+}
+
+.outlineVolumeLabel {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 8px 0 4px;
+  font-weight: 600;
+}
+
+.outlineChapterList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  font-size: 12px;
+}
+
+.outlineChapterList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 2px 0;
+}
+
+.outlineAiJson,
+.outlineAiReport {
+  font-size: 11px;
+  white-space: pre-wrap;
+  max-height: 50vh;
+  overflow: auto;
+  margin: 0;
+}
+
+.outlineHint {
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+
 .status {
   padding: 10px 12px;
   border-top: 1px solid var(--border);

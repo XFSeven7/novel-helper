@@ -42,6 +42,7 @@ import { SidebarToggleIcon } from "./components/layout/LayoutIcons";
 import { TopBar } from "./components/layout/TopBar";
 import { BookShelfNav } from "./components/nav/BookShelfNav";
 import { ChapterNav } from "./components/nav/ChapterNav";
+import { OutlineWorkspace } from "./components/outline/OutlineWorkspace";
 import { useLayout3Splitters } from "./hooks/useLayout3Splitters";
 import { useLocalStorageState } from "./hooks/useLocalStorageState";
 import {
@@ -123,7 +124,7 @@ const CHARACTER_TAG_OPTIONS = ["盟友", "敌对", "家人", "同事", "组织",
 
 
 export function App() {
-  const [leftTab, setLeftTab] = useState<"chapters" | "global" | "progress" | "inspiration">("chapters");
+  const [leftTab, setLeftTab] = useState<"chapters" | "outline" | "global" | "progress" | "inspiration">("chapters");
   const [globalTab, setGlobalTab] = useState<GlobalTabId>("auditCharacters");
 
   useEffect(() => {
@@ -2621,6 +2622,16 @@ export function App() {
                       <button
                         type="button"
                         role="tab"
+                        className={`browserTab ${leftTab === "outline" ? "active" : ""}`}
+                        aria-selected={leftTab === "outline"}
+                        onClick={() => setLeftTab("outline")}
+                        disabled={busy}
+                      >
+                        大纲
+                      </button>
+                      <button
+                        type="button"
+                        role="tab"
                         className={`browserTab ${leftTab === "global" ? "active" : ""}`}
                         aria-selected={leftTab === "global"}
                         onClick={() => setLeftTab("global")}
@@ -2668,6 +2679,16 @@ export function App() {
                       onChapterTitleChange={setChapterTitle}
                       onOpenChapter={(c) => void onOpenChapter(c)}
                       onCreateChapter={() => void onCreateChapter()}
+                    />
+                  ) : leftTab === "outline" && activeBook ? (
+                    <OutlineWorkspace
+                      slug={activeBook}
+                      chapters={chapters}
+                      busy={busy}
+                      activeModelId={activeModelId}
+                      bookSynopsis={activeBookMeta?.synopsis}
+                      onOpenChapter={(c) => void onOpenChapter(c)}
+                      onStatus={setStatus}
                     />
                   ) : leftTab === "inspiration" ? (
                     <InspirationTab
