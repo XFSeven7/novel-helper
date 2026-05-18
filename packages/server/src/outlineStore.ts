@@ -105,10 +105,42 @@ function normalizeChapterPlan(raw: any): ChapterPlan {
   };
 }
 
+export function synthesizeVolumeSynopsis(
+  chapterFilenames: string[],
+  plans: Record<string, ChapterPlan>
+): string {
+  const cores = chapterFilenames
+    .map((f) => plans[f]?.core?.trim())
+    .filter((x): x is string => Boolean(x));
+  if (!cores.length) return "";
+  if (cores.length === 1) return cores[0]!;
+  const head = cores.slice(0, 2).join("\n\n");
+  if (cores.length <= 2) return head;
+  return `${head}\n\n（本卷共 ${cores.length} 章，由章纲核心归纳）`;
+}
+
+export function matchVolumeToCurrent(incoming: VolumeOutline, currents: VolumeOutline[]): VolumeOutline | null {
+  const exact = currents.find((v) => v.id === incoming.id);
+  if (exact) return exact;
+  const incomingSet = new Set(incoming.chapterFilenames || []);
+  let best: VolumeOutline | null = null;
+  let bestScore = 0;
+  for (const v of currents) {
+    const score = v.chapterFilenames.filter((f) => incomingSet.has(f)).length;
+    if (score > bestScore) {
+      bestScore = score;
+      best = v;
+    }
+  }
+  if (best) return best;
+  if (currents.length === 1) return currents[0]!;
+  return null;
+}
+
 function normalizeVolume(raw: any, fallbackOrder: number): VolumeOutline | null {
   const id = String(raw?.id || "").trim();
-  const title = String(raw?.title || "").trim();
-  if (!id || !title) return null;
+  const title = String(raw?.title || "").trim() || `第${fallbackOrder}卷`;
+  if (!id) return null;
   const chapterFilenames = Array.isArray(raw?.chapterFilenames)
     ? raw.chapterFilenames.map((x: any) => String(x || "").trim()).filter(Boolean)
     : [];
@@ -333,6 +365,98 @@ function mergeBookOutline(current: BookOutline, incoming: Partial<BookOutline>, 
   };
 }
 
+export type OutlineAiPreviewMode =
+  | "snowflake"
+  | "fromChapters"
+  | "refineChapterPlan"
+  | "volumeChapterPlans"
+  | "foreshadowAudit";
+
+/** 补全 AI 预览中的分卷与卷摘要，便于应用时写入 outline.json */
+export function enrichOutlineAiPreview(
+  current: OutlineIndex,
+  preview: Partial<OutlineIndex>,
+  mode: OutlineAiPreviewMode,
+  ctx?: { volumeId?: string }
+): Partial<OutlineIndex> {
+  const plans = preview.chapterPlans || {};
+  const hasPlans = Object.keys(plans).length > 0;
+  const next: Partial<OutlineIndex> = { ...preview };
+
+  if (mode === "volumeChapterPlans" && ctx?.volumeId) {
+    const vol = current.volumes.find((v) => v.id === ctx.volumeId);
+    if (vol && hasPlans) {
+      const synopsis = synthesizeVolumeSynopsis(vol.chapterFilenames, plans);
+      if (synopsis) {
+        next.volumes = [{ ...vol, synopsis: synopsis || vol.synopsis }];
+      }
+    }
+    return next;
+  }
+
+  if (mode !== "fromChapters" && mode !== "snowflake") return next;
+  if (!hasPlans && !preview.volumes?.length && !preview.book) return next;
+
+  const incomingVolumes = Array.isArray(preview.volumes) ? preview.volumes : [];
+
+  if (incomingVolumes.length) {
+    const mergedVolumes: VolumeOutline[] = [];
+    incomingVolumes.forEach((pv, i) => {
+      const raw = normalizeVolume(pv, i + 1);
+      if (!raw) return;
+      const matched = matchVolumeToCurrent(raw, current.volumes);
+      const id = matched?.id ?? raw.id;
+      const existing = current.volumes.find((v) => v.id === id) ?? matched;
+      const filenames =
+        raw.chapterFilenames.length > 0
+          ? raw.chapterFilenames
+          : existing?.chapterFilenames || raw.chapterFilenames;
+      const synopsis =
+        raw.synopsis?.trim() ||
+        synthesizeVolumeSynopsis(filenames, plans) ||
+        existing?.synopsis ||
+        "";
+      mergedVolumes.push({
+        id,
+        title: raw.title || existing?.title || `第${i + 1}卷`,
+        order: raw.order ?? existing?.order ?? i + 1,
+        synopsis: synopsis || undefined,
+        chapterFilenames: filenames
+      });
+    });
+    next.volumes = mergedVolumes;
+    return next;
+  }
+
+  if (hasPlans && current.volumes.length) {
+    next.volumes = current.volumes.map((v) => {
+      const filenames = v.chapterFilenames.length
+        ? v.chapterFilenames
+        : current.ungroupedFilenames.filter((f) => plans[f]);
+      const synopsis = synthesizeVolumeSynopsis(filenames, plans) || v.synopsis;
+      return { ...v, synopsis: synopsis || v.synopsis };
+    });
+    return next;
+  }
+
+  if (hasPlans) {
+    const filenames = Object.keys(plans).sort();
+    const existing = current.volumes[0];
+    next.volumes = [
+      {
+        id: existing?.id || "vol-main",
+        title: existing?.title || "正文",
+        order: 1,
+        synopsis: synthesizeVolumeSynopsis(filenames, plans),
+        chapterFilenames: filenames
+      }
+    ];
+    next.ungroupedFilenames = [];
+  }
+
+  return next;
+}
+
 export function mergeOutlinePreview(
   current: OutlineIndex,
   preview: Partial<OutlineIndex>,
@@ -358,19 +482,26 @@ export function mergeOutlinePreview(
         }
         return true;
       });
-      const existing = volumeById.get(vol.id);
+      const matched = matchVolumeToCurrent(vol, [...volumeById.values()]);
+      const targetId = matched?.id ?? vol.id;
+      const existing = volumeById.get(targetId);
+      const incomingSynopsis = vol.synopsis?.trim();
       if (existing) {
-        volumeById.set(vol.id, {
+        volumeById.set(targetId, {
           ...existing,
           title: overwrite ? vol.title : existing.title || vol.title,
           order: vol.order ?? existing.order,
-          synopsis: overwrite ? vol.synopsis ?? existing.synopsis : existing.synopsis || vol.synopsis,
+          synopsis: overwrite
+            ? incomingSynopsis || existing.synopsis
+            : existing.synopsis?.trim() || incomingSynopsis || existing.synopsis,
           chapterFilenames: overwrite
-            ? cleanFilenames
+            ? cleanFilenames.length
+              ? cleanFilenames
+              : existing.chapterFilenames
             : [...new Set([...existing.chapterFilenames, ...cleanFilenames])]
         });
       } else {
-        volumeById.set(vol.id, { ...vol, chapterFilenames: cleanFilenames });
+        volumeById.set(targetId, { ...vol, id: targetId, chapterFilenames: cleanFilenames });
       }
     }
   }

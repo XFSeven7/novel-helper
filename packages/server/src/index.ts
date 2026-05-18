@@ -92,6 +92,7 @@ import {
   writeOutlineIndex,
   validateOutlineAgainstChapters,
   mergeOutlinePreview,
+  enrichOutlineAiPreview,
   normalizeOutlineIndex,
   type OutlineIndex
 } from "./outlineStore.js";
@@ -2232,7 +2233,12 @@ app.post("/api/books/:slug/outline/ai/apply", async (req, reply) => {
       return reply.code(400).send({ message: "伏笔体检报告不可应用到大纲" });
     }
 
-    const { merged, warnings } = mergeOutlinePreview(current, body.preview as Partial<OutlineIndex>, {
+    let previewInput = body.preview as Partial<OutlineIndex>;
+    if (previewInput?.chapterPlans && !("report" in previewInput)) {
+      previewInput = enrichOutlineAiPreview(current, previewInput, "fromChapters");
+    }
+
+    const { merged, warnings } = mergeOutlinePreview(current, previewInput, {
       overwrite: Boolean(body.overwrite),
       validFilenames
     });

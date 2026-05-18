@@ -26,7 +26,11 @@ import {
   truncateForPrompt
 } from "./prompts/index.js";
 import type { OutlineIndex } from "./outlineStore.js";
-import { stripInvalidFilenamesFromPreview } from "./outlineStore.js";
+import {
+  enrichOutlineAiPreview,
+  stripInvalidFilenamesFromPreview,
+  type OutlineAiPreviewMode
+} from "./outlineStore.js";
 
 export type OutlineAiMode =
   | "snowflake"
@@ -254,5 +258,10 @@ export async function runOutlineAi(input: {
   const stripped = stripInvalidFilenamesFromPreview(preview, validFilenames);
   warnings.push(...stripped.warnings);
 
-  return { preview: stripped.preview, prompt, warnings };
+  let enriched = enrichOutlineAiPreview(outline, stripped.preview, mode as OutlineAiPreviewMode, {
+    volumeId: volumeId || undefined
+  });
+  enriched = stripInvalidFilenamesFromPreview(enriched, validFilenames).preview;
+
+  return { preview: enriched, prompt, warnings };
 }

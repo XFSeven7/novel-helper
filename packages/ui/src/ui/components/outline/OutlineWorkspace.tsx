@@ -34,6 +34,8 @@ export function OutlineWorkspace({
   const [aiModalOpen, setAiModalOpen] = useState(false);
   const [aiInstruction, setAiInstruction] = useState("");
   const [targetVolumes, setTargetVolumes] = useState(3);
+  const [lastAiMode, setLastAiMode] = useState<OutlineAiMode | null>(null);
+  const [snowflakeOpen, setSnowflakeOpen] = useState(false);
 
   const chapterByFilename = useMemo(() => new Map(chapters.map((c) => [c.filename, c])), [chapters]);
 
@@ -49,6 +51,7 @@ export function OutlineWorkspace({
   const disabled = busy || saving || aiBusy;
 
   const triggerAi = async (mode: OutlineAiMode, extra?: { volumeId?: string; chapterFilename?: string }) => {
+    setLastAiMode(mode);
     try {
       onStatus?.("AI 生成中…");
       const { preview, warnings } = await runAi({
@@ -131,6 +134,28 @@ export function OutlineWorkspace({
     }));
   };
 
+  const deleteVolume = (volumeId: string) => {
+    const vol = outline.volumes.find((v) => v.id === volumeId);
+    if (!vol) return;
+    const n = vol.chapterFilenames.length;
+    const msg =
+      n === 0
+        ? `删除卷「${vol.title}」？`
+        : `卷内 ${n} 章将移回「未分卷」，并删除卷「${vol.title}」。确定继续？`;
+    if (!window.confirm(msg)) return;
+    const moving = vol.chapterFilenames;
+    const remaining = outline.volumes.filter((v) => v.id !== volumeId);
+    updateOutline((prev) => {
+      const ungroupedSet = new Set([...prev.ungroupedFilenames, ...moving]);
+      return {
+        ...prev,
+        volumes: prev.volumes.filter((v) => v.id !== volumeId),
+        ungroupedFilenames: [...ungroupedSet]
+      };
+    });
+    setSelectedVolumeId((current) => (current === volumeId ? (remaining[0]?.id ?? null) : current));
+  };
+
   const plan = selectedChapterFilename ? outline.chapterPlans[selectedChapterFilename] : undefined;
 
   return (
@@ -160,12 +185,9 @@ export function OutlineWorkspace({
         <BookPanel
           outline={outline}
           bookSynopsis={bookSynopsis}
-          targetVolumes={targetVolumes}
           disabled={disabled}
-          onTargetVolumesChange={setTargetVolumes}
           onBookChange={(book) => updateOutline((prev) => ({ ...prev, book }))}
-          onSnowflake={() => void triggerAi("snowflake")}
-          onFromChapters={() => void triggerAi("fromChapters")}
+          onOpenSnowflake={() => setSnowflakeOpen(true)}
         />
       ) : null}
 
@@ -185,6 +207,7 @@ export function OutlineWorkspace({
           }
           onAssign={assignToVolume}
           onRemove={removeFromVolume}
+          onDeleteVolume={deleteVolume}
           onBatchPlans={(volumeId) => void triggerAi("volumeChapterPlans", { volumeId })}
         />
       ) : null}
@@ -192,8 +215,8 @@ export function OutlineWorkspace({
       {subTab === "chapters" ? (
         <ChaptersPanel
           outline={outline}
-          chapters={chapters}
           chapterByFilename={chapterByFilename}
+          chapterCount={chapters.length}
           selectedFilename={selectedChapterFilename}
           plan={plan}
           disabled={disabled}
@@ -203,14 +226,32 @@ export function OutlineWorkspace({
           onOpenChapter={onOpenChapter}
           onUpdatePlan={updateChapterPlan}
           onRefinePlan={(filename) => void triggerAi("refineChapterPlan", { chapterFilename: filename })}
+          onFromChapters={() => void triggerAi("fromChapters")}
         />
       ) : null}
       </div>
+
+      <SnowflakeDialog
+        open={snowflakeOpen}
+        busy={aiBusy}
+        disabled={disabled}
+        targetVolumes={targetVolumes}
+        logline={outline.book.logline || ""}
+        onTargetVolumesChange={setTargetVolumes}
+        onClose={() => setSnowflakeOpen(false)}
+        onGenerate={() => {
+          setSnowflakeOpen(false);
+          void triggerAi("snowflake");
+        }}
+      />
 
       <OutlineAiPreviewModal
         open={aiModalOpen}
         busy={aiBusy}
         preview={aiPreview}
+        chapters={chapters}
+        aiMode={lastAiMode}
+        chapterCount={chapters.length}
         warnings={aiWarnings}
         onClose={() => setAiModalOpen(false)}
         onApply={applyAi}
@@ -255,9 +296,7 @@ function OutlineAiMenu({
       }}
     >
       <option value="">AI ▾</option>
-      <option value="snowflake">雪花起步</option>
-      <option value="fromChapters">从章节反推</option>
-      <option value="foreshadowAudit">伏笔体检</option>
+      <option value="foreshadowAudit">伏笔体检报告</option>
     </select>
   );
 }
@@ -312,15 +351,11 @@ function OutlineSubTabs({ subTab, onChange }: { subTab: SubTab; onChange: (t: Su
 function BookPanel(props: {
   outline: OutlineIndex;
   bookSynopsis?: string;
-  targetVolumes: number;
   disabled: boolean;
-  onTargetVolumesChange: (n: number) => void;
   onBookChange: (book: OutlineIndex["book"]) => void;
-  onSnowflake: () => void;
-  onFromChapters: () => void;
+  onOpenSnowflake: () => void;
 }) {
-  const { outline, bookSynopsis, targetVolumes, disabled, onTargetVolumesChange, onBookChange, onSnowflake, onFromChapters } =
-    props;
+  const { outline, bookSynopsis, disabled, onBookChange, onOpenSnowflake } = props;
   const b = outline.book;
   const syn = b.synopsis || {};
   const setSyn = (key: keyof NonNullable<typeof b.synopsis>, val: string) => {
@@ -328,6 +363,7 @@ function BookPanel(props: {
   };
   return (
     <div className="outlineForm">
+      <p className="muted outlineHint">适合开书前或重做全书规划；已有章节正文请在「章纲」中整理。</p>
       {bookSynopsis ? (
         <p className="muted outlineHint">书籍简介（meta）仅作参考，与下方大纲字段独立。</p>
       ) : null}
@@ -339,23 +375,9 @@ function BookPanel(props: {
         onChange={(logline) => onBookChange({ ...b, logline })}
       />
       <div className="outlineRow">
-        <button type="button" className="btnSort" disabled={disabled} onClick={onSnowflake}>
-          雪花起步
+        <button type="button" className="btnSort" disabled={disabled} onClick={onOpenSnowflake}>
+          从梗概生成全书结构
         </button>
-        <button type="button" className="btnSort" disabled={disabled} onClick={onFromChapters}>
-          从章节反推
-        </button>
-        <label className="outlineInline">
-          分卷数
-          <input
-            type="number"
-            min={1}
-            max={20}
-            disabled={disabled}
-            value={targetVolumes}
-            onChange={(e) => onTargetVolumesChange(Number(e.target.value) || 3)}
-          />
-        </label>
       </div>
       {(
         [
@@ -390,6 +412,7 @@ function VolumesPanel(props: {
   onUpdateVolume: (vol: VolumeOutline) => void;
   onAssign: (volumeId: string, filename: string) => void;
   onRemove: (volumeId: string, filename: string) => void;
+  onDeleteVolume: (volumeId: string) => void;
   onBatchPlans: (volumeId: string) => void;
 }) {
   const {
@@ -402,6 +425,7 @@ function VolumesPanel(props: {
     onUpdateVolume,
     onAssign,
     onRemove,
+    onDeleteVolume,
     onBatchPlans
   } = props;
   const vol = selectedVolume;
@@ -442,9 +466,19 @@ function VolumesPanel(props: {
               value={vol.synopsis || ""}
               onChange={(synopsis) => onUpdateVolume({ ...vol, synopsis })}
             />
-            <button type="button" className="btnSort" disabled={disabled} onClick={() => onBatchPlans(vol.id)}>
-              AI 生成本卷章纲
-            </button>
+            <div className="outlineRow">
+              <button type="button" className="btnSort" disabled={disabled} onClick={() => onBatchPlans(vol.id)}>
+                AI 生成本卷章纲
+              </button>
+              <button
+                type="button"
+                className="btnDanger btnSort"
+                disabled={disabled}
+                onClick={() => onDeleteVolume(vol.id)}
+              >
+                删除本卷
+              </button>
+            </div>
             <p className="outlineLabel">卷内章节</p>
             <ul className="outlineChapterList">
               {vol.chapterFilenames.map((f) => {
@@ -483,8 +517,8 @@ function VolumesPanel(props: {
 
 function ChaptersPanel(props: {
   outline: OutlineIndex;
-  chapters: ChapterMeta[];
   chapterByFilename: Map<string, ChapterMeta>;
+  chapterCount: number;
   selectedFilename: string | null;
   plan: OutlineIndex["chapterPlans"][string] | undefined;
   disabled: boolean;
@@ -492,18 +526,20 @@ function ChaptersPanel(props: {
   onOpenChapter: (c: ChapterMeta) => void;
   onUpdatePlan: (filename: string, patch: Partial<OutlineIndex["chapterPlans"][string]>) => void;
   onRefinePlan: (filename: string) => void;
+  onFromChapters: () => void;
 }) {
   const {
     outline,
-    chapters,
     chapterByFilename,
+    chapterCount,
     selectedFilename,
     plan,
     disabled,
     onSelect,
     onOpenChapter,
     onUpdatePlan,
-    onRefinePlan
+    onRefinePlan,
+    onFromChapters
   } = props;
 
   const treeChapters = (filenames: string[]) =>
@@ -526,7 +562,16 @@ function ChaptersPanel(props: {
   const ch = filename ? chapterByFilename.get(filename) : null;
 
   return (
-    <div className="outlineSplit">
+    <div className="outlineChaptersLayout">
+      <div className="outlineChaptersAi">
+        <button type="button" className="btnSort" disabled={disabled || chapterCount === 0} onClick={onFromChapters}>
+          从已有章节归纳章纲
+        </button>
+        <p className="muted outlineHint">
+          读取各章标题 + 正文前 800 字，以及书籍简介、时间线、伏笔索引（非全书审计记忆）。
+        </p>
+      </div>
+      <div className="outlineSplit">
       <ChapterTree outline={outline} treeChapters={treeChapters} />
       <div className="outlineSplitRight">
         {filename && ch ? (
@@ -545,11 +590,12 @@ function ChaptersPanel(props: {
               onChange={(core) => onUpdatePlan(filename, { core })}
             />
             <label className="outlineLabel">场景</label>
-            <input
-              className="outlineInput"
+            <OutlineTextarea
+              rows={3}
               disabled={disabled}
+              placeholder="场景 / 地点，可多行"
               value={plan?.scenes || ""}
-              onChange={(e) => onUpdatePlan(filename, { scenes: e.target.value })}
+              onChange={(scenes) => onUpdatePlan(filename, { scenes })}
             />
             <label className="outlineLabel">情节要点（每行一条）</label>
             <OutlineTextarea
@@ -576,6 +622,89 @@ function ChaptersPanel(props: {
         ) : (
           <p className="muted">选择章节编辑章纲</p>
         )}
+      </div>
+      </div>
+    </div>
+  );
+}
+
+function SnowflakeDialog({
+  open,
+  busy,
+  disabled,
+  targetVolumes,
+  logline,
+  onTargetVolumesChange,
+  onClose,
+  onGenerate
+}: {
+  open: boolean;
+  busy: boolean;
+  disabled: boolean;
+  targetVolumes: number;
+  logline: string;
+  onTargetVolumesChange: (n: number) => void;
+  onClose: () => void;
+  onGenerate: () => void;
+}) {
+  const [showHelp, setShowHelp] = useState(false);
+  if (!open) return null;
+
+  return (
+    <div className="modalBackdrop" role="presentation" onClick={onClose}>
+      <div
+        className="modalPanel modalPanelOpaque outlineSnowflakeModal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="snowflake-dialog-title"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modalHeaderRow">
+          <h2 id="snowflake-dialog-title" className="modalHeading">
+            从梗概生成全书结构
+          </h2>
+          <button type="button" className="btnModalSecondary" onClick={onClose} aria-label="关闭">
+            关闭
+          </button>
+        </div>
+        <div className="modalBodyScroll">
+          <p className="muted outlineHint">
+            根据一句话梗概生成五段梗概与分卷草案；不会创建新的章节文件。
+          </p>
+          {!logline.trim() ? (
+            <p className="outlineSnowflakeWarn">建议先在大纲中填写「一句话梗概」，生成结果会更贴切。</p>
+          ) : null}
+          <label className="outlineLabel">建议分卷数</label>
+          <input
+            type="number"
+            className="outlineInput"
+            min={1}
+            max={20}
+            disabled={disabled || busy}
+            value={targetVolumes}
+            onChange={(e) => onTargetVolumesChange(Math.min(20, Math.max(1, Number(e.target.value) || 3)))}
+          />
+          <button
+            type="button"
+            className="btnSort outlineSnowflakeHelpToggle"
+            onClick={() => setShowHelp((v) => !v)}
+          >
+            {showHelp ? "收起说明" : "什么是雪花写作法？"}
+          </button>
+          {showHelp ? (
+            <p className="muted outlineHint">
+              雪花写作法：从一句核心梗概逐步扩展为段落、人物与分卷结构。此处仅生成全书级草案，细节请在分卷与章纲中继续完善。
+            </p>
+          ) : null}
+        </div>
+        <div className="modalActions">
+          <button type="button" className="btnModalSecondary" disabled={busy} onClick={onClose}>
+            取消
+          </button>
+          <button type="button" className="btnModalPrimary" disabled={disabled || busy} onClick={onGenerate}>
+            {busy ? "生成中…" : "生成预览"}
+          </button>
+        </div>
       </div>
     </div>
   );

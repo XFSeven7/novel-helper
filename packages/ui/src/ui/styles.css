@@ -4540,9 +4540,164 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis) {
   margin: 0;
 }
 
+.outlineAiModalBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.outlineAiPreviewVisual {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.outlineAiPreviewSection {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.outlineAiPreviewHeading {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.outlineAiPreviewBlock {
+  margin: 0;
+}
+
+.outlineAiPreviewLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.outlineAiPreviewText {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.outlineAiPreviewMeta {
+  font-size: 11px;
+  margin: 0;
+}
+
+.outlineAiVolumeCard,
+.outlineAiChapterCard {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  background: color-mix(in srgb, var(--panel2, var(--panel)) 55%, transparent);
+}
+
+.outlineAiVolumeCardHead,
+.outlineAiChapterCardHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.outlineAiVolumeSynopsis {
+  margin-bottom: 8px;
+}
+
+.outlineAiVolumeMeta {
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.outlineAiVolumeChapters {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.outlineAiVolumeChapters li {
+  padding: 2px 0;
+}
+
+.outlineAiChapterCards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: min(42vh, 360px);
+  overflow-y: auto;
+}
+
+.outlineAiBeatsList {
+  margin: 0;
+  padding-left: 1.2em;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.outlineAiBeatsList li {
+  margin: 4px 0;
+}
+
+.outlineAiPreviewEmpty {
+  font-size: 11px;
+  margin: 0 0 6px;
+  font-style: italic;
+}
+
+.outlineAiRawToggle {
+  align-self: flex-start;
+  font-size: 11px;
+}
+
 .outlineHint {
   font-size: 11px;
   margin-bottom: 8px;
+}
+
+.outlineChaptersLayout {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.outlineChaptersAi {
+  flex-shrink: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+.outlineChaptersAi .outlineHint {
+  margin: 6px 0 0;
+}
+
+.outlineAiContextSummary {
+  font-size: 12px;
+  margin: 0 0 10px;
+  line-height: 1.45;
+}
+
+.outlineSnowflakeModal {
+  width: min(420px, calc(100vw - 32px));
+}
+
+.outlineSnowflakeWarn {
+  font-size: 12px;
+  margin: 8px 0;
+  color: color-mix(in srgb, var(--warning, #fbbf24) 85%, var(--text));
+}
+
+.outlineSnowflakeHelpToggle {
+  margin-top: 10px;
 }
 
 .status {

@@ -1199,6 +1199,7 @@ export function buildOutlineFromChaptersPrompt(input: {
     "- 严格输出 JSON（不要解释、不要 markdown、不要代码块）。",
     `- chapterFilenames 与 chapterPlans 的 key 只能来自以下列表，禁止虚构：${JSON.stringify(allowed)}`,
     "- 每章必须最多归属一个分卷；未归属的放入 ungroupedFilenames。",
+    "- volumes 中每一卷必须填写 synopsis（卷摘要：主要情节、冲突、成长、伏笔与卷末状态），不可留空。",
     "- beats 每条一句话，3-5 条为宜。",
     "",
     input.instruction ? `作者补充: ${input.instruction}` : "",
