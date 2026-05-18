@@ -210,8 +210,11 @@ export async function pickAppDataDirectory() {
   );
 }
 
-export async function openAppDataDirectory() {
-  return await http<{ ok: true }>(`/api/settings/app/open-directory`, { method: "POST" });
+export async function openAppDataDirectory(dirPath?: string) {
+  return await http<{ ok: true }>(`/api/settings/app/open-directory`, {
+    method: "POST",
+    body: JSON.stringify(dirPath?.trim() ? { path: dirPath.trim() } : {})
+  });
 }
 
 export async function auditChapter(slug: string, filename: string, modelConfigId: string | null) {

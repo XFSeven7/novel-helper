@@ -71,9 +71,10 @@ export function SettingsDataDirPanel(props: {
   }, []);
 
   async function onOpenDirectory() {
+    if (!info) return;
     setOpening(true);
     try {
-      await openAppDataDirectory();
+      await openAppDataDirectory(info.effectiveDataDir);
       showFeedback("已在文件管理器中打开。", "ok");
     } catch (e: unknown) {
       showFeedback(formatApiError(e), "err");

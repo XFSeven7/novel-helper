@@ -1954,9 +1954,11 @@ app.post("/api/settings/app/pick-directory", async (req, reply) => {
   }
 });
 
-app.post("/api/settings/app/open-directory", async (_req, reply) => {
+app.post("/api/settings/app/open-directory", async (req, reply) => {
+  const body = z.object({ path: z.string().optional() }).parse((req as any).body ?? {});
+  const target = body.path?.trim() ? body.path.trim() : getDataDir();
   try {
-    await openPathInFileManager(getDataDir());
+    await openPathInFileManager(target);
     return { ok: true };
   } catch (e: any) {
     return reply.code(500).send({ error: e?.message || String(e) });
