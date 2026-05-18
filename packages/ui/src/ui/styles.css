@@ -222,12 +222,10 @@ code {
   word-break: break-all;
 }
 
-.settingsDataDirSource {
-  font-size: 11px;
-  padding: 2px 8px;
-  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
-  border-radius: 6px;
-  color: var(--muted);
+.settingsDataDirOpenBtn.btnSort {
+  flex-shrink: 0;
+  font-size: 12px;
+  padding: 4px 10px;
 }
 
 .settingsDataDirContent {

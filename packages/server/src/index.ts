@@ -70,6 +70,7 @@ import {
   type AppSettingsResponse
 } from "./appConfig.js";
 import { pickDataDirectory } from "./nativeFolderPicker.js";
+import { openPathInFileManager } from "./openPathInFileManager.js";
 import {
   clearDataDirCaches,
   getDataDir,
@@ -1948,6 +1949,15 @@ app.post("/api/settings/app/pick-directory", async (req, reply) => {
     if (result.cancelled) return { cancelled: true };
     const normalized = await validateAndNormalizeDataDir(result.path);
     return { cancelled: false, path: normalized };
+  } catch (e: any) {
+    return reply.code(500).send({ error: e?.message || String(e) });
+  }
+});
+
+app.post("/api/settings/app/open-directory", async (_req, reply) => {
+  try {
+    await openPathInFileManager(getDataDir());
+    return { ok: true };
   } catch (e: any) {
     return reply.code(500).send({ error: e?.message || String(e) });
   }

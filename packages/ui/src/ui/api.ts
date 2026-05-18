@@ -210,6 +210,10 @@ export async function pickAppDataDirectory() {
   );
 }
 
+export async function openAppDataDirectory() {
+  return await http<{ ok: true }>(`/api/settings/app/open-directory`, { method: "POST" });
+}
+
 export async function auditChapter(slug: string, filename: string, modelConfigId: string | null) {
   return await http<{ run: any }>(`/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}/audit`, {
     method: "POST",

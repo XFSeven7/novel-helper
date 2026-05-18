@@ -1,14 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
-import { getAppSettings, pickAppDataDirectory, putAppSettings, type AppSettings } from "../../api";
+import { getAppSettings, openAppDataDirectory, pickAppDataDirectory, putAppSettings, type AppSettings } from "../../api";
 import { DataDirMigrateModal } from "./DataDirMigrateModal";
 
 const FEEDBACK_MS = 3200;
-
-const SOURCE_LABEL: Record<AppSettings["source"], string> = {
-  env: "环境变量",
-  file: "设置文件",
-  default: "默认"
-};
 
 function normalizePath(p: string) {
   const t = p.trim();
@@ -22,6 +16,7 @@ export function SettingsDataDirPanel(props: {
   const { busy, onDataDirChanged } = props;
   const [loading, setLoading] = useState(true);
   const [picking, setPicking] = useState(false);
+  const [opening, setOpening] = useState(false);
   const [saving, setSaving] = useState(false);
   const [info, setInfo] = useState<AppSettings | null>(null);
   const [draft, setDraft] = useState("");
@@ -61,6 +56,17 @@ export function SettingsDataDirPanel(props: {
       cancelled = true;
     };
   }, []);
+
+  async function onOpenDirectory() {
+    setOpening(true);
+    try {
+      await openAppDataDirectory();
+    } catch (e: unknown) {
+      showFeedback(e instanceof Error ? e.message : String(e), "err");
+    } finally {
+      setOpening(false);
+    }
+  }
 
   async function onPickDirectory() {
     if (!info || info.envLocked) return;
@@ -111,7 +117,7 @@ export function SettingsDataDirPanel(props: {
   if (loading) return <div className="muted auditPanelEmpty">加载中…</div>;
   if (!info) return null;
 
-  const locked = busy || info.envLocked || picking || saving;
+  const locked = busy || info.envLocked || picking || saving || opening;
 
   return (
     <>
@@ -121,7 +127,15 @@ export function SettingsDataDirPanel(props: {
           <div className="settingsDataDirRow">
             <span className="muted">当前地址</span>
             <code className="settingsDataDirPath">{info.effectiveDataDir}</code>
-            <span className="settingsDataDirSource">{SOURCE_LABEL[info.source]}</span>
+            <button
+              type="button"
+              className="btnSort settingsDataDirOpenBtn"
+              disabled={locked}
+              onClick={() => void onOpenDirectory()}
+              title="在文件管理器中打开当前数据目录"
+            >
+              {opening ? "打开中…" : "打开文件夹"}
+            </button>
           </div>
           <div className="modelField">
             <div className="navSubtitle">书籍保存地址</div>
