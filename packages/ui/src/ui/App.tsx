@@ -465,11 +465,15 @@ export function App() {
   const chapterWordCount = useMemo(() => approximateWordCount(chapterContent || ""), [chapterContent]);
 
   const currentChapterDraftOutOfSync = useMemo(() => {
-    if (!selectedChapter) return true;
-    const latest = latestHistoryHashByChapter[selectedChapter.filename] ?? null;
-    if (!currentChapterEditorHash) return true;
+    if (!selectedChapter) return false;
+    const fn = selectedChapter.filename;
+    const latestKnown = Object.prototype.hasOwnProperty.call(latestHistoryHashByChapter, fn);
+    const latest = latestHistoryHashByChapter[fn];
+    if (!latestKnown || !currentChapterEditorHash) {
+      return chaptersDraftOutOfSync.has(fn);
+    }
     return isDraftOutOfSync(latest, currentChapterEditorHash);
-  }, [selectedChapter, latestHistoryHashByChapter, currentChapterEditorHash]);
+  }, [selectedChapter, latestHistoryHashByChapter, currentChapterEditorHash, chaptersDraftOutOfSync]);
 
   const bookTotalWordCount = useMemo(() => {
     const list = Array.isArray(chapters) ? chapters : [];
@@ -816,14 +820,27 @@ export function App() {
     const slug = activeBookRef.current;
     const sel = selectedChapterRef.current;
     const fn = sel?.bookSlug === slug ? sel.filename : null;
+    const latestMap = latestHistoryHashByChapterRef.current;
+    const latestHistoryHash =
+      fn && Object.prototype.hasOwnProperty.call(latestMap, fn) ? latestMap[fn] : undefined;
     setChaptersDraftOutOfSync(
       mergeDraftOutOfSyncSet(
         serverDraftOutOfSyncRef.current,
         fn,
         fn ? currentChapterEditorHashRef.current : null,
-        fn ? latestHistoryHashByChapterRef.current[fn] ?? null : null
+        latestHistoryHash
       )
     );
+  }, []);
+
+  const prefetchChapterLatestHistoryHash = useCallback(async (slug: string, filename: string) => {
+    try {
+      const { latestContentHash } = await listChapterVersions(slug, filename);
+      setLatestHistoryHashByChapter((prev) => ({ ...prev, [filename]: latestContentHash }));
+      return latestContentHash;
+    } catch {
+      return null;
+    }
   }, []);
 
   const refreshChapterDraftStatus = useCallback(
@@ -1308,6 +1325,11 @@ export function App() {
   }, [activeBook]);
 
   useEffect(() => {
+    setCurrentChapterEditorHash(null);
+    currentChapterEditorHashRef.current = null;
+  }, [selectedChapter?.filename, activeBook]);
+
+  useEffect(() => {
     if (!activeBook || !selectedChapter) return;
     let cancelled = false;
     void (async () => {
@@ -1547,10 +1569,14 @@ export function App() {
       await refreshTimelineIndex(bookSlug).catch(() => {});
       await refreshBooks();
 
+      setCurrentChapterEditorHash(null);
+      currentChapterEditorHashRef.current = null;
       setSelectedChapter({ bookSlug, filename: chapter.filename });
       const { content } = await readChapter(bookSlug, chapter.filename);
       setChapterContent(content);
       chapterBaselineRef.current = content;
+      await prefetchChapterLatestHistoryHash(bookSlug, chapter.filename);
+      applyChapterDraftOutOfSyncMerge();
       setChapterTitleEditing(false);
 
       // 新建章节后:刷新右侧内容整理数据源
@@ -1656,10 +1682,14 @@ export function App() {
       setChapterVersions([]);
       setSelectedHistoryVersionId(null);
       setVersionContentCache({});
+      setCurrentChapterEditorHash(null);
+      currentChapterEditorHashRef.current = null;
       setSelectedChapter({ bookSlug: activeBook, filename: c.filename });
       const { content } = await readChapter(activeBook, c.filename);
       setChapterContent(content);
       chapterBaselineRef.current = content;
+      await prefetchChapterLatestHistoryHash(activeBook, c.filename);
+      applyChapterDraftOutOfSyncMerge();
       queueMicrotask(() => scrollChapterToTop());
       void loadAuditArtifacts(activeBook, c.filename);
       void loadGlobalArtifacts(activeBook);
