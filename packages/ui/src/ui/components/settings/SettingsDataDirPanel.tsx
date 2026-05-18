@@ -72,11 +72,19 @@ export function SettingsDataDirPanel(props: {
 
   async function onOpenDirectory() {
     if (!info) return;
+    const dir = info.effectiveDataDir;
+    console.log("[novel-helper:open-data-dir] UI click 打开文件夹", {
+      effectiveDataDir: dir,
+      source: info.source,
+      fileDataDir: info.fileDataDir
+    });
     setOpening(true);
     try {
-      await openAppDataDirectory(info.effectiveDataDir);
+      await openAppDataDirectory(dir);
+      console.log("[novel-helper:open-data-dir] UI success toast");
       showFeedback("已在文件管理器中打开。", "ok");
     } catch (e: unknown) {
+      console.error("[novel-helper:open-data-dir] UI error", e);
       showFeedback(formatApiError(e), "err");
     } finally {
       setOpening(false);

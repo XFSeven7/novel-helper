@@ -211,10 +211,15 @@ export async function pickAppDataDirectory() {
 }
 
 export async function openAppDataDirectory(dirPath?: string) {
-  return await http<{ ok: true }>(`/api/settings/app/open-directory`, {
+  const path = dirPath?.trim() || "";
+  const body = path ? { path } : {};
+  console.log("[novel-helper:open-data-dir] fetch POST /api/settings/app/open-directory", body);
+  const result = await http<{ ok: true }>(`/api/settings/app/open-directory`, {
     method: "POST",
-    body: JSON.stringify(dirPath?.trim() ? { path: dirPath.trim() } : {})
+    body: JSON.stringify(body)
   });
+  console.log("[novel-helper:open-data-dir] fetch response", result);
+  return result;
 }
 
 export async function auditChapter(slug: string, filename: string, modelConfigId: string | null) {

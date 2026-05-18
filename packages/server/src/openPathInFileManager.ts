@@ -6,6 +6,16 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
+const LOG = "[novel-helper:open-data-dir]";
+
+function log(...args: unknown[]) {
+  console.log(LOG, ...args);
+}
+
+function logError(...args: unknown[]) {
+  console.error(LOG, ...args);
+}
+
 export function normalizeTargetPath(targetPath: string) {
   return targetPath.trim().replace(/[\r\n\u0000]+/g, "");
 }
@@ -55,42 +65,59 @@ function windowsCmdExe(): string {
 
 /** 用 Windows「开始」关联打开文件夹（不要用 start explorer.exe，否则可能只启动空窗口） */
 async function openViaCmdStart(winPath: string): Promise<void> {
-  await execFileAsync(windowsCmdExe(), ["/d", "/c", "start", "", winPath], { windowsHide: true });
+  const cmd = windowsCmdExe();
+  const args = ["/d", "/c", "start", "", winPath];
+  log("try cmd-start", { cmd, args });
+  await execFileAsync(cmd, args, { windowsHide: true });
+  log("cmd-start finished (no throw)");
 }
 
 async function openViaPowerShell(winPath: string): Promise<void> {
   const psPath = escapePowerShellSingleQuoted(winPath);
-  await execFileAsync(
-    windowsPowerShellExe(),
-    [
-      "-NoProfile",
-      "-STA",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-Command",
-      `Invoke-Item -LiteralPath '${psPath}'`
-    ],
-    { windowsHide: true, timeout: 30_000 }
-  );
+  const exe = windowsPowerShellExe();
+  const args = [
+    "-NoProfile",
+    "-STA",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-Command",
+    `Invoke-Item -LiteralPath '${psPath}'`
+  ];
+  log("try powershell Invoke-Item", { exe, winPath, psPath });
+  await execFileAsync(exe, args, { windowsHide: true, timeout: 30_000 });
+  log("powershell finished (no throw)");
 }
 
 async function openViaExplorerExe(winPath: string): Promise<void> {
+  log("try explorer.exe", { winPath });
   try {
     await execFileAsync("explorer.exe", [winPath], { windowsHide: true });
+    log("explorer.exe finished (no throw)");
   } catch (e) {
-    if (isBenignWindowsOpenError(e)) return;
+    if (isBenignWindowsOpenError(e)) {
+      log("explorer.exe benign error (treated as ok)", e);
+      return;
+    }
     throw e;
   }
 }
 
 async function openWindowsFolder(winPath: string): Promise<void> {
+  const methods: Array<{ name: string; fn: (p: string) => Promise<void> }> = [
+    { name: "cmd-start", fn: openViaCmdStart },
+    { name: "powershell", fn: openViaPowerShell },
+    { name: "explorer.exe", fn: openViaExplorerExe }
+  ];
   const errors: string[] = [];
-  for (const fn of [openViaCmdStart, openViaPowerShell, openViaExplorerExe]) {
+  for (const { name, fn } of methods) {
     try {
       await fn(winPath);
+      log("SUCCESS via", name, { winPath });
       return;
     } catch (e: any) {
-      errors.push(e?.message || String(e));
+      const msg = e?.message || String(e);
+      errors.push(`${name}: ${msg}`);
+      logError("FAILED", name, { message: msg, code: e?.code, stderr: e?.stderr });
     }
   }
   throw new Error(
@@ -99,27 +126,51 @@ async function openWindowsFolder(winPath: string): Promise<void> {
 }
 
 export async function openPathInFileManager(targetPath: string): Promise<void> {
-  const resolved = path.resolve(normalizeTargetPath(targetPath));
+  const normalized = normalizeTargetPath(targetPath);
+  const resolved = path.resolve(normalized);
+  const wsl = isWslEnvironment();
+
+  log("begin", {
+    platform: process.platform,
+    wsl,
+    cwd: process.cwd(),
+    input: targetPath,
+    normalized,
+    resolved,
+    getDataDirHint: process.env.NOVEL_HELPER_DATA_DIR || "(env not set)"
+  });
+
   try {
     const st = await fsp.stat(resolved);
+    log("stat ok", { isDirectory: st.isDirectory(), mode: st.mode });
     if (!st.isDirectory()) throw new Error("路径不是文件夹。");
   } catch (e: any) {
-    if (e?.code === "ENOENT") throw new Error("文件夹不存在。");
+    if (e?.code === "ENOENT") {
+      logError("stat ENOENT", resolved);
+      throw new Error("文件夹不存在。");
+    }
+    logError("stat error", e);
     throw e;
   }
 
   if (process.platform === "darwin") {
+    log("darwin open", resolved);
     await execFileAsync("open", [resolved]);
+    log("SUCCESS darwin open");
     return;
   }
 
-  if (process.platform === "win32" || isWslEnvironment()) {
-    await openWindowsFolder(toWindowsPath(resolved));
+  if (process.platform === "win32" || wsl) {
+    const winPath = toWindowsPath(resolved);
+    log("windows branch", { winPath, from: resolved });
+    await openWindowsFolder(winPath);
     return;
   }
 
   if (process.platform === "linux") {
+    log("linux xdg-open", resolved);
     await execFileAsync("xdg-open", [resolved]);
+    log("SUCCESS xdg-open");
     return;
   }
 

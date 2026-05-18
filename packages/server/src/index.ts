@@ -1956,11 +1956,19 @@ app.post("/api/settings/app/pick-directory", async (req, reply) => {
 
 app.post("/api/settings/app/open-directory", async (req, reply) => {
   const body = z.object({ path: z.string().optional() }).parse((req as any).body ?? {});
-  const target = body.path?.trim() ? body.path.trim() : getDataDir();
+  const fromBody = body.path?.trim() || null;
+  const target = fromBody ?? getDataDir();
+  console.log("[novel-helper:open-data-dir] API request", {
+    fromBody,
+    getDataDir: getDataDir(),
+    target
+  });
   try {
     await openPathInFileManager(target);
+    console.log("[novel-helper:open-data-dir] API response ok");
     return { ok: true };
   } catch (e: any) {
+    console.error("[novel-helper:open-data-dir] API response error", e?.message || e);
     return reply.code(500).send({ error: e?.message || String(e) });
   }
 });
