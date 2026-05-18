@@ -185,3 +185,11 @@
   --scrollbar-thumb-hover: rgba(22, 163, 74, 0.35);
   --scrollbar-corner: var(--scrollbar-track);
 }
+
+/* 表单控件：由各主题 --border / --accent / --panel2 派生，切换主题时线框与底色同步变化 */
+html[data-theme] {
+  --input-border: color-mix(in srgb, var(--border) 72%, var(--accent) 28%);
+  --input-bg: color-mix(in srgb, var(--panel2) 86%, var(--bg));
+  --input-border-focus: color-mix(in srgb, var(--accent) 58%, var(--border));
+  --input-focus-ring: color-mix(in srgb, var(--accent) 26%, transparent);
+}

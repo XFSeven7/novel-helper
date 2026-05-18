@@ -1079,24 +1079,40 @@ code {
 
 .modalInput {
   width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  border-radius: 0;
+  border: 1px solid var(--input-border, var(--border));
+  background: var(--input-bg, var(--panel2, var(--panel)));
+  color: var(--text);
+  outline: none;
+  font-family: inherit;
 }
 
 .modalTextarea {
   width: 100%;
   resize: vertical;
   min-height: 96px;
-  padding: 10px;
+  padding: 8px 10px;
   font-size: 13px;
   line-height: 1.5;
   border-radius: 0;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--input-border, var(--border));
+  background: var(--input-bg, var(--panel2, var(--panel)));
   color: var(--text);
   outline: none;
-  font-family: ui-serif, "PingFang SC", "Noto Serif SC", serif;
+  font-family: inherit;
 }
 
-/* 编辑弹窗：输入控件统一直角 */
+.modalInput:focus,
+.modalTextarea:focus {
+  border-color: var(--input-border-focus, var(--accent));
+  box-shadow: 0 0 0 2px var(--input-focus-ring, color-mix(in srgb, var(--accent) 22%, transparent));
+}
+
+/* 弹窗内输入控件统一直角（边框见文件后部 modalPanel 表单规则） */
 .modalPanel input.modalInput,
 .modalPanel textarea.modalTextarea {
   border-radius: 0 !important;
@@ -3844,6 +3860,60 @@ code {
   max-height: min(92vh, 860px);
 }
 
+/* 编辑角色：内容区随高度展开，不用弹窗内滚动条 */
+.modalBackdropEditChar {
+  align-items: flex-start;
+  padding-top: 28px;
+  padding-bottom: 28px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.modalBackdropEditChar::-webkit-scrollbar {
+  display: none;
+}
+
+.modalPanelEditChar {
+  width: min(860px, 96vw);
+  max-height: none;
+  overflow: visible;
+  margin: auto;
+}
+
+.modalPanelEditChar textarea.modalTextarea,
+.modalPanelEditChar .modalTextareaAuto {
+  resize: none;
+  overflow: hidden;
+  field-sizing: content;
+  min-height: 2.75em;
+}
+
+.modalPanelEditChar .toggle {
+  padding: 4px 0;
+}
+
+.modalPanelEditChar .editCharMergeList {
+  border: 1px solid var(--input-border, var(--border));
+  border-radius: 6px;
+  overflow: visible;
+}
+
+.modalPanelEditChar .editCharMergeList label.row {
+  margin: 0;
+  padding: 8px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.modalPanelEditChar .editCharMergeList label.row:last-child {
+  border-bottom: none;
+}
+
+.modalPanelEditChar .editCharMergeList input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+}
+
 [data-theme="midnight"] .modalPanelOpaque,
 [data-theme="forest"] .modalPanelOpaque,
 [data-theme="ocean"] .modalPanelOpaque,
@@ -4101,19 +4171,19 @@ code {
   margin-bottom: 10px;
 }
 
-input {
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]) {
   width: 100%;
   padding: 10px 10px;
   border-radius: 0;
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--input-border, var(--border));
+  background: var(--input-bg, var(--panel2, var(--panel)));
   color: var(--text);
   outline: none;
 }
 
-input:focus {
-  border-color: rgba(139, 92, 246, 0.55);
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.18);
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):focus {
+  border-color: var(--input-border-focus, var(--accent));
+  box-shadow: 0 0 0 2px var(--input-focus-ring, color-mix(in srgb, var(--accent) 22%, transparent));
 }
 
 button {
@@ -4322,7 +4392,8 @@ button:disabled {
   border-color: rgba(139, 92, 246, 0.38);
 }
 
-textarea:not(.mobileTextarea):not(.bookOverviewSynopsis) {
+/* 章节编辑器正文区：无边框；弹窗/大纲表单 textarea 排除在外 */
+textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not(.outlineTextarea) {
   flex: 1;
   width: 100%;
   resize: none;
@@ -4335,6 +4406,21 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis) {
   background: transparent;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
     monospace;
+}
+
+/* 弹窗表单控件：须在章节编辑器 textarea 规则之后，避免 border 被覆盖 */
+.modalPanel input.modalInput,
+.modalPanel textarea.modalTextarea {
+  box-sizing: border-box;
+  border: 1px solid var(--input-border, var(--border)) !important;
+  background: var(--input-bg, var(--panel2, var(--panel))) !important;
+  outline: none;
+}
+
+.modalPanel input.modalInput:focus,
+.modalPanel textarea.modalTextarea:focus {
+  border-color: var(--input-border-focus, var(--accent)) !important;
+  box-shadow: 0 0 0 2px var(--input-focus-ring, color-mix(in srgb, var(--accent) 22%, transparent));
 }
 
 /* 大纲：左侧栏内单一滚动，输入框随内容增高、无框内滚动条 */
@@ -4399,6 +4485,16 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis) {
   font-size: 12px;
 }
 
+.modalPanel select,
+.outlineAiSelect {
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, var(--text) 12%);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel2, var(--panel)) 70%, transparent);
+  color: var(--text);
+}
+
 .outlineInstruction {
   display: block;
   margin: 6px 0 4px;
@@ -4455,9 +4551,9 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis) {
   box-sizing: border-box;
   flex: none;
   padding: 6px 8px;
-  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border: 1px solid var(--input-border, var(--border));
   border-radius: 6px;
-  background: color-mix(in srgb, var(--panel2, var(--panel)) 70%, transparent);
+  background: var(--input-bg, var(--panel2, var(--panel)));
   color: var(--text);
   font-family: inherit;
   font-size: 12px;
@@ -4474,9 +4570,9 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis) {
   min-height: 2.75em;
   overflow: hidden;
   resize: none;
-  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border: 1px solid var(--input-border, var(--border));
   border-radius: 6px;
-  background: color-mix(in srgb, var(--panel2, var(--panel)) 70%, transparent);
+  background: var(--input-bg, var(--panel2, var(--panel)));
   color: var(--text);
   font-family: inherit;
   font-size: 12px;

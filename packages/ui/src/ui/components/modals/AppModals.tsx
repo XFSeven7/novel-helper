@@ -1410,14 +1410,14 @@ export function AppModals(props: AppModalsProps) {
 
 {editCharOpen ? (
   <div
-    className="modalBackdrop"
+    className="modalBackdrop modalBackdropEditChar"
     role="presentation"
     onClick={() => {
       if (!busy) setEditCharOpen(false);
     }}
   >
     <div
-      className="modalPanel modalPanelOpaque modalPanelLarge"
+      className="modalPanel modalPanelOpaque modalPanelLarge modalPanelEditChar"
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-edit-char-heading"
@@ -1554,7 +1554,7 @@ export function AppModals(props: AppModalsProps) {
                 ) : (
                   <>
                     <label className="modalLabel">选择要合并进来的角色(可多选)</label>
-                    <div style={{ maxHeight: 220, overflow: "auto", border: "1px solid var(--border)", borderRadius: 8 }}>
+                    <div className="editCharMergeList">
                       {options.map((name) => (
                         <label
                           key={name}
@@ -1630,7 +1630,7 @@ export function AppModals(props: AppModalsProps) {
                       <div className="modalField" style={{ marginTop: 10 }}>
                         <label className="modalLabel">合并后草稿预览(JSON)</label>
                         <textarea
-                          className="modalTextarea"
+                          className="modalTextarea modalTextareaAuto"
                           value={mergeFromEditDraftText}
                           onChange={(e) => setMergeFromEditDraftText(e.target.value)}
                           disabled={busy || mergeFromEditDraftBusy}
@@ -1664,7 +1664,7 @@ export function AppModals(props: AppModalsProps) {
         </label>
         <input
           id="modal-edit-char-role"
-          className="modalInput"
+          className="modalInput modalInputFramed"
           value={editCharRole}
           onChange={(e) => setEditCharRole(e.target.value)}
           placeholder="如:主角/配角/反派..."
@@ -1684,26 +1684,28 @@ export function AppModals(props: AppModalsProps) {
           />
           锁定(后续审计不自动改)
         </label>
-        <input
+        <textarea
           id="modal-edit-char-tags"
-          className="modalInput"
+          className="modalTextarea modalTextareaAuto"
           value={editCharTags}
           onChange={(e) => setEditCharTags(e.target.value)}
           placeholder="盟友, 敌对, 神秘..."
           disabled={busy}
+          rows={2}
         />
       </div>
       <div className="modalField">
         <label className="modalLabel" htmlFor="modal-edit-char-personality">
           性格分析
         </label>
-        <input
+        <textarea
           id="modal-edit-char-personality"
-          className="modalInput"
+          className="modalTextarea modalTextareaAuto"
           value={editCharPersonality}
           onChange={(e) => setEditCharPersonality(e.target.value)}
           placeholder="性格、动机、弱点、行为模式..."
           disabled={busy}
+          rows={2}
         />
       </div>
 
@@ -1722,7 +1724,7 @@ export function AppModals(props: AppModalsProps) {
         </label>
         <input
           id="modal-edit-char-social-prof"
-          className="modalInput"
+          className="modalInput modalInputFramed"
           value={editCharSocialProfession}
           onChange={(e) => setEditCharSocialProfession(e.target.value)}
           placeholder="如:老兵/捕快/商人..."
@@ -1735,7 +1737,7 @@ export function AppModals(props: AppModalsProps) {
         </label>
         <input
           id="modal-edit-char-social-class"
-          className="modalInput"
+          className="modalInput modalInputFramed"
           value={editCharSocialClass}
           onChange={(e) => setEditCharSocialClass(e.target.value)}
           placeholder="如:贵族/平民/宗门内门..."
@@ -1834,7 +1836,7 @@ export function AppModals(props: AppModalsProps) {
         </label>
         <input
           id="modal-edit-char-want"
-          className="modalInput"
+          className="modalInput modalInputFramed"
           value={editCharWant}
           onChange={(e) => setEditCharWant(e.target.value)}
           placeholder="如:复仇/变强/赚一千万..."
@@ -1847,7 +1849,7 @@ export function AppModals(props: AppModalsProps) {
         </label>
         <input
           id="modal-edit-char-need"
-          className="modalInput"
+          className="modalInput modalInputFramed"
           value={editCharNeed}
           onChange={(e) => setEditCharNeed(e.target.value)}
           placeholder="如:学会信任/面对恐惧..."
@@ -1860,7 +1862,7 @@ export function AppModals(props: AppModalsProps) {
         </label>
         <input
           id="modal-edit-char-moral"
-          className="modalInput"
+          className="modalInput modalInputFramed"
           value={editCharMoralCompass}
           onChange={(e) => setEditCharMoralCompass(e.target.value)}
           placeholder="如:利己/集体主义/底线..."

@@ -97,6 +97,7 @@ import {
   type OutlineIndex
 } from "./outlineStore.js";
 import { runOutlineAi, type OutlineAiMode } from "./outlineAi.js";
+import { mergeOccurredNotes } from "./characterOccurredNotes.js";
 import {
   truncateForPrompt,
   buildInspirationPrompt,
@@ -1292,7 +1293,7 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
           "";
         if (txt) extracted.push(txt);
       }
-      if (extracted.length) merged.occurredNotes = mergeStrArr(prev?.occurredNotes, extracted);
+      if (extracted.length) merged.occurredNotes = mergeOccurredNotes(prev?.occurredNotes, extracted);
     }
 
     // 叙事驱动力
@@ -2907,7 +2908,8 @@ app.post("/api/books/:slug/audit/characters/update", async (req, reply) => {
               : null)
           }
         : prev.relationalHooks,
-    occurredNotes: body.occurredNotes !== undefined ? mergeStrArr(prev.occurredNotes, body.occurredNotes) : prev.occurredNotes,
+    occurredNotes:
+      body.occurredNotes !== undefined ? mergeOccurredNotes(prev.occurredNotes, body.occurredNotes) : prev.occurredNotes,
     personalityAnalysis:
       body.personalityAnalysis !== undefined ? body.personalityAnalysis : prev.personalityAnalysis,
     updatedAt: now
@@ -3019,7 +3021,7 @@ app.post("/api/books/:slug/audit/characters/merge", async (req, reply) => {
       state: mergeObjNonEmpty(primary.state, secondary.state),
       socialTags: mergeObjNonEmpty(primary.socialTags, secondary.socialTags),
       historicalDebts: mergeStrArr(primary.historicalDebts, secondary.historicalDebts),
-      occurredNotes: mergeStrArr(primary.occurredNotes, secondary.occurredNotes),
+      occurredNotes: mergeOccurredNotes(primary.occurredNotes, secondary.occurredNotes),
       narrativeDrives: mergeObjNonEmpty(primary.narrativeDrives, secondary.narrativeDrives),
       fingerprints: (() => {
         const out: any = mergeObjNonEmpty(primary.fingerprints, secondary.fingerprints);
