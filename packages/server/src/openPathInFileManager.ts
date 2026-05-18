@@ -1,12 +1,30 @@
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
+function normalizeTargetPath(targetPath: string) {
+  return targetPath.trim().replace(/[\r\n\u0000]+/g, "");
+}
+
+/** Windows 的 explorer 常以退出码 1 结束，即使用户已成功打开文件夹 */
+function openWindowsFolder(resolved: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn("explorer.exe", [resolved], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true
+    });
+    child.once("error", reject);
+    child.unref();
+    resolve();
+  });
+}
+
 export async function openPathInFileManager(targetPath: string): Promise<void> {
-  const resolved = path.resolve(targetPath);
+  const resolved = path.resolve(normalizeTargetPath(targetPath));
   try {
     const st = await fsp.stat(resolved);
     if (!st.isDirectory()) throw new Error("路径不是文件夹。");
@@ -21,7 +39,7 @@ export async function openPathInFileManager(targetPath: string): Promise<void> {
     return;
   }
   if (platform === "win32") {
-    await execFileAsync("explorer", [resolved], { windowsHide: true });
+    await openWindowsFolder(resolved);
     return;
   }
   if (platform === "linux") {

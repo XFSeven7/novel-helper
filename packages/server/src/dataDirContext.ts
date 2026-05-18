@@ -7,7 +7,7 @@ export function getDataDir(): string {
 }
 
 export function setDataDir(next: string) {
-  activeDataDir = path.resolve(next);
+  activeDataDir = path.resolve(next.trim().replace(/[\r\n\u0000]+/g, ""));
 }
 
 export function initDataDir(initial: string) {
