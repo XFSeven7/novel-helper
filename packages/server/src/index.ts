@@ -1964,9 +1964,9 @@ app.post("/api/settings/app/open-directory", async (req, reply) => {
     target
   });
   try {
-    await openPathInFileManager(target);
-    console.log("[novel-helper:open-data-dir] API response ok");
-    return { ok: true };
+    const result = await openPathInFileManager(target);
+    console.log("[novel-helper:open-data-dir] API response ok", result);
+    return result;
   } catch (e: any) {
     console.error("[novel-helper:open-data-dir] API response error", e?.message || e);
     return reply.code(500).send({ error: e?.message || String(e) });

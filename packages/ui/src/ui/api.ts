@@ -210,11 +210,20 @@ export async function pickAppDataDirectory() {
   );
 }
 
+export type OpenAppDataDirectoryResult = {
+  ok: true;
+  platform: string;
+  wsl: boolean;
+  resolved: string;
+  winPath?: string;
+  method: string;
+};
+
 export async function openAppDataDirectory(dirPath?: string) {
-  const path = dirPath?.trim() || "";
-  const body = path ? { path } : {};
+  const pathArg = dirPath?.trim() || "";
+  const body = pathArg ? { path: pathArg } : {};
   console.log("[novel-helper:open-data-dir] fetch POST /api/settings/app/open-directory", body);
-  const result = await http<{ ok: true }>(`/api/settings/app/open-directory`, {
+  const result = await http<OpenAppDataDirectoryResult>(`/api/settings/app/open-directory`, {
     method: "POST",
     body: JSON.stringify(body)
   });

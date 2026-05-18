@@ -80,9 +80,10 @@ export function SettingsDataDirPanel(props: {
     });
     setOpening(true);
     try {
-      await openAppDataDirectory(dir);
-      console.log("[novel-helper:open-data-dir] UI success toast");
-      showFeedback("已在文件管理器中打开。", "ok");
+      const result = await openAppDataDirectory(dir);
+      console.log("[novel-helper:open-data-dir] UI open result", result);
+      const via = result.method ? `（${result.method}）` : "";
+      showFeedback(`已在文件管理器中打开${via}。若仍无窗口，请看运行 server 的终端日志。`, "ok");
     } catch (e: unknown) {
       console.error("[novel-helper:open-data-dir] UI error", e);
       showFeedback(formatApiError(e), "err");

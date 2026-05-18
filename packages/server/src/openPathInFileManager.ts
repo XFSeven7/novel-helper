@@ -16,6 +16,15 @@ function logError(...args: unknown[]) {
   console.error(LOG, ...args);
 }
 
+export type OpenPathResult = {
+  ok: true;
+  platform: NodeJS.Platform;
+  wsl: boolean;
+  resolved: string;
+  winPath?: string;
+  method: string;
+};
+
 export function normalizeTargetPath(targetPath: string) {
   return targetPath.trim().replace(/[\r\n\u0000]+/g, "");
 }
@@ -30,7 +39,6 @@ export function isWslEnvironment() {
   }
 }
 
-/** 将 /mnt/e/foo 或已有的 E:\foo 转为 Windows 路径 */
 export function toWindowsPath(p: string): string {
   const trimmed = normalizeTargetPath(p);
   if (/^[a-zA-Z]:[\\/]/.test(trimmed)) return path.win32.normalize(trimmed);
@@ -38,20 +46,6 @@ export function toWindowsPath(p: string): string {
   const m = abs.match(/^\/mnt\/([a-zA-Z])\/(.*)$/);
   if (m) return path.win32.normalize(`${m[1].toUpperCase()}:\\${m[2].replace(/\//g, "\\")}`);
   return path.win32.normalize(trimmed);
-}
-
-function windowsPowerShellExe() {
-  const root = process.env.SystemRoot || "C:\\Windows";
-  return path.join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-}
-
-function escapePowerShellSingleQuoted(s: string) {
-  return s.replace(/'/g, "''");
-}
-
-function isBenignWindowsOpenError(e: unknown) {
-  const msg = String((e as any)?.message || e);
-  return /exit code|command failed|explorer/i.test(msg);
 }
 
 function windowsCmdExe(): string {
@@ -63,69 +57,36 @@ function windowsCmdExe(): string {
   return "cmd.exe";
 }
 
-/** 用 Windows「开始」关联打开文件夹（不要用 start explorer.exe，否则可能只启动空窗口） */
-async function openViaCmdStart(winPath: string): Promise<void> {
+function isBenignExplorerExit(e: unknown) {
+  const msg = String((e as any)?.message || e);
+  return /exit code|command failed|explorer/i.test(msg);
+}
+
+/**
+ * 与用户在 CMD 中执行 `explorer "E:\path"` 等价：cmd /c explorer <path>
+ */
+async function openWindowsFolderViaCmdExplorer(winPath: string): Promise<void> {
   const cmd = windowsCmdExe();
-  const args = ["/d", "/c", "start", "", winPath];
-  log("try cmd-start", { cmd, args });
-  await execFileAsync(cmd, args, { windowsHide: true });
-  log("cmd-start finished (no throw)");
-}
-
-async function openViaPowerShell(winPath: string): Promise<void> {
-  const psPath = escapePowerShellSingleQuoted(winPath);
-  const exe = windowsPowerShellExe();
-  const args = [
-    "-NoProfile",
-    "-STA",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-Command",
-    `Invoke-Item -LiteralPath '${psPath}'`
-  ];
-  log("try powershell Invoke-Item", { exe, winPath, psPath });
-  await execFileAsync(exe, args, { windowsHide: true, timeout: 30_000 });
-  log("powershell finished (no throw)");
-}
-
-async function openViaExplorerExe(winPath: string): Promise<void> {
-  log("try explorer.exe", { winPath });
+  const args = ["/d", "/c", "explorer", winPath];
+  log("cmd /c explorer", { cmd, args });
   try {
-    await execFileAsync("explorer.exe", [winPath], { windowsHide: true });
-    log("explorer.exe finished (no throw)");
+    await execFileAsync(cmd, args, { windowsHide: false });
+    log("cmd /c explorer finished (exit 0)");
   } catch (e) {
-    if (isBenignWindowsOpenError(e)) {
-      log("explorer.exe benign error (treated as ok)", e);
+    if (isBenignExplorerExit(e)) {
+      log("cmd /c explorer benign exit (treated as ok)", e);
       return;
     }
     throw e;
   }
 }
 
-async function openWindowsFolder(winPath: string): Promise<void> {
-  const methods: Array<{ name: string; fn: (p: string) => Promise<void> }> = [
-    { name: "cmd-start", fn: openViaCmdStart },
-    { name: "powershell", fn: openViaPowerShell },
-    { name: "explorer.exe", fn: openViaExplorerExe }
-  ];
-  const errors: string[] = [];
-  for (const { name, fn } of methods) {
-    try {
-      await fn(winPath);
-      log("SUCCESS via", name, { winPath });
-      return;
-    } catch (e: any) {
-      const msg = e?.message || String(e);
-      errors.push(`${name}: ${msg}`);
-      logError("FAILED", name, { message: msg, code: e?.code, stderr: e?.stderr });
-    }
-  }
-  throw new Error(
-    `无法在文件管理器中打开文件夹。${errors.length ? ` ${errors[errors.length - 1]}` : ""}`
-  );
+async function openWindowsFolder(winPath: string): Promise<string> {
+  await openWindowsFolderViaCmdExplorer(winPath);
+  return "cmd-explorer";
 }
 
-export async function openPathInFileManager(targetPath: string): Promise<void> {
+export async function openPathInFileManager(targetPath: string): Promise<OpenPathResult> {
   const normalized = normalizeTargetPath(targetPath);
   const resolved = path.resolve(normalized);
   const wsl = isWslEnvironment();
@@ -136,42 +97,32 @@ export async function openPathInFileManager(targetPath: string): Promise<void> {
     cwd: process.cwd(),
     input: targetPath,
     normalized,
-    resolved,
-    getDataDirHint: process.env.NOVEL_HELPER_DATA_DIR || "(env not set)"
+    resolved
   });
 
   try {
     const st = await fsp.stat(resolved);
-    log("stat ok", { isDirectory: st.isDirectory(), mode: st.mode });
     if (!st.isDirectory()) throw new Error("路径不是文件夹。");
   } catch (e: any) {
-    if (e?.code === "ENOENT") {
-      logError("stat ENOENT", resolved);
-      throw new Error("文件夹不存在。");
-    }
-    logError("stat error", e);
+    if (e?.code === "ENOENT") throw new Error("文件夹不存在。");
     throw e;
   }
 
   if (process.platform === "darwin") {
-    log("darwin open", resolved);
     await execFileAsync("open", [resolved]);
-    log("SUCCESS darwin open");
-    return;
+    return { ok: true, platform: process.platform, wsl, resolved, method: "open" };
   }
 
   if (process.platform === "win32" || wsl) {
     const winPath = toWindowsPath(resolved);
-    log("windows branch", { winPath, from: resolved });
-    await openWindowsFolder(winPath);
-    return;
+    log("windows branch", { winPath });
+    const method = await openWindowsFolder(winPath);
+    return { ok: true, platform: process.platform, wsl, resolved, winPath, method };
   }
 
   if (process.platform === "linux") {
-    log("linux xdg-open", resolved);
     await execFileAsync("xdg-open", [resolved]);
-    log("SUCCESS xdg-open");
-    return;
+    return { ok: true, platform: process.platform, wsl, resolved, method: "xdg-open" };
   }
 
   throw new Error(`当前系统 (${process.platform}) 暂不支持在文件管理器中打开文件夹。`);
