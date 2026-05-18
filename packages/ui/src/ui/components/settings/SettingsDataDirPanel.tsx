@@ -9,6 +9,19 @@ function normalizePath(p: string) {
   return t.replace(/\/+$/, "") || t;
 }
 
+function formatApiError(e: unknown): string {
+  if (!(e instanceof Error)) return String(e);
+  const text = e.message.trim();
+  if (!text) return "请求失败";
+  try {
+    const parsed = JSON.parse(text) as { error?: string };
+    if (typeof parsed.error === "string" && parsed.error.trim()) return parsed.error.trim();
+  } catch {
+    // not JSON
+  }
+  return text;
+}
+
 export function SettingsDataDirPanel(props: {
   busy: boolean;
   onDataDirChanged: () => void | Promise<void>;
@@ -61,8 +74,9 @@ export function SettingsDataDirPanel(props: {
     setOpening(true);
     try {
       await openAppDataDirectory();
+      showFeedback("已在文件管理器中打开。", "ok");
     } catch (e: unknown) {
-      showFeedback(e instanceof Error ? e.message : String(e), "err");
+      showFeedback(formatApiError(e), "err");
     } finally {
       setOpening(false);
     }

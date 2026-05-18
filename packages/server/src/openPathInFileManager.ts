@@ -9,18 +9,67 @@ function normalizeTargetPath(targetPath: string) {
   return targetPath.trim().replace(/[\r\n\u0000]+/g, "");
 }
 
-/** Windows 的 explorer 常以退出码 1 结束，即使用户已成功打开文件夹 */
-function openWindowsFolder(resolved: string): Promise<void> {
+function windowsPowerShellExe() {
+  const root = process.env.SystemRoot || "C:\\Windows";
+  return path.join(root, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+}
+
+function escapePowerShellSingleQuoted(s: string) {
+  return s.replace(/'/g, "''");
+}
+
+function launchDetached(file: string, args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn("explorer.exe", [resolved], {
+    const child = spawn(file, args, {
       detached: true,
       stdio: "ignore",
       windowsHide: true
     });
     child.once("error", reject);
-    child.unref();
-    resolve();
+    child.once("spawn", () => {
+      child.unref();
+      resolve();
+    });
   });
+}
+
+async function openWindowsFolder(resolved: string): Promise<void> {
+  const winPath = path.win32.normalize(resolved);
+  const psPath = escapePowerShellSingleQuoted(winPath);
+  const errors: string[] = [];
+
+  try {
+    await launchDetached(windowsPowerShellExe(), [
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-Command",
+      `Invoke-Item -LiteralPath '${psPath}'`
+    ]);
+    return;
+  } catch (e: any) {
+    errors.push(e?.message || String(e));
+  }
+
+  try {
+    const comSpec = process.env.ComSpec || "cmd.exe";
+    await launchDetached(comSpec, ["/d", "/c", "start", "", "explorer.exe", winPath]);
+    return;
+  } catch (e: any) {
+    errors.push(e?.message || String(e));
+  }
+
+  try {
+    await launchDetached("explorer.exe", [winPath]);
+    return;
+  } catch (e: any) {
+    errors.push(e?.message || String(e));
+  }
+
+  throw new Error(
+    `无法在文件管理器中打开文件夹。${errors.length ? ` ${errors[errors.length - 1]}` : ""}`
+  );
 }
 
 export async function openPathInFileManager(targetPath: string): Promise<void> {
