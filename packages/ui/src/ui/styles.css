@@ -267,10 +267,12 @@ code {
   right: 0;
   z-index: 200;
   min-width: 168px;
+  max-height: min(400px, 70vh);
   padding: 4px;
   border: 1px solid var(--border);
-  background: var(--panel);
+  background: var(--popover);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  overflow-y: auto;
 }
 
 .themePickerOption {
@@ -289,7 +291,7 @@ code {
 
 .themePickerOption:hover,
 .themePickerOption.is-current {
-  background: var(--panel2);
+  background: var(--popover-hover);
 }
 
 .themePickerSwatch {
@@ -3844,11 +3846,15 @@ code {
 
 [data-theme="midnight"] .modalPanelOpaque,
 [data-theme="forest"] .modalPanelOpaque,
-[data-theme="ocean"] .modalPanelOpaque {
+[data-theme="ocean"] .modalPanelOpaque,
+[data-theme="sunset"] .modalPanelOpaque,
+[data-theme="charcoal"] .modalPanelOpaque {
   background: color-mix(in srgb, var(--bg) 86%, #ffffff 14%);
 }
 
-[data-theme="paper"] .modalPanelOpaque {
+[data-theme="paper"] .modalPanelOpaque,
+[data-theme="sepia"] .modalPanelOpaque,
+[data-theme="meadow"] .modalPanelOpaque {
   background: color-mix(in srgb, var(--bg) 94%, #000000 6%);
 }
 

@@ -15,6 +15,8 @@
   --warning: #f5c542;
   --danger: #f87171;
   --info: #8b5cf6;
+  --popover: #141b2e;
+  --popover-hover: #1a2340;
   --mobile-stage-bg: color-mix(in srgb, var(--bg) 94%, var(--accent) 6%);
   --scrollbar-size: 10px;
   --scrollbar-track: color-mix(in srgb, var(--bg) 92%, transparent);
@@ -37,6 +39,8 @@
   --warning: #fbbf24;
   --danger: #f87171;
   --info: #34d399;
+  --popover: #0f1a14;
+  --popover-hover: #15251c;
   --mobile-stage-bg: color-mix(in srgb, var(--bg) 94%, var(--accent) 6%);
   --scrollbar-track: color-mix(in srgb, var(--bg) 92%, transparent);
   --scrollbar-thumb: color-mix(in srgb, var(--border) 65%, transparent);
@@ -58,6 +62,54 @@
   --warning: #fbbf24;
   --danger: #fb7185;
   --info: #38bdf8;
+  --popover: #0d1826;
+  --popover-hover: #122030;
+  --mobile-stage-bg: color-mix(in srgb, var(--bg) 94%, var(--accent) 6%);
+  --scrollbar-track: color-mix(in srgb, var(--bg) 92%, transparent);
+  --scrollbar-thumb: color-mix(in srgb, var(--border) 65%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--accent) 35%, var(--scrollbar-thumb));
+  --scrollbar-corner: var(--scrollbar-track);
+}
+
+[data-theme="sunset"] {
+  color-scheme: dark;
+  --bg: #1a100c;
+  --panel: rgba(255, 255, 255, 0.06);
+  --panel2: rgba(255, 255, 255, 0.09);
+  --text: rgba(255, 255, 255, 0.92);
+  --muted: rgba(255, 255, 255, 0.62);
+  --border: rgba(255, 255, 255, 0.11);
+  --accent: #fb923c;
+  --topbar-bg: rgba(255, 255, 255, 0.06);
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --danger: #fb7185;
+  --info: #fb923c;
+  --popover: #241610;
+  --popover-hover: #2e1c14;
+  --mobile-stage-bg: color-mix(in srgb, var(--bg) 94%, var(--accent) 6%);
+  --scrollbar-track: color-mix(in srgb, var(--bg) 92%, transparent);
+  --scrollbar-thumb: color-mix(in srgb, var(--border) 65%, transparent);
+  --scrollbar-thumb-hover: color-mix(in srgb, var(--accent) 35%, var(--scrollbar-thumb));
+  --scrollbar-corner: var(--scrollbar-track);
+}
+
+[data-theme="charcoal"] {
+  color-scheme: dark;
+  --bg: #16161a;
+  --panel: rgba(255, 255, 255, 0.06);
+  --panel2: rgba(255, 255, 255, 0.09);
+  --text: rgba(255, 255, 255, 0.92);
+  --muted: rgba(255, 255, 255, 0.62);
+  --border: rgba(255, 255, 255, 0.11);
+  --accent: #94a3b8;
+  --topbar-bg: rgba(255, 255, 255, 0.06);
+  --success: #22c55e;
+  --warning: #fbbf24;
+  --danger: #f87171;
+  --info: #94a3b8;
+  --popover: #1e1e24;
+  --popover-hover: #26262e;
   --mobile-stage-bg: color-mix(in srgb, var(--bg) 94%, var(--accent) 6%);
   --scrollbar-track: color-mix(in srgb, var(--bg) 92%, transparent);
   --scrollbar-thumb: color-mix(in srgb, var(--border) 65%, transparent);
@@ -79,9 +131,57 @@
   --warning: #d97706;
   --danger: #dc2626;
   --info: #7c3aed;
+  --popover: #fffdf8;
+  --popover-hover: #f3ede3;
   --mobile-stage-bg: color-mix(in srgb, var(--bg) 94%, var(--accent) 6%);
   --scrollbar-track: color-mix(in srgb, var(--bg) 94%, transparent);
   --scrollbar-thumb: rgba(17, 24, 39, 0.22);
   --scrollbar-thumb-hover: rgba(124, 58, 237, 0.35);
+  --scrollbar-corner: var(--scrollbar-track);
+}
+
+[data-theme="sepia"] {
+  color-scheme: light;
+  --bg: #ebe4d5;
+  --panel: rgba(68, 48, 32, 0.05);
+  --panel2: rgba(68, 48, 32, 0.08);
+  --text: rgba(52, 38, 26, 0.92);
+  --muted: rgba(52, 38, 26, 0.58);
+  --border: rgba(52, 38, 26, 0.14);
+  --accent: #b45309;
+  --topbar-bg: rgba(68, 48, 32, 0.06);
+  --success: #15803d;
+  --warning: #ca8a04;
+  --danger: #dc2626;
+  --info: #b45309;
+  --popover: #f5efe4;
+  --popover-hover: #ebe3d4;
+  --mobile-stage-bg: color-mix(in srgb, var(--bg) 94%, var(--accent) 6%);
+  --scrollbar-track: color-mix(in srgb, var(--bg) 94%, transparent);
+  --scrollbar-thumb: rgba(52, 38, 26, 0.22);
+  --scrollbar-thumb-hover: rgba(180, 83, 9, 0.35);
+  --scrollbar-corner: var(--scrollbar-track);
+}
+
+[data-theme="meadow"] {
+  color-scheme: light;
+  --bg: #eef6ee;
+  --panel: rgba(20, 60, 32, 0.05);
+  --panel2: rgba(20, 60, 32, 0.08);
+  --text: rgba(17, 40, 24, 0.92);
+  --muted: rgba(17, 40, 24, 0.56);
+  --border: rgba(17, 40, 24, 0.12);
+  --accent: #16a34a;
+  --topbar-bg: rgba(20, 60, 32, 0.06);
+  --success: #16a34a;
+  --warning: #ca8a04;
+  --danger: #dc2626;
+  --info: #16a34a;
+  --popover: #f7fcf7;
+  --popover-hover: #e8f3e8;
+  --mobile-stage-bg: color-mix(in srgb, var(--bg) 94%, var(--accent) 6%);
+  --scrollbar-track: color-mix(in srgb, var(--bg) 94%, transparent);
+  --scrollbar-thumb: rgba(17, 40, 24, 0.2);
+  --scrollbar-thumb-hover: rgba(22, 163, 74, 0.35);
   --scrollbar-corner: var(--scrollbar-track);
 }

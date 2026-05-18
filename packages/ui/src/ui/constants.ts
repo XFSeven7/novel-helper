@@ -15,7 +15,15 @@ export const MOBILE_PRESETS: Array<{ id: MobilePresetId; label: string; w: numbe
   { id: "ipad-mini", label: "iPad mini (768×1024)", w: 768, h: 1024 }
 ];
 
-export type ThemeId = "midnight" | "forest" | "ocean" | "paper";
+export type ThemeId =
+  | "midnight"
+  | "forest"
+  | "ocean"
+  | "sunset"
+  | "charcoal"
+  | "paper"
+  | "sepia"
+  | "meadow";
 
 export type ThemePresetMeta = {
   id: ThemeId;
@@ -28,7 +36,11 @@ export const THEME_PRESETS: ThemePresetMeta[] = [
   { id: "midnight", label: "暗夜紫", previewBg: "#0b1020", previewAccent: "#8b5cf6" },
   { id: "forest", label: "墨林", previewBg: "#0a1410", previewAccent: "#34d399" },
   { id: "ocean", label: "海蓝", previewBg: "#081420", previewAccent: "#38bdf8" },
-  { id: "paper", label: "宣纸", previewBg: "#f6f2ea", previewAccent: "#7c3aed" }
+  { id: "sunset", label: "暮色", previewBg: "#1a100c", previewAccent: "#fb923c" },
+  { id: "charcoal", label: "石墨", previewBg: "#16161a", previewAccent: "#94a3b8" },
+  { id: "paper", label: "宣纸", previewBg: "#f6f2ea", previewAccent: "#7c3aed" },
+  { id: "sepia", label: "赭茶", previewBg: "#ebe4d5", previewAccent: "#b45309" },
+  { id: "meadow", label: "草野", previewBg: "#eef6ee", previewAccent: "#16a34a" }
 ];
 
 /** @deprecated 使用 ThemeId */

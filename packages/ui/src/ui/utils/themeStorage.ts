@@ -1,6 +1,6 @@
-import { THEME_STORAGE_KEY, type ThemeId } from "../constants";
+import { THEME_PRESETS, THEME_STORAGE_KEY, type ThemeId } from "../constants";
 
-const THEME_IDS: ThemeId[] = ["midnight", "forest", "ocean", "paper"];
+const THEME_IDS: ThemeId[] = THEME_PRESETS.map((p) => p.id);
 
 export function isThemeId(v: string): v is ThemeId {
   return (THEME_IDS as string[]).includes(v);
@@ -19,9 +19,12 @@ export function migrateLegacyTheme(raw: string | null): ThemeId {
   if (raw === "light") return "paper";
   if (raw === "dark" || raw === "default" || raw === "midnight") return "midnight";
   if (raw === "forest" || raw === "loam") return "forest";
-  if (raw === "ocean" || raw === "sunset") return "ocean";
-  if (raw === "paper" || raw === "sepia" || raw === "village" || raw === "meadow" || raw === "clay")
-    return "paper";
+  if (raw === "ocean") return "ocean";
+  if (raw === "sunset") return "sunset";
+  if (raw === "charcoal") return "charcoal";
+  if (raw === "paper") return "paper";
+  if (raw === "sepia" || raw === "clay" || raw === "village") return "sepia";
+  if (raw === "meadow") return "meadow";
   if (raw === "system" || !raw) return resolveSystemToPreset();
   return "midnight";
 }

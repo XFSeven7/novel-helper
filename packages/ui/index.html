@@ -7,7 +7,16 @@
     <script>
       (function () {
         var KEY = "novel-helper-theme";
-        var IDS = { midnight: 1, forest: 1, ocean: 1, paper: 1 };
+        var IDS = {
+          midnight: 1,
+          forest: 1,
+          ocean: 1,
+          sunset: 1,
+          charcoal: 1,
+          paper: 1,
+          sepia: 1,
+          meadow: 1
+        };
         function system() {
           try {
             return window.matchMedia("(prefers-color-scheme: light)").matches ? "paper" : "midnight";
@@ -20,9 +29,12 @@
           if (raw === "light") return "paper";
           if (raw === "dark" || raw === "default" || raw === "midnight") return "midnight";
           if (raw === "forest" || raw === "loam") return "forest";
-          if (raw === "ocean" || raw === "sunset") return "ocean";
-          if (raw === "paper" || raw === "sepia" || raw === "village" || raw === "meadow" || raw === "clay")
-            return "paper";
+          if (raw === "ocean") return "ocean";
+          if (raw === "sunset") return "sunset";
+          if (raw === "charcoal") return "charcoal";
+          if (raw === "paper") return "paper";
+          if (raw === "sepia" || raw === "clay" || raw === "village") return "sepia";
+          if (raw === "meadow") return "meadow";
           return system();
         }
         var theme = "midnight";
