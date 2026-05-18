@@ -1,92 +1,4 @@
-/* 首帧无类名时与「黑夜」一致；由 App 挂载时为 html 添加 theme-* */
-:root {
-  color-scheme: dark;
-  --bg: #0b1020;
-  --panel: rgba(255, 255, 255, 0.06);
-  --panel2: rgba(255, 255, 255, 0.09);
-  --text: rgba(255, 255, 255, 0.92);
-  --muted: rgba(255, 255, 255, 0.65);
-  --border: rgba(255, 255, 255, 0.12);
-  --accent: #8b5cf6;
-  --topbar-bg: rgba(255, 255, 255, 0.06);
-  --mobile-stage-bg: color-mix(in srgb, var(--bg) 94%, var(--accent) 6%);
-  --scrollbar-size: 10px;
-  --scrollbar-track: color-mix(in srgb, var(--bg) 92%, transparent);
-  --scrollbar-thumb: color-mix(in srgb, var(--border) 65%, transparent);
-  --scrollbar-thumb-hover: color-mix(in srgb, var(--accent) 35%, var(--scrollbar-thumb));
-  --scrollbar-corner: var(--scrollbar-track);
-}
-
-:root.theme-dark {
-  color-scheme: dark;
-  --bg: #0b1020;
-  --panel: rgba(255, 255, 255, 0.06);
-  --panel2: rgba(255, 255, 255, 0.09);
-  --text: rgba(255, 255, 255, 0.92);
-  --muted: rgba(255, 255, 255, 0.65);
-  --border: rgba(255, 255, 255, 0.12);
-  --accent: #8b5cf6;
-  --topbar-bg: rgba(255, 255, 255, 0.06);
-  --mobile-stage-bg: color-mix(in srgb, var(--bg) 94%, var(--accent) 6%);
-  --scrollbar-track: color-mix(in srgb, var(--bg) 92%, transparent);
-  --scrollbar-thumb: color-mix(in srgb, var(--border) 65%, transparent);
-  --scrollbar-thumb-hover: color-mix(in srgb, var(--accent) 35%, var(--scrollbar-thumb));
-  --scrollbar-corner: var(--scrollbar-track);
-}
-
-:root.theme-light {
-  color-scheme: light;
-  --bg: #f6f2ea;
-  --panel: rgba(17, 24, 39, 0.04);
-  --panel2: rgba(17, 24, 39, 0.06);
-  --text: rgba(17, 24, 39, 0.92);
-  --muted: rgba(17, 24, 39, 0.58);
-  --border: rgba(17, 24, 39, 0.12);
-  --accent: #7c3aed;
-  --topbar-bg: rgba(17, 24, 39, 0.05);
-  --mobile-stage-bg: color-mix(in srgb, var(--bg) 94%, var(--accent) 6%);
-  --scrollbar-track: color-mix(in srgb, var(--bg) 94%, transparent);
-  --scrollbar-thumb: rgba(17, 24, 39, 0.22);
-  --scrollbar-thumb-hover: rgba(124, 58, 237, 0.35);
-  --scrollbar-corner: var(--scrollbar-track);
-}
-
-/* 跟随系统：默认浅色，仅在 prefers-color-scheme: dark 时切深色 */
-:root.theme-system {
-  color-scheme: light;
-  --bg: #f6f2ea;
-  --panel: rgba(17, 24, 39, 0.04);
-  --panel2: rgba(17, 24, 39, 0.06);
-  --text: rgba(17, 24, 39, 0.92);
-  --muted: rgba(17, 24, 39, 0.58);
-  --border: rgba(17, 24, 39, 0.12);
-  --accent: #7c3aed;
-  --topbar-bg: rgba(17, 24, 39, 0.05);
-  --mobile-stage-bg: color-mix(in srgb, var(--bg) 94%, var(--accent) 6%);
-  --scrollbar-track: color-mix(in srgb, var(--bg) 94%, transparent);
-  --scrollbar-thumb: rgba(17, 24, 39, 0.22);
-  --scrollbar-thumb-hover: rgba(124, 58, 237, 0.35);
-  --scrollbar-corner: var(--scrollbar-track);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root.theme-system {
-    color-scheme: dark;
-    --bg: #0b1020;
-    --panel: rgba(255, 255, 255, 0.06);
-    --panel2: rgba(255, 255, 255, 0.09);
-    --text: rgba(255, 255, 255, 0.92);
-    --muted: rgba(255, 255, 255, 0.65);
-    --border: rgba(255, 255, 255, 0.12);
-    --accent: #8b5cf6;
-    --topbar-bg: rgba(255, 255, 255, 0.06);
-    --mobile-stage-bg: color-mix(in srgb, var(--bg) 94%, var(--accent) 6%);
-    --scrollbar-track: color-mix(in srgb, var(--bg) 92%, transparent);
-    --scrollbar-thumb: color-mix(in srgb, var(--border) 65%, transparent);
-    --scrollbar-thumb-hover: color-mix(in srgb, var(--accent) 35%, var(--scrollbar-thumb));
-    --scrollbar-corner: var(--scrollbar-track);
-  }
-}
+@import "./themes/presets.css";
 
 * {
   box-sizing: border-box;
@@ -300,7 +212,7 @@ code {
 }
 
 .settingsDataDirFeedbackErr {
-  color: color-mix(in srgb, #f87171 92%, var(--text));
+  color: color-mix(in srgb, var(--danger) 92%, var(--text));
 }
 
 .topbarRight {
@@ -312,6 +224,91 @@ code {
 }
 
 .btnFullscreenToggle,
+.themePickerRoot {
+  position: relative;
+}
+
+.btnThemePicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  margin: 0;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: color-mix(in srgb, var(--text) 90%, transparent);
+  font-size: 13px;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.btnThemePicker:hover,
+.btnThemePicker.active {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.btnThemePicker:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+}
+
+.themePickerBtnSwatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.themePickerMenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 200;
+  min-width: 168px;
+  padding: 4px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+}
+
+.themePickerOption {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.themePickerOption:hover,
+.themePickerOption.is-current {
+  background: var(--panel2);
+}
+
+.themePickerSwatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.themePickerLabel {
+  flex: 1;
+}
+
+.themePickerCheck {
+  color: var(--accent);
+  font-size: 12px;
+}
+
 .btnThemeToggle,
 .btnGithubLink,
 .btnSettingsToggle {
@@ -876,7 +873,7 @@ code {
 .chapterNavDraftMark {
   width: 1em;
   flex-shrink: 0;
-  color: color-mix(in srgb, #f5c542 88%, var(--text));
+  color: color-mix(in srgb, var(--warning) 88%, var(--text));
   font-weight: 600;
 }
 
@@ -920,7 +917,7 @@ code {
 }
 
 .chapterNavAuditStatus.ok {
-  color: color-mix(in srgb, #22c55e 86%, var(--text));
+  color: color-mix(in srgb, var(--success) 86%, var(--text));
 }
 
 .chapterNavAuditStatus.miss {
@@ -928,7 +925,7 @@ code {
 }
 
 .chapterNavAuditChanged {
-  color: color-mix(in srgb, #f5c542 88%, var(--text));
+  color: color-mix(in srgb, var(--warning) 88%, var(--text));
   font-weight: 600;
 }
 
@@ -989,7 +986,7 @@ code {
   margin: 2px 0 1px;
   font-size: 11px;
   line-height: 1.35;
-  color: color-mix(in srgb, #fbbf24 78%, var(--muted));
+  color: color-mix(in srgb, var(--warning) 78%, var(--muted));
 }
 
 .navBookGapHint {
@@ -1001,15 +998,15 @@ code {
   font-size: 11px;
   line-height: 1.35;
   border-radius: 6px;
-  border: 1px solid color-mix(in srgb, #fbbf24 42%, var(--border));
-  background: color-mix(in srgb, #fbbf24 12%, transparent);
-  color: color-mix(in srgb, #fbbf24 88%, var(--text));
+  border: 1px solid color-mix(in srgb, var(--warning) 42%, var(--border));
+  background: color-mix(in srgb, var(--warning) 12%, transparent);
+  color: color-mix(in srgb, var(--warning) 88%, var(--text));
   cursor: pointer;
   font-family: inherit;
 }
 
 .navBookGapHint:hover:not(:disabled) {
-  background: color-mix(in srgb, #fbbf24 20%, transparent);
+  background: color-mix(in srgb, var(--warning) 20%, transparent);
 }
 
 .navBookGapHint:disabled {
@@ -1069,7 +1066,7 @@ code {
 
 .modalReq {
   margin-left: 4px;
-  color: color-mix(in srgb, #f97373 75%, var(--text));
+  color: color-mix(in srgb, var(--danger) 75%, var(--text));
 }
 
 .modalOptional {
@@ -1177,13 +1174,13 @@ code {
 }
 
 .btnSuccess {
-  border-color: color-mix(in srgb, #22c55e 52%, var(--border));
-  background: color-mix(in srgb, #22c55e 18%, transparent);
-  color: color-mix(in srgb, #22c55e 92%, var(--text));
+  border-color: color-mix(in srgb, var(--success) 52%, var(--border));
+  background: color-mix(in srgb, var(--success) 18%, transparent);
+  color: color-mix(in srgb, var(--success) 92%, var(--text));
 }
 
 .btnSuccess:hover:not(:disabled) {
-  background: color-mix(in srgb, #22c55e 26%, transparent);
+  background: color-mix(in srgb, var(--success) 26%, transparent);
   color: var(--text);
 }
 
@@ -1484,7 +1481,7 @@ code {
 }
 
 .autosaveErr {
-  color: color-mix(in srgb, #f97373 52%, var(--muted));
+  color: color-mix(in srgb, var(--danger) 52%, var(--muted));
 }
 
 .centerMeta {
@@ -2291,7 +2288,7 @@ code {
 }
 
 .chapterHistoryVersionChip.active {
-  border-color: color-mix(in srgb, #8b5cf6 55%, var(--border));
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
   background: rgba(139, 92, 246, 0.16);
 }
 
@@ -2371,11 +2368,11 @@ code {
 }
 
 .chapterHistoryDiffLegendDel {
-  color: color-mix(in srgb, #ef4444 85%, var(--muted));
+  color: color-mix(in srgb, var(--danger) 85%, var(--muted));
 }
 
 .chapterHistoryDiffLegendIns {
-  color: color-mix(in srgb, #22c55e 85%, var(--muted));
+  color: color-mix(in srgb, var(--success) 85%, var(--muted));
 }
 
 .chapterHistorySplit .polishDiffIns,
@@ -2403,8 +2400,8 @@ code {
 }
 
 .polishDiffDel {
-  background: color-mix(in srgb, #ef4444 18%, transparent);
-  color: color-mix(in srgb, #ef4444 92%, var(--text));
+  background: color-mix(in srgb, var(--danger) 18%, transparent);
+  color: color-mix(in srgb, var(--danger) 92%, var(--text));
   border-radius: 6px;
   padding: 0 2px;
 }
@@ -2626,13 +2623,13 @@ code {
 }
 
 .foreshadowBadgeProgress {
-  border-color: color-mix(in srgb, #f59e0b 45%, var(--border));
-  background: color-mix(in srgb, #f59e0b 14%, transparent);
+  border-color: color-mix(in srgb, var(--warning) 45%, var(--border));
+  background: color-mix(in srgb, var(--warning) 14%, transparent);
 }
 
 .foreshadowBadgeClosed {
-  border-color: color-mix(in srgb, #22c55e 40%, var(--border));
-  background: color-mix(in srgb, #22c55e 14%, transparent);
+  border-color: color-mix(in srgb, var(--success) 40%, var(--border));
+  background: color-mix(in srgb, var(--success) 14%, transparent);
 }
 
 .foreshadowBody {
@@ -3046,8 +3043,8 @@ code {
   justify-content: space-between;
   gap: 10px;
   padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, #f5c542 55%, var(--border));
-  background: color-mix(in srgb, #f5c542 14%, var(--panel));
+  border: 1px solid color-mix(in srgb, var(--warning) 55%, var(--border));
+  background: color-mix(in srgb, var(--warning) 14%, var(--panel));
   color: color-mix(in srgb, var(--text) 92%, #000);
 }
 
@@ -3356,8 +3353,8 @@ code {
 }
 
 .polishDiffIns {
-  background: color-mix(in srgb, #22c55e 18%, transparent);
-  color: color-mix(in srgb, #22c55e 90%, var(--text));
+  background: color-mix(in srgb, var(--success) 18%, transparent);
+  color: color-mix(in srgb, var(--success) 90%, var(--text));
   border-radius: 6px;
   padding: 0 2px;
 }
@@ -3386,8 +3383,8 @@ code {
 }
 
 .auditLink_timelineEvent {
-  color: color-mix(in srgb, #22c55e 85%, var(--text));
-  background: color-mix(in srgb, #22c55e 10%, transparent);
+  color: color-mix(in srgb, var(--success) 85%, var(--text));
+  background: color-mix(in srgb, var(--success) 10%, transparent);
 }
 
 .auditLink_storyFile {
@@ -3443,15 +3440,13 @@ code {
 }
 
 /* 白天主题：阅读模式更接近纸面质感（不影响黑夜主题） */
-:root.theme-light .mobilePhone,
-:root.theme-system .mobilePhone {
+[data-theme="paper"] .mobilePhone {
   border-color: rgba(17, 24, 39, 0.16);
   background: rgba(255, 255, 255, 0.72);
   box-shadow: 0 22px 70px rgba(17, 24, 39, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.55);
 }
 
-:root.theme-light .mobileTextarea,
-:root.theme-system .mobileTextarea {
+[data-theme="paper"] .mobileTextarea {
   border-color: rgba(17, 24, 39, 0.14);
   background: rgba(255, 255, 255, 0.92);
   color: rgba(17, 24, 39, 0.92);
@@ -3847,12 +3842,13 @@ code {
   max-height: min(92vh, 860px);
 }
 
-:root.theme-dark .modalPanelOpaque {
+[data-theme="midnight"] .modalPanelOpaque,
+[data-theme="forest"] .modalPanelOpaque,
+[data-theme="ocean"] .modalPanelOpaque {
   background: color-mix(in srgb, var(--bg) 86%, #ffffff 14%);
 }
 
-:root.theme-light .modalPanelOpaque,
-:root.theme-system .modalPanelOpaque {
+[data-theme="paper"] .modalPanelOpaque {
   background: color-mix(in srgb, var(--bg) 94%, #000000 6%);
 }
 
@@ -4024,7 +4020,7 @@ code {
 
 .auditCharMetaExisting {
   background: color-mix(in srgb, #4ade80 16%, transparent);
-  color: color-mix(in srgb, #22c55e 90%, var(--text));
+  color: color-mix(in srgb, var(--success) 90%, var(--text));
 }
 
 .auditCharMetaUnknown {
@@ -4045,13 +4041,13 @@ code {
 }
 
 .auditCharRoleVillain {
-  background: color-mix(in srgb, #f87171 22%, transparent);
-  color: color-mix(in srgb, #f87171 94%, var(--text));
+  background: color-mix(in srgb, var(--danger) 22%, transparent);
+  color: color-mix(in srgb, var(--danger) 94%, var(--text));
 }
 
 .auditCharRoleAlly {
   background: color-mix(in srgb, #4ade80 18%, transparent);
-  color: color-mix(in srgb, #22c55e 92%, var(--text));
+  color: color-mix(in srgb, var(--success) 92%, var(--text));
 }
 
 .auditCharRoleSupporting {
@@ -4204,8 +4200,8 @@ button:disabled {
 }
 
 .chipClear {
-  border-color: color-mix(in srgb, #f97373 38%, var(--border));
-  color: color-mix(in srgb, #f97373 72%, var(--text));
+  border-color: color-mix(in srgb, var(--danger) 38%, var(--border));
+  color: color-mix(in srgb, var(--danger) 72%, var(--text));
 }
 
 .bookShelfDangerRow {
@@ -4215,13 +4211,13 @@ button:disabled {
 }
 
 .btnDanger {
-  border: 1px solid color-mix(in srgb, #f97373 38%, var(--border));
+  border: 1px solid color-mix(in srgb, var(--danger) 38%, var(--border));
   background: transparent;
-  color: color-mix(in srgb, #f97373 72%, var(--text));
+  color: color-mix(in srgb, var(--danger) 72%, var(--text));
 }
 
 .btnDanger:hover:not(:disabled) {
-  background: color-mix(in srgb, #f97373 14%, transparent);
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
 }
 
 .characterGroups {

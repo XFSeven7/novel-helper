@@ -4,10 +4,37 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Novel Helper</title>
+    <script>
+      (function () {
+        var KEY = "novel-helper-theme";
+        var IDS = { midnight: 1, forest: 1, ocean: 1, paper: 1 };
+        function system() {
+          try {
+            return window.matchMedia("(prefers-color-scheme: light)").matches ? "paper" : "midnight";
+          } catch (e) {
+            return "midnight";
+          }
+        }
+        function migrate(raw) {
+          if (raw && IDS[raw]) return raw;
+          if (raw === "light") return "paper";
+          if (raw === "dark" || raw === "default" || raw === "midnight") return "midnight";
+          if (raw === "forest" || raw === "loam") return "forest";
+          if (raw === "ocean" || raw === "sunset") return "ocean";
+          if (raw === "paper" || raw === "sepia" || raw === "village" || raw === "meadow" || raw === "clay")
+            return "paper";
+          return system();
+        }
+        var theme = "midnight";
+        try {
+          theme = migrate(localStorage.getItem(KEY));
+        } catch (e) {}
+        document.documentElement.dataset.theme = theme;
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

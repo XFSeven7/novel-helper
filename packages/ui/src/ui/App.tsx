@@ -6,8 +6,7 @@ import {
   MODEL_CONFIGS_STORAGE_KEY,
   NAV_COLLAPSED_STORAGE_KEY,
   RIGHT_COLLAPSED_STORAGE_KEY,
-  THEME_STORAGE_KEY,
-  type ThemePreference
+  type ThemeId
 } from "./constants";
 import { auditCharacterNewBadgeClass, auditCharacterRoleClass } from "./utils/auditCharacters";
 import { type AuditLinkTarget } from "./utils/auditDiff";
@@ -27,9 +26,9 @@ import {
 import {
   BUILTIN_MODEL_PROVIDERS,
   defaultConfigFor,
-  loadModelConfigs,
-  loadThemePreference
+  loadModelConfigs
 } from "./utils/modelConfigStorage";
+import { applyThemeToDocument, loadThemeId, saveThemeId } from "./utils/themeStorage";
 import { clamp } from "./utils/math";
 import {
   auditDirtyIgnoreKey,
@@ -259,7 +258,7 @@ export function App() {
   const serverDraftOutOfSyncRef = useRef<string[]>([]);
   const latestHistoryHashByChapterRef = useRef<Record<string, string | null>>({});
   const currentChapterEditorHashRef = useRef<string | null>(null);
-  const [themePreference, setThemePreference] = useState<ThemePreference>(() => loadThemePreference());
+  const [themeId, setThemeId] = useState<ThemeId>(() => loadThemeId());
   const [fullscreenOn, setFullscreenOn] = useState(false);
   const [{ configs: modelConfigs, activeId: activeModelId }, setModelState] = useState(() =>
     loadModelConfigs()
@@ -724,18 +723,12 @@ export function App() {
   }, [createBookModalOpen]);
 
   useLayoutEffect(() => {
-    const root = document.documentElement;
-    root.classList.remove("theme-light", "theme-dark");
-    root.classList.add(`theme-${themePreference}`);
-  }, [themePreference]);
+    applyThemeToDocument(themeId);
+  }, [themeId]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(THEME_STORAGE_KEY, themePreference);
-    } catch {
-      // ignore
-    }
-  }, [themePreference]);
+    saveThemeId(themeId);
+  }, [themeId]);
 
   useEffect(() => {
     const sync = () => setFullscreenOn(Boolean(getFullscreenElement()));
@@ -2905,8 +2898,8 @@ export function App() {
     <div className="app">
       <TopBar
         busy={busy}
-        themePreference={themePreference}
-        onThemeChange={setThemePreference}
+        themeId={themeId}
+        onThemeChange={setThemeId}
         fullscreenOn={fullscreenOn}
         onGoHome={goNavHome}
         onFullscreenError={setStatus}

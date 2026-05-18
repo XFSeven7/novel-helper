@@ -1,19 +1,18 @@
 import React from "react";
-import { GITHUB_REPO_URL, type ThemePreference } from "../../constants";
+import { GITHUB_REPO_URL, type ThemeId } from "../../constants";
 import {
   IconFullscreenEnter,
   IconFullscreenExit,
   IconGitHub,
-  IconSettings,
-  IconThemeMoon,
-  IconThemeSun
+  IconSettings
 } from "./LayoutIcons";
+import { ThemePicker } from "./ThemePicker";
 import { toggleDocumentFullscreen } from "./fullscreen";
 
 export type TopBarProps = {
   busy: boolean;
-  themePreference: ThemePreference;
-  onThemeChange: (theme: ThemePreference) => void;
+  themeId: ThemeId;
+  onThemeChange: (theme: ThemeId) => void;
   fullscreenOn: boolean;
   onGoHome: () => void;
   onFullscreenError: (message: string) => void;
@@ -26,7 +25,7 @@ export type TopBarProps = {
 
 export function TopBar({
   busy,
-  themePreference,
+  themeId,
   onThemeChange,
   fullscreenOn,
   onGoHome,
@@ -68,16 +67,7 @@ export function TopBar({
             右栏
           </button>
         </div>
-        <button
-          type="button"
-          className="btnThemeToggle"
-          onClick={() => onThemeChange(themePreference === "light" ? "dark" : "light")}
-          disabled={busy}
-          title={themePreference === "light" ? "当前为白天，点击切换为黑夜" : "当前为黑夜，点击切换为白天"}
-          aria-label={themePreference === "light" ? "切换为黑夜" : "切换为白天"}
-        >
-          {themePreference === "light" ? <IconThemeMoon /> : <IconThemeSun />}
-        </button>
+        <ThemePicker busy={busy} themeId={themeId} onThemeChange={onThemeChange} />
         <a
           href={GITHUB_REPO_URL}
           className="btnGithubLink"

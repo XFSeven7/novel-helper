@@ -15,7 +15,24 @@ export const MOBILE_PRESETS: Array<{ id: MobilePresetId; label: string; w: numbe
   { id: "ipad-mini", label: "iPad mini (768×1024)", w: 768, h: 1024 }
 ];
 
-export type ThemePreference = "light" | "dark";
+export type ThemeId = "midnight" | "forest" | "ocean" | "paper";
+
+export type ThemePresetMeta = {
+  id: ThemeId;
+  label: string;
+  previewBg: string;
+  previewAccent: string;
+};
+
+export const THEME_PRESETS: ThemePresetMeta[] = [
+  { id: "midnight", label: "暗夜紫", previewBg: "#0b1020", previewAccent: "#8b5cf6" },
+  { id: "forest", label: "墨林", previewBg: "#0a1410", previewAccent: "#34d399" },
+  { id: "ocean", label: "海蓝", previewBg: "#081420", previewAccent: "#38bdf8" },
+  { id: "paper", label: "宣纸", previewBg: "#f6f2ea", previewAccent: "#7c3aed" }
+];
+
+/** @deprecated 使用 ThemeId */
+export type ThemePreference = ThemeId;
 
 export const GITHUB_REPO_URL = "https://github.com/XFSeven7/novel-helper";
 
