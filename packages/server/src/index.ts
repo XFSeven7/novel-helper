@@ -52,7 +52,8 @@ import {
   readInspirationIndex,
   writeInspirationIndex,
   InspirationIndex,
-  IdeaItem
+  IdeaItem,
+  approximateWordCount
 } from "./fsStore.js";
 import {
   ChapterVersionError,
@@ -110,7 +111,7 @@ import {
   buildTimelineUpdatePrompt,
   buildTimelineRangeCompressPrompt,
   buildPolishPrompt,
-  buildExpandPrompt,
+  buildAdjustPrompt,
   buildChapterTitleSuggestPrompt,
   buildCharacterCardMergePrompt,
   buildAuditCharacterMergePrompt,
@@ -1791,8 +1792,9 @@ async function performExpandWithAiSdk(input: {
     .map((r) => `第${r.startChapter}-${r.endChapter}章：${String(r.summary || "").trim()}`)
     .filter((s) => s.length > 0);
 
-  const prompt = buildExpandPrompt({
+  const prompt = buildAdjustPrompt({
     targetWords,
+    currentWords: approximateWordCount(original),
     compressed,
     extraContext,
     original
@@ -2525,7 +2527,7 @@ app.post("/api/books/:slug/chapters/:filename/expand/stream", async (req, reply)
   sseWrite(reply.raw, { type: "log", text: "连接已建立…\n" });
 
   try {
-    sseWrite(reply.raw, { type: "log", text: "开始扩写…\n" });
+    sseWrite(reply.raw, { type: "log", text: "开始调整…\n" });
     const { text } = await performExpandWithAiSdk({
       slug: params.slug,
       filename: params.filename,

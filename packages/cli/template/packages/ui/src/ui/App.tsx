@@ -2204,7 +2204,7 @@ export function App() {
   async function onExpandWithTargetWords(targetWords: number, extraContext: string) {
     if (!activeBook || !selectedChapter) return;
     if (!okModelConfigs.length) {
-      setStatus("没有可用模型：请先在「模型配置」里测试连接，连接成功后再扩写。");
+      setStatus("没有可用模型：请先在「模型配置」里测试连接，连接成功后再调整。");
       return;
     }
     setExpandBusy(true);
@@ -2260,7 +2260,7 @@ export function App() {
               if (t.trim()) setExpandDraft(t);
             }
             if (payload.type === "error") {
-              throw new Error(String(payload.message || "扩写失败"));
+              throw new Error(String(payload.message || "调整失败"));
             }
           } catch {
             // ignore
@@ -3028,14 +3028,14 @@ export function App() {
                   disabled={busy || expandBusy}
                   onClick={() => {
                     if (busy || !selectedChapter) return;
-                    setExpandTargetWords(String(Math.max(200, chapterWordCount + 500)));
+                    setExpandTargetWords(String(Math.max(200, chapterWordCount)));
                     setExpandExtraContext("");
                     setExpandDraft("");
                     setExpandModalOpen(true);
                   }}
-                  title="快速扩写：输入目标字数并结合全书记忆摘要扩写本章"
+                  title="调整本章：设置预计字数，可增写、压缩或优化草率段落"
                 >
-                  {expandBusy ? "扩写中…" : "扩写"}
+                  {expandBusy ? "调整中…" : "调整"}
                 </button>
                 <button
                   type="button"
@@ -3258,9 +3258,9 @@ export function App() {
                   <div className="polishSplit">
                     <div className="polishHead">
                       <div className="polishTitle">
-                        扩写对照
+                        调整对照
                         <span className="polishCounts muted">
-                          原文 {approximateWordCount(chapterContent)} 字 · 扩写后 {approximateWordCount(expandDraft)} 字
+                          原文 {approximateWordCount(chapterContent)} 字 · 调整后 {approximateWordCount(expandDraft)} 字
                         </span>
                       </div>
                       <div className="row">
@@ -3272,9 +3272,9 @@ export function App() {
                             setExpandModeOn(false);
                             setExpandModalOpen(true);
                           }}
-                          title="修改目标字数/补充信息并重新扩写"
+                          title="修改预计字数/说明并重新调整"
                         >
-                          重新扩写
+                          重新调整
                         </button>
                         <button
                           type="button"
@@ -3285,7 +3285,7 @@ export function App() {
                             setExpandModeOn(false);
                             setExpandDraft("");
                           }}
-                          title="用扩写结果替换正文"
+                          title="用调整结果替换正文"
                         >
                           一键更换
                         </button>
@@ -3298,7 +3298,7 @@ export function App() {
                             setExpandDraft("");
                           }}
                         >
-                          退出扩写
+                          退出调整
                         </button>
                       </div>
                     </div>
@@ -3308,8 +3308,8 @@ export function App() {
                         <div className="polishText">{chapterContent}</div>
                       </div>
                       <div className="polishCol">
-                        <div className="polishColTitle muted">扩写后</div>
-                        <div className="polishText">{expandDraft || (expandBusy ? "扩写中…" : "—")}</div>
+                        <div className="polishColTitle muted">调整后</div>
+                        <div className="polishText">{expandDraft || (expandBusy ? "调整中…" : "—")}</div>
                       </div>
                     </div>
                   </div>
@@ -3499,9 +3499,9 @@ export function App() {
                   <div className="polishSplit">
                     <div className="polishHead">
                       <div className="polishTitle">
-                        扩写对照
+                        调整对照
                         <span className="polishCounts muted">
-                          原文 {approximateWordCount(chapterContent)} 字 · 扩写后 {approximateWordCount(expandDraft)} 字
+                          原文 {approximateWordCount(chapterContent)} 字 · 调整后 {approximateWordCount(expandDraft)} 字
                         </span>
                       </div>
                       <div className="row">
@@ -3513,9 +3513,9 @@ export function App() {
                             setExpandModeOn(false);
                             setExpandModalOpen(true);
                           }}
-                          title="修改目标字数/补充信息并重新扩写"
+                          title="修改预计字数/说明并重新调整"
                         >
-                          重新扩写
+                          重新调整
                         </button>
                         <button
                           type="button"
@@ -3526,7 +3526,7 @@ export function App() {
                             setExpandModeOn(false);
                             setExpandDraft("");
                           }}
-                          title="用扩写结果替换正文"
+                          title="用调整结果替换正文"
                         >
                           一键更换
                         </button>
@@ -3539,7 +3539,7 @@ export function App() {
                             setExpandDraft("");
                           }}
                         >
-                          退出扩写
+                          退出调整
                         </button>
                       </div>
                     </div>
@@ -3549,8 +3549,8 @@ export function App() {
                         <div className="polishText">{chapterContent}</div>
                       </div>
                       <div className="polishCol">
-                        <div className="polishColTitle muted">扩写后</div>
-                        <div className="polishText">{expandDraft || (expandBusy ? "扩写中…" : "—")}</div>
+                        <div className="polishColTitle muted">调整后</div>
+                        <div className="polishText">{expandDraft || (expandBusy ? "调整中…" : "—")}</div>
                       </div>
                     </div>
                   </div>
@@ -5223,11 +5223,11 @@ export function App() {
             onClick={(e) => e.stopPropagation()}
           >
             <h2 id="modal-expand-heading" className="modalHeading">
-              快速扩写
+              章节调整
             </h2>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-expand-words">
-                目标字数
+                预计字数
               </label>
               <input
                 id="modal-expand-words"
@@ -5239,12 +5239,12 @@ export function App() {
                 inputMode="numeric"
               />
               <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-                会自动把全书记忆“压缩摘要”投喂给模型作为已发生事件上下文。
+                高于当前字数会增写，低于会压缩，接近则主要优化草率或单薄段落。会自动附带全书记忆压缩摘要。
               </div>
             </div>
             <div className="modalField">
               <label className="modalLabel" htmlFor="modal-expand-extra">
-                补充：当前发生的事情（可选）
+                调整说明（可选）
               </label>
               <textarea
                 id="modal-expand-extra"
@@ -5253,19 +5253,19 @@ export function App() {
                 onChange={(e) => setExpandExtraContext(e.target.value)}
                 disabled={busy || expandBusy}
                 rows={4}
-                placeholder="例如：本章此刻主角刚到青石村晒谷场，准备……"
+                placeholder="例如：后半段写得有点草率，希望加强心理描写；或节奏太慢需要删减……"
               />
             </div>
             {expandDraft.trim() ? (
               <div className="modalField">
-                <label className="modalLabel">扩写结果预览（左原文 / 右扩写稿）</label>
+                <label className="modalLabel">调整结果预览（左原文 / 右调整稿）</label>
                 <div className="polishCols" style={{ padding: 0 }}>
                   <div className="polishCol" style={{ background: "transparent" }}>
                     <div className="polishColTitle muted">原文</div>
                     <div className="polishText">{chapterContent}</div>
                   </div>
                   <div className="polishCol" style={{ background: "transparent" }}>
-                    <div className="polishColTitle muted">扩写后</div>
+                    <div className="polishColTitle muted">调整后</div>
                     <div className="polishText">{expandDraft}</div>
                   </div>
                 </div>
@@ -5289,7 +5289,7 @@ export function App() {
                   setExpandModalOpen(false);
                   setExpandDraft("");
                 }}
-                title="用扩写结果替换正文"
+                title="用调整结果替换正文"
               >
                 一键更换
               </button>
@@ -5300,7 +5300,7 @@ export function App() {
                 onClick={() => {
                   const n = Math.floor(Number(expandTargetWords.trim()));
                   if (!Number.isFinite(n) || n < 200) {
-                    setStatus("目标字数需为 >=200 的数字。");
+                    setStatus("预计字数需为 >=200 的数字。");
                     return;
                   }
                   setExpandModalOpen(false);
@@ -5311,7 +5311,7 @@ export function App() {
                   void onExpandWithTargetWords(n, expandExtraContext);
                 }}
               >
-                {expandBusy ? "扩写中…" : "开始扩写"}
+                {expandBusy ? "调整中…" : "开始调整"}
               </button>
             </div>
           </div>

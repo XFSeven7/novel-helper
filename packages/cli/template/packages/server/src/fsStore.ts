@@ -827,7 +827,7 @@ async function allocateChapterFilename(chaptersDir: string, index: number, stem:
   return allocateChapterFilenameExcept(chaptersDir, index, stem, null);
 }
 
-function approximateWordCount(s: string): number {
+export function approximateWordCount(s: string): number {
   const zh = (s.match(/[\u4e00-\u9fa5]/g) || []).length;
   const en = (s.replace(/[\u4e00-\u9fa5]/g, " ").match(/[A-Za-z0-9]+/g) || []).length;
   return zh + en;

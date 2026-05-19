@@ -2565,7 +2565,7 @@ export function App() {
   async function onExpandWithTargetWords(targetWords: number, extraContext: string) {
     if (!activeBook || !selectedChapter) return;
     if (!okModelConfigs.length) {
-      setStatus("没有可用模型:请先在「设置」中配置模型并测试连接,连接成功后再扩写。");
+      setStatus("没有可用模型:请先在「设置」中配置模型并测试连接,连接成功后再调整。");
       return;
     }
     setExpandBusy(true);
@@ -2621,7 +2621,7 @@ export function App() {
               if (t.trim()) setExpandDraft(t);
             }
             if (payload.type === "error") {
-              throw new Error(String(payload.message || "扩写失败"));
+              throw new Error(String(payload.message || "调整失败"));
             }
           } catch {
             // ignore
@@ -3382,14 +3382,14 @@ export function App() {
                   disabled={busy || expandBusy}
                   onClick={() => {
                     if (busy || !selectedChapter) return;
-                    setExpandTargetWords(String(Math.max(200, chapterWordCount + 500)));
+                    setExpandTargetWords(String(Math.max(200, chapterWordCount)));
                     setExpandExtraContext("");
                     setExpandDraft("");
                     setExpandModalOpen(true);
                   }}
-                  title="快速扩写:输入目标字数并结合全书记忆摘要扩写本章"
+                  title="调整本章:设置预计字数,可增写、压缩或优化草率段落"
                 >
-                  {expandBusy ? "扩写中..." : "扩写"}
+                  {expandBusy ? "调整中..." : "调整"}
                 </button>
                 <button
                   type="button"

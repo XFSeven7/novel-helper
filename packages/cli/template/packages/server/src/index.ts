@@ -47,7 +47,8 @@ import {
   writeAuditAnalysisText,
   writeStoryTimelineMarkdownFromIndex,
   TimelineIndex,
-  WritingPack
+  WritingPack,
+  approximateWordCount
 } from "./fsStore.js";
 import { resolveDataDir, safeSlug } from "./paths.js";
 
@@ -1524,13 +1525,25 @@ async function performExpandWithAiSdk(input: {
     .map((r) => `第${r.startChapter}-${r.endChapter}章：${String(r.summary || "").trim()}`)
     .filter((s) => s.length > 0);
 
+  const currentWords = approximateWordCount(original);
+  const target = Math.max(200, Math.floor(targetWords));
+  const delta = target - currentWords;
+  let lengthGuidance: string;
+  if (delta > Math.max(80, currentWords * 0.08)) {
+    lengthGuidance = `当前约 ${currentWords} 字，目标约 ${target} 字（需明显增写）。补充环境氛围、动作细节、心理活动、对话节奏与过渡，避免啰嗦重复。`;
+  } else if (delta < -Math.max(80, currentWords * 0.08)) {
+    lengthGuidance = `当前约 ${currentWords} 字，目标约 ${target} 字（需明显压缩）。删减冗余与重复表达，保留关键剧情与信息顺序，使篇幅更精炼。`;
+  } else {
+    lengthGuidance = `当前约 ${currentWords} 字，目标约 ${target} 字（篇幅接近目标，以优化为主）。改善草率、单薄或节奏欠佳的段落；可略增或略减局部字数，使整体接近目标。`;
+  }
+
   const prompt = [
-    "你是一位中文小说写作助手。请在不改变剧情事实与信息顺序的前提下，对下面的章节正文进行扩写。",
+    "你是一位中文小说写作助手。请在不改变剧情事实与信息顺序的前提下，对下面的章节正文进行调整。",
     "要求：",
-    `- 目标字数：约 ${Math.max(200, Math.floor(targetWords))} 字（允许 ±10%）`,
+    lengthGuidance,
+    `- 目标字数：约 ${target} 字（允许 ±10%）`,
     "- 保留人名/地名/专有名词一致；不加戏、不引入新设定；不改变叙事视角",
-    "- 扩写方式：补充环境氛围、动作细节、心理活动、对话节奏、过渡段落，但不要啰嗦重复",
-    "- 输出只要扩写后的正文，不要解释、不要加标题",
+    "- 输出只要调整后的正文，不要解释、不要加标题",
     "",
     "【已发生的事情（时间线压缩摘要）】",
     compressed.length ? compressed.join("\n") : "（暂无）",
@@ -1968,7 +1981,7 @@ app.post("/api/books/:slug/chapters/:filename/expand/stream", async (req, reply)
   sseWrite(reply.raw, { type: "log", text: "连接已建立…\\n" });
 
   try {
-    sseWrite(reply.raw, { type: "log", text: "开始扩写…\\n" });
+    sseWrite(reply.raw, { type: "log", text: "开始调整…\\n" });
     const { text } = await performExpandWithAiSdk({
       slug: params.slug,
       filename: params.filename,

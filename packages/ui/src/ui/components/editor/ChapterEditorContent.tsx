@@ -92,9 +92,9 @@ export function ChapterEditorContent({
     <div className="polishSplit">
       <div className="polishHead">
         <div className="polishTitle">
-          扩写对照
+          调整对照
           <span className="polishCounts muted">
-            原文 {approximateWordCount(chapterContent)} 字 · 扩写后 {approximateWordCount(expandDraft)} 字
+            原文 {approximateWordCount(chapterContent)} 字 · 调整后 {approximateWordCount(expandDraft)} 字
           </span>
         </div>
         <div className="row">
@@ -106,9 +106,9 @@ export function ChapterEditorContent({
               setExpandModeOn(false);
               setExpandModalOpen(true);
             }}
-            title="修改目标字数/补充信息并重新扩写"
+            title="修改预计字数/说明并重新调整"
           >
-            重新扩写
+            重新调整
           </button>
           <button
             type="button"
@@ -119,7 +119,7 @@ export function ChapterEditorContent({
               setExpandModeOn(false);
               setExpandDraft("");
             }}
-            title="用扩写结果替换正文"
+            title="用调整结果替换正文"
           >
             一键更换
           </button>
@@ -132,7 +132,7 @@ export function ChapterEditorContent({
               setExpandDraft("");
             }}
           >
-            退出扩写
+            退出调整
           </button>
         </div>
       </div>
@@ -142,8 +142,8 @@ export function ChapterEditorContent({
           <div className="polishText">{chapterContent}</div>
         </div>
         <div className="polishCol">
-          <div className="polishColTitle muted">扩写后</div>
-          <div className="polishText">{expandDraft || (expandBusy ? "扩写中..." : "-")}</div>
+          <div className="polishColTitle muted">调整后</div>
+          <div className="polishText">{expandDraft || (expandBusy ? "调整中..." : "-")}</div>
         </div>
       </div>
     </div>

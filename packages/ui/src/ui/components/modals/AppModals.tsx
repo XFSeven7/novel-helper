@@ -1071,11 +1071,11 @@ export function AppModals(props: AppModalsProps) {
       onClick={(e) => e.stopPropagation()}
     >
       <h2 id="modal-expand-heading" className="modalHeading">
-        快速扩写
+        章节调整
       </h2>
       <div className="modalField">
         <label className="modalLabel" htmlFor="modal-expand-words">
-          目标字数
+          预计字数
         </label>
         <input
           id="modal-expand-words"
@@ -1087,12 +1087,12 @@ export function AppModals(props: AppModalsProps) {
           inputMode="numeric"
         />
         <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-          会自动把全书记忆"压缩摘要"投喂给模型作为已发生事件上下文。
+          高于当前字数会增写,低于会压缩,接近则主要优化草率或单薄段落。会自动附带全书记忆压缩摘要。
         </div>
       </div>
       <div className="modalField">
         <label className="modalLabel" htmlFor="modal-expand-extra">
-          补充:当前发生的事情(可选)
+          调整说明(可选)
         </label>
         <textarea
           id="modal-expand-extra"
@@ -1101,14 +1101,14 @@ export function AppModals(props: AppModalsProps) {
           onChange={(e) => setExpandExtraContext(e.target.value)}
           disabled={busy || expandBusy}
           rows={4}
-          placeholder="例如:本章此刻主角刚到青石村晒谷场,准备......"
+          placeholder="例如:后半段写得有点草率,希望加强心理描写;或节奏太慢需要删减……"
         />
       </div>
       {expandDraft.trim() ? (
         <div className="modalField">
-          <label className="modalLabel">已生成扩写稿</label>
+          <label className="modalLabel">已生成调整稿</label>
           <div className="muted" style={{ marginTop: 6, fontSize: 12 }}>
-            扩写中会直接在编辑区以左右对照展示;你也可以点击"一键更换"替换正文。
+            调整中会直接在编辑区以左右对照展示;你也可以点击"一键更换"替换正文。
           </div>
         </div>
       ) : null}
@@ -1130,7 +1130,7 @@ export function AppModals(props: AppModalsProps) {
             setExpandModalOpen(false);
             setExpandDraft("");
           }}
-          title="用扩写结果替换正文"
+          title="用调整结果替换正文"
         >
           一键更换
         </button>
@@ -1141,7 +1141,7 @@ export function AppModals(props: AppModalsProps) {
           onClick={() => {
             const n = Math.floor(Number(expandTargetWords.trim()));
             if (!Number.isFinite(n) || n < 200) {
-              setStatus("目标字数需为 >=200 的数字。");
+              setStatus("预计字数需为 >=200 的数字。");
               return;
             }
             setExpandModalOpen(false);
@@ -1152,7 +1152,7 @@ export function AppModals(props: AppModalsProps) {
             void onExpandWithTargetWords(n, expandExtraContext);
           }}
         >
-          {expandBusy ? "扩写中..." : "开始扩写"}
+          {expandBusy ? "调整中..." : "开始调整"}
         </button>
       </div>
     </div>
