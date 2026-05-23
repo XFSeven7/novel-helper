@@ -2495,7 +2495,7 @@ app.post("/api/books/:bookId/chapters/:filename/polish/stream", async (req, repl
   sseWrite(reply.raw, { type: "log", text: "连接已建立…\n" });
 
   try {
-    sseWrite(reply.raw, { type: "log", text: "开始润色…\n" });
+    sseWrite(reply.raw, { type: "log", text: "开始纠错…\n" });
     const { text } = await performPolishWithAiSdk({
       slug: params.bookId,
       filename: params.filename,

@@ -2131,7 +2131,7 @@ export function App() {
   async function onPolishSelectedChapter() {
     if (!activeBook || !selectedChapter) return;
     if (!okModelConfigs.length) {
-      setStatus("没有可用模型：请先在「模型配置」里测试连接，连接成功后再润色。");
+      setStatus("没有可用模型：请先在「模型配置」里测试连接，连接成功后再纠错。");
       return;
     }
     setPolishBusy(true);
@@ -2186,7 +2186,7 @@ export function App() {
               setPolishPhase("done");
             }
             if (payload.type === "error") {
-              throw new Error(String(payload.message || "润色失败"));
+              throw new Error(String(payload.message || "纠错失败"));
             }
           } catch {
             // ignore
@@ -3019,9 +3019,9 @@ export function App() {
                       return next;
                     });
                   }}
-                  title={polishModeOn ? "退出润色对照" : "用 AI 润色本章并提供对照"}
+                  title={polishModeOn ? "退出纠错对照" : "用 AI 纠错本章并提供对照"}
                 >
-                  {polishBusy ? "润色中…" : polishModeOn ? "退出润色" : "润色"}
+                  {polishBusy ? "纠错中…" : polishModeOn ? "退出纠错" : "纠错"}
                 </button>
                 <button
                   type="button"
@@ -3318,9 +3318,9 @@ export function App() {
                   <div className="polishSplit">
                     <div className="polishHead">
                       <div className="polishTitle">
-                        润色对照
+                        纠错对照
                         <span className="polishCounts muted">
-                          原文 {approximateWordCount(polishOriginal || chapterContent)} 字 · 润色后{" "}
+                          原文 {approximateWordCount(polishOriginal || chapterContent)} 字 · 纠错后{" "}
                           {approximateWordCount(polishDraft)} 字
                         </span>
                       </div>
@@ -3330,9 +3330,9 @@ export function App() {
                           className="btnSort"
                           disabled={busy || polishBusy || !okModelConfigs.length}
                           onClick={() => void onPolishSelectedChapter()}
-                          title={!okModelConfigs.length ? "请先在「模型配置」里测试连接" : "重新润色（覆盖右侧润色稿）"}
+                          title={!okModelConfigs.length ? "请先在「模型配置」里测试连接" : "重新纠错（覆盖右侧纠错稿）"}
                         >
-                          重新润色
+                          重新纠错
                         </button>
                         <button
                           type="button"
@@ -3345,7 +3345,7 @@ export function App() {
                             setPolishOriginal("");
                             setPolishDraft("");
                           }}
-                          title="用右侧润色稿替换正文"
+                          title="用右侧纠错稿替换正文"
                         >
                           一键更换
                         </button>
@@ -3357,8 +3357,8 @@ export function App() {
                         <div className="polishText">{polishOriginal || chapterContent}</div>
                       </div>
                       <div className="polishCol">
-                        <div className="polishColTitle muted">润色后</div>
-                        <div className="polishDiffPreview" aria-label="润色改动标记预览">
+                        <div className="polishColTitle muted">纠错后</div>
+                        <div className="polishDiffPreview" aria-label="纠错改动标记预览">
                           {diffChars(polishOriginal || chapterContent, polishDraft).map((seg, idx) =>
                             seg.t === "ins" ? (
                               <span key={idx} className="polishDiffIns">
@@ -3559,9 +3559,9 @@ export function App() {
                   <div className="polishSplit">
                     <div className="polishHead">
                       <div className="polishTitle">
-                        润色对照
+                        纠错对照
                         <span className="polishCounts muted">
-                          原文 {approximateWordCount(polishOriginal || chapterContent)} 字 · 润色后{" "}
+                          原文 {approximateWordCount(polishOriginal || chapterContent)} 字 · 纠错后{" "}
                           {approximateWordCount(polishDraft)} 字
                         </span>
                       </div>
@@ -3571,9 +3571,9 @@ export function App() {
                           className="btnSort"
                           disabled={busy || polishBusy || !okModelConfigs.length}
                           onClick={() => void onPolishSelectedChapter()}
-                          title={!okModelConfigs.length ? "请先在「模型配置」里测试连接" : "重新润色（覆盖右侧润色稿）"}
+                          title={!okModelConfigs.length ? "请先在「模型配置」里测试连接" : "重新纠错（覆盖右侧纠错稿）"}
                         >
-                          重新润色
+                          重新纠错
                         </button>
                         <button
                           type="button"
@@ -3586,7 +3586,7 @@ export function App() {
                             setPolishOriginal("");
                             setPolishDraft("");
                           }}
-                          title="用右侧润色稿替换正文"
+                          title="用右侧纠错稿替换正文"
                         >
                           一键更换
                         </button>
@@ -3598,8 +3598,8 @@ export function App() {
                         <div className="polishText">{polishOriginal || chapterContent}</div>
                       </div>
                       <div className="polishCol">
-                        <div className="polishColTitle muted">润色后</div>
-                        <div className="polishDiffPreview" aria-label="润色改动标记预览">
+                        <div className="polishColTitle muted">纠错后</div>
+                        <div className="polishDiffPreview" aria-label="纠错改动标记预览">
                           {diffChars(polishOriginal || chapterContent, polishDraft).map((seg, idx) =>
                             seg.t === "ins" ? (
                               <span key={idx} className="polishDiffIns">

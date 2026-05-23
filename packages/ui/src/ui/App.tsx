@@ -2622,7 +2622,7 @@ export function App() {
   async function onPolishSelectedChapter() {
     if (!activeBook || !selectedChapter) return;
     if (!okModelConfigs.length) {
-      setStatus("没有可用模型:请先在「设置」中配置模型并测试连接,连接成功后再润色。");
+      setStatus("没有可用模型:请先在「设置」中配置模型并测试连接,连接成功后再纠错。");
       return;
     }
     setPolishBusy(true);
@@ -2677,7 +2677,7 @@ export function App() {
               setPolishPhase("done");
             }
             if (payload.type === "error") {
-              throw new Error(String(payload.message || "润色失败"));
+              throw new Error(String(payload.message || "纠错失败"));
             }
           } catch {
             // ignore malformed chunk
@@ -3543,9 +3543,9 @@ export function App() {
                       return next;
                     });
                   }}
-                  title={polishModeOn ? "退出润色对照" : "用 AI 润色本章并提供对照"}
+                  title={polishModeOn ? "退出纠错对照" : "AI 纠错本章错别字、标点与语法，并提供对照"}
                 >
-                  {polishBusy ? "润色中..." : polishModeOn ? "退出润色" : "润色"}
+                  {polishBusy ? "纠错中..." : polishModeOn ? "退出纠错" : "纠错"}
                 </button>
                 <button
                   type="button"

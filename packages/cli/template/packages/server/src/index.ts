@@ -1477,11 +1477,14 @@ async function performPolishWithAiSdk(input: {
 
   const { model, providerOptions } = createAiSdkModel(cfg);
   const prompt = [
-    "你是一位中文小说编辑。请对下面的章节正文进行润色：",
-    "- 不改变剧情事实与信息顺序（不加戏、不删关键事件）",
-    "- 保留人名/地名/专有名词一致",
-    "- 优化语病、重复、节奏与描写，增强可读性",
-    "- 输出只要润色后的正文，不要解释、不要加标题",
+    "你是一位中文小说校对编辑。请对下面的章节正文做「纠错」：只改明显错误，不做文风润色或改写。",
+    "- 修正错别字、误字、同音字误用",
+    "- 修正标点符号误用（缺漏、多余、中英文混用、引号配对等）",
+    "- 修正语法问题：成分残缺、搭配不当、语序别扭、重复赘余等",
+    "- 不改变剧情事实、信息顺序与人称视角；不加戏、不删关键情节",
+    "- 保留人名、地名、专有名词与数字表述一致",
+    "- 不为了「更好听」而换词、扩写、压缩或调整修辞；没有把握的错误不要硬改",
+    "- 只输出纠错后的完整正文，不要解释、不要列表、不要加标题或备注",
     "",
     "【原文】",
     original || "",
@@ -1939,7 +1942,7 @@ app.post("/api/books/:slug/chapters/:filename/polish/stream", async (req, reply)
   sseWrite(reply.raw, { type: "log", text: "连接已建立…\n" });
 
   try {
-    sseWrite(reply.raw, { type: "log", text: "开始润色…\n" });
+    sseWrite(reply.raw, { type: "log", text: "开始纠错…\n" });
     const { text } = await performPolishWithAiSdk({
       slug: params.slug,
       filename: params.filename,

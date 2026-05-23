@@ -151,9 +151,9 @@ export function ChapterEditorContent({
     <div className="polishSplit">
       <div className="polishHead">
         <div className="polishTitle">
-          润色对照
+          纠错对照
           <span className="polishCounts muted">
-            原文 {approximateWordCount(polishOriginal || chapterContent)} 字 · 润色后{" "}
+            原文 {approximateWordCount(polishOriginal || chapterContent)} 字 · 纠错后{" "}
             {approximateWordCount(polishDraft)} 字
           </span>
         </div>
@@ -163,9 +163,9 @@ export function ChapterEditorContent({
             className="btnSort"
             disabled={busy || polishBusy || !okModelCount}
             onClick={() => void onPolishSelectedChapter()}
-            title={!okModelCount ? "请先在「设置」中配置模型并测试连接" : "重新润色(覆盖右侧润色稿)"}
+            title={!okModelCount ? "请先在「设置」中配置模型并测试连接" : "重新纠错(覆盖右侧纠错稿)"}
           >
-            重新润色
+            重新纠错
           </button>
           <button
             type="button"
@@ -178,7 +178,7 @@ export function ChapterEditorContent({
               setPolishOriginal("");
               setPolishDraft("");
             }}
-            title="用右侧润色稿替换正文"
+            title="用右侧纠错稿替换正文"
           >
             一键更换
           </button>
@@ -190,8 +190,8 @@ export function ChapterEditorContent({
           <div className="polishText">{polishOriginal || chapterContent}</div>
         </div>
         <div className="polishCol">
-          <div className="polishColTitle muted">润色后</div>
-          <div className="polishDiffPreview" aria-label="润色改动标记预览">
+          <div className="polishColTitle muted">纠错后</div>
+          <div className="polishDiffPreview" aria-label="纠错改动标记预览">
             {diffChars(polishOriginal || chapterContent, polishDraft).map((seg, idx) =>
               seg.t === "ins" ? (
                 <span key={idx} className="polishDiffIns">

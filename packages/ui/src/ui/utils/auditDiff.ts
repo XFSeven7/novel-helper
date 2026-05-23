@@ -58,7 +58,7 @@ export function diffChars(aRaw: string, bRaw: string): DiffSeg[] {
   const n = A.length;
   const m = B.length;
 
-  // LCS DP(n*m)-章节润色一般可接受;用于"标记修改"预览,不影响保存逻辑
+  // LCS DP(n*m)-章节纠错对照一般可接受;用于"标记修改"预览,不影响保存逻辑
   const dp: number[][] = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
   for (let i = n - 1; i >= 0; i--) {
     for (let j = m - 1; j >= 0; j--) {
@@ -99,7 +99,7 @@ export function diffChars(aRaw: string, bRaw: string): DiffSeg[] {
     j++;
   }
 
-  // 仅展示"润色后的文本"时,删除段无处显示;这里保留 del 以便未来扩展,但 UI 只高亮 ins
+  // 仅展示"纠错后的文本"时,删除段无处显示;这里保留 del 以便未来扩展,但 UI 只高亮 ins
   return out;
 }
 
