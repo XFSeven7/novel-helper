@@ -62,6 +62,7 @@ import { BookSetupWizard } from "./components/bookSetup/BookSetupWizard";
 import { ChapterNav } from "./components/nav/ChapterNav";
 import { OutlineWorkspace } from "./components/outline/OutlineWorkspace";
 import { BookNotesPanel } from "./components/notes/BookNotesPanel";
+import { appConfirm } from "./dialog/dialog";
 import { useLayout3Splitters } from "./hooks/useLayout3Splitters";
 import { useLocalStorageState } from "./hooks/useLocalStorageState";
 import {
@@ -1542,7 +1543,10 @@ export function App() {
 
   async function discardBookPlan(sessionId: string) {
     const label = bookSetupPlans.find((p) => p.sessionId === sessionId)?.displayTitle ?? "该规划";
-    if (!confirm(`确定废弃「${label}」？本地草案将删除且无法恢复。`)) return;
+    if (!(await appConfirm({
+      message: `确定废弃「${label}」？本地草案将删除且无法恢复。`,
+      variant: "danger"
+    }))) return;
     setBusy(true);
     try {
       await discardBookSetupPlan(sessionId);
@@ -2135,9 +2139,9 @@ export function App() {
         .map((r: any) => `${r.startChapter}-${r.endChapter}`)
         .sort((x: string, y: string) => x.localeCompare(y, "zh-Hans-CN"))
         .join("、");
-      const ok = window.confirm(
-        `你要压缩的区间第 ${a}-${b} 章与已有多章概要重叠:${list}\n\n是否合并为更粗区间:第 ${unionA}-${unionB} 章?\n(合并后会删除上述旧区间,仅保留并集区间摘要)`
-      );
+      const ok = await appConfirm({
+        message: `你要压缩的区间第 ${a}-${b} 章与已有多章概要重叠:${list}\n\n是否合并为更粗区间:第 ${unionA}-${unionB} 章?\n(合并后会删除上述旧区间,仅保留并集区间摘要)`
+      });
       if (!ok) {
         setTimelineBusy(false);
         return;
@@ -2485,9 +2489,9 @@ export function App() {
           .sort((a, b) => a - b);
         const uniq = [...new Set(prevMissing)].slice(0, 24);
         if (uniq.length) {
-          const ok = window.confirm(
-            `提示:检测到本章之前仍有未分析章节:第 ${uniq.join("、")} 章。\n\n直接分析本章可能会出现内容遗漏。\n\n仍要继续分析本章吗?`
-          );
+          const ok = await appConfirm({
+            message: `提示:检测到本章之前仍有未分析章节:第 ${uniq.join("、")} 章。\n\n直接分析本章可能会出现内容遗漏。\n\n仍要继续分析本章吗?`
+          });
           if (!ok) return;
         }
       }

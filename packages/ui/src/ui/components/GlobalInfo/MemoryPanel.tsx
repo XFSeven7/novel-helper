@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { appConfirm } from "../../dialog/dialog";
 
 export type MemoryTabId = "chapters" | "ranges";
 
@@ -264,9 +265,10 @@ export function MemoryPanel(props: {
                             className="btnSort"
                             disabled={busy || timelineBusy || !activeBook}
                             onClick={async () => {
-                              const ok = window.confirm(
-                                `确认删除第 ${r.startChapter}-${r.endChapter} 章的多章概要？\n（不会影响章节概要）`
-                              );
+                              const ok = await appConfirm({
+                                message: `确认删除第 ${r.startChapter}-${r.endChapter} 章的多章概要？\n（不会影响章节概要）`,
+                                variant: "danger"
+                              });
                               if (!ok) return;
                               await onDeleteRange(r.startChapter, r.endChapter);
                             }}

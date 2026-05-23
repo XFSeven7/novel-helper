@@ -16,6 +16,7 @@ import {
 import { CHARACTER_ROLE_OPTIONS, type CharacterRole } from "../../constants";
 import { auditCharacterNewBadgeClass, auditCharacterRoleClass } from "../../utils/auditCharacters";
 import { formatMissingChapterList } from "../../utils/chapterFormat";
+import { appConfirm } from "../../dialog/dialog";
 
 export type AppModalsProps = {
   books: any;
@@ -1273,9 +1274,10 @@ export function AppModals(props: AppModalsProps) {
                 setStatus("请先生成合并预览。");
                 return;
               }
-              const ok = window.confirm(
-                `确认应用合并?\n\n保留:${primaryName}\n合并并移除:${secondaryNames.join("、")}\n\n提示:将按预览草稿写入地点库。`
-              );
+              const ok = await appConfirm({
+                message: `确认应用合并?\n\n保留:${primaryName}\n合并并移除:${secondaryNames.join("、")}\n\n提示:将按预览草稿写入地点库。`,
+                variant: "danger"
+              });
               if (!ok) return;
               setBusy(true);
               setStatus("");
@@ -1510,9 +1512,10 @@ export function AppModals(props: AppModalsProps) {
                 setStatus("请先生成合并预览。");
                 return;
               }
-              const ok = window.confirm(
-                `确认应用合并?\n\n保留:${primaryName}\n合并并移除:${secondaryNames.join("、")}\n\n提示:将按预览草稿写入角色库,并修正关系引用。`
-              );
+              const ok = await appConfirm({
+                message: `确认应用合并?\n\n保留:${primaryName}\n合并并移除:${secondaryNames.join("、")}\n\n提示:将按预览草稿写入角色库,并修正关系引用。`,
+                variant: "danger"
+              });
               if (!ok) return;
               setBusy(true);
               setStatus("");

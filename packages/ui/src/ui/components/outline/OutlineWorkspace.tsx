@@ -4,6 +4,7 @@ import { useOutline } from "../../hooks/useOutline";
 import { OutlineAiPreviewModal } from "./OutlineAiPreviewModal";
 import { OutlineMainlinePanel } from "./OutlineMainlinePanel";
 import { OutlineTextarea } from "./OutlineTextarea";
+import { appConfirm } from "../../dialog/dialog";
 
 export type OutlineWorkspaceProps = {
   slug: string;
@@ -141,7 +142,7 @@ export function OutlineWorkspace({
     }));
   };
 
-  const deleteVolume = (volumeId: string) => {
+  const deleteVolume = async (volumeId: string) => {
     const vol = outline.volumes.find((v) => v.id === volumeId);
     if (!vol) return;
     const n = vol.chapterFilenames.length;
@@ -149,7 +150,7 @@ export function OutlineWorkspace({
       n === 0
         ? `删除卷「${vol.title}」？`
         : `卷内 ${n} 章将移回「未分卷」，并删除卷「${vol.title}」。确定继续？`;
-    if (!window.confirm(msg)) return;
+    if (!(await appConfirm({ message: msg, variant: "danger" }))) return;
     const moving = vol.chapterFilenames;
     const remaining = outline.volumes.filter((v) => v.id !== volumeId);
     updateOutline((prev) => {

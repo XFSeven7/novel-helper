@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { BookNoteEntry, BookNotebook } from "../../api";
+import { appAlert, appConfirm } from "../../dialog/dialog";
 import { sortNoteEntries, useBookNotes } from "../../hooks/useBookNotes";
 import { useLocalStorageState } from "../../hooks/useLocalStorageState";
 
@@ -197,10 +198,12 @@ export function BookNotesPanel({ bookId, busy, onStatus, focusRequest = 0 }: Boo
     if (nb.builtIn || nb.id === BUILT_IN_NOTEBOOK_ID) return;
     const count = (notes.index?.entries ?? []).filter((e) => e.notebookId === nb.id).length;
     if (count > 0) {
-      window.alert(`该笔记本下有 ${count} 条备注，请先迁移或删除条目后再删除笔记本。`);
+      await appAlert({
+        message: `该笔记本下有 ${count} 条备注，请先迁移或删除条目后再删除笔记本。`
+      });
       return;
     }
-    if (!window.confirm(`确定删除笔记本「${nb.name}」？`)) return;
+    if (!(await appConfirm({ message: `确定删除笔记本「${nb.name}」？`, variant: "danger" }))) return;
     try {
       await notes.removeNotebook(nb.id);
       if (activeNotebookId === nb.id) {
@@ -246,7 +249,7 @@ export function BookNotesPanel({ bookId, busy, onStatus, focusRequest = 0 }: Boo
 
   const handleDeleteEntry = async (entry: BookNoteEntry) => {
     closeEntryMenu();
-    if (!window.confirm("确定删除这条备注？")) return;
+    if (!(await appConfirm({ message: "确定删除这条备注？", variant: "danger" }))) return;
     try {
       await notes.removeEntry(entry.id);
       onStatus?.("备注已删除");

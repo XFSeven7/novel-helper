@@ -31,6 +31,7 @@ import {
   parseInspirationTechniqueContent
 } from "../../utils/inspirationParse";
 import { clamp } from "../../utils/math";
+import { appConfirm } from "../../dialog/dialog";
 
 export type InspirationTabProps = {
   busy: boolean;
@@ -782,7 +783,10 @@ export function InspirationTab({
                         disabled={busy || inspirationBusy || !activeBook}
                         onClick={async () => {
                           if (!activeBook) return;
-                          const ok = window.confirm("确认清空回收站?(彻底删除不可恢复)");
+                          const ok = await appConfirm({
+                            message: "确认清空回收站?(彻底删除不可恢复)",
+                            variant: "danger"
+                          });
                           if (!ok) return;
                           setInspirationBusy(true);
                           setInspirationErr("");
@@ -859,7 +863,9 @@ export function InspirationTab({
                                 disabled={busy}
                                 onClick={async () => {
                                   if (!activeBook) return;
-                                  const ok = window.confirm("确认移到回收站?(可在回收站恢复)");
+                                  const ok = await appConfirm({
+                                    message: "确认移到回收站?(可在回收站恢复)"
+                                  });
                                   if (!ok) return;
                                   setInspirationBusy(true);
                                   setInspirationErr("");

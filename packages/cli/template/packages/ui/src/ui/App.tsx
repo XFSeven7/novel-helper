@@ -16,6 +16,7 @@ import {
 import { auditCharacterNewBadgeClass, auditCharacterRoleClass, formatAuditCharField } from "./utils/auditCharacters";
 import { clamp } from "./utils/math";
 import { MemoryPanel } from "./components/GlobalInfo/MemoryPanel";
+import { appConfirm } from "./dialog/dialog";
 import { useLayout3Splitters } from "./hooks/useLayout3Splitters";
 import { useLocalStorageState } from "./hooks/useLocalStorageState";
 import {
@@ -1916,9 +1917,9 @@ export function App() {
         .map((r: any) => `${r.startChapter}-${r.endChapter}`)
         .sort((x: string, y: string) => x.localeCompare(y, "zh-Hans-CN"))
         .join("、");
-      const ok = window.confirm(
-        `你要压缩的区间第 ${a}-${b} 章与已有多章概要重叠：${list}\n\n是否合并为更粗区间：第 ${unionA}-${unionB} 章？\n（合并后会删除上述旧区间，仅保留并集区间摘要）`
-      );
+      const ok = await appConfirm({
+        message: `你要压缩的区间第 ${a}-${b} 章与已有多章概要重叠：${list}\n\n是否合并为更粗区间：第 ${unionA}-${unionB} 章？\n（合并后会删除上述旧区间，仅保留并集区间摘要）`
+      });
       if (!ok) {
         setTimelineBusy(false);
         return;

@@ -1667,6 +1667,27 @@ code {
   background: rgba(139, 92, 246, 0.32);
 }
 
+.btnModalDanger {
+  padding: 8px 14px;
+  font-size: 13px;
+  border-color: color-mix(in srgb, var(--danger, #c44) 55%, var(--border));
+  background: color-mix(in srgb, var(--danger, #c44) 22%, transparent);
+  color: color-mix(in srgb, #fff 92%, var(--danger, #e66));
+}
+
+.btnModalDanger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger, #c44) 34%, transparent);
+}
+
+.appDialogMessage {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.appDialogBackdrop {
+  z-index: 1250;
+}
+
 .bookShelfTabs {
   display: flex;
   gap: 4px;

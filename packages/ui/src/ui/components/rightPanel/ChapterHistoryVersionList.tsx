@@ -2,6 +2,7 @@ import React from "react";
 import type { ChapterVersionMeta } from "../../api";
 import { approximateWordCount, formatBookCreatedAt } from "../../utils/chapterFormat";
 import { CHAPTER_HISTORY_CURRENT_ID } from "../editor/ChapterHistoryPane";
+import { appConfirm } from "../../dialog/dialog";
 
 export type ChapterHistoryVersionListProps = {
   versions: ChapterVersionMeta[];
@@ -77,9 +78,14 @@ export function ChapterHistoryVersionList({
           className="btnSquare"
           disabled={busy || !canRestore}
           onClick={() => {
-            if (!selectedVersionId || !canRestore) return;
-            const ok = window.confirm("将磁盘正文还原为该历史存稿，当前未保存的编辑会丢失。是否继续？");
-            if (ok) void onRestore(selectedVersionId);
+            void (async () => {
+              if (!selectedVersionId || !canRestore) return;
+              const ok = await appConfirm({
+                message: "将磁盘正文还原为该历史存稿，当前未保存的编辑会丢失。是否继续？",
+                variant: "danger"
+              });
+              if (ok) void onRestore(selectedVersionId);
+            })();
           }}
         >
           还原到此版本
