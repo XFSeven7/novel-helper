@@ -949,6 +949,31 @@ export function buildProgressIndexPrompt(input: {
 }
 // --- chapter tools (proofread / expand / titles) ---
 
+export function buildMobileLayoutPrompt(input: { original: string }): string {
+  return [
+    "你是一位网文排版编辑，专门为「手机阅读」整理章节正文版式。",
+    "",
+    "任务：在不改动剧情、措辞与人称的前提下，仅通过分段、换行与场景分隔，让正文更适合竖屏手机阅读。",
+    "",
+    "必须遵守：",
+    "- 不增删改任何句子中的字词（错别字也不要顺手改，除非 obvious 的断行粘连）",
+    "- 不改变事件顺序、对话归属与叙述视角",
+    "- 段落之间用恰好一个空行分隔",
+    "- 对话尽量单独成段；同一段内多人短句可酌情拆分",
+    "- 场景切换可用单独一行的 * * * 表示（仅当原文已有明显转场或空行暗示时）",
+    "- 去掉无意义的硬换行（把被误断开的句子接回一行）",
+    "- 保留原文中的标题行；若原文有 # 标题可去掉 # 只保留标题文字并单独成段居中感（仍用纯文本一行）",
+    "",
+    "输出要求：",
+    "- 只输出排版后的完整正文纯文本",
+    "- 不要 markdown 代码块、不要解释、不要备注",
+    "",
+    "【原文】",
+    input.original || "",
+    ""
+  ].join("\n");
+}
+
 export function buildPolishPrompt(input: { original: string }): string {
   return [
     "你是一位中文小说校对编辑。请对下面的章节正文做「纠错」：只改明显错误，不做文风润色或改写。",

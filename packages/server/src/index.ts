@@ -114,6 +114,7 @@ import {
   buildTimelineUpdatePrompt,
   buildTimelineRangeCompressPrompt,
   buildPolishPrompt,
+  buildMobileLayoutPrompt,
   buildAdjustPrompt,
   buildChapterTitleSuggestPrompt,
   buildCharacterCardMergePrompt,
@@ -1660,6 +1661,36 @@ async function performPolishWithAiSdk(input: {
   return { text: full };
 }
 
+async function performMobileLayoutWithAiSdk(input: {
+  slug: string;
+  filename: string;
+  modelConfigId: string | null | undefined;
+  original: string;
+  onDelta?: (textDelta: string) => void;
+}) {
+  const { slug, filename, modelConfigId, onDelta, original } = input;
+  const settings = await readModelSettings();
+  const activeId = modelConfigId || settings.activeId;
+  const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+  if (!cfg) throw new Error("未配置模型");
+
+  const { model, providerOptions } = createAiSdkModel(cfg);
+  const prompt = buildMobileLayoutPrompt({ original });
+
+  const r = await streamText({
+    model,
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.2,
+    providerOptions
+  });
+
+  for await (const delta of r.textStream) {
+    onDelta?.(delta);
+  }
+
+  const full = await r.text;
+  return { text: full };
+}
 
 async function updateProgressIndexAfterAudit(input: { cfg: ModelConfig; slug: string; filename: string; run: any }) {
   const { cfg, slug, filename, run } = input;
@@ -2466,6 +2497,46 @@ app.post("/api/books/:bookId/chapters/:filename/audit/stream", async (req, reply
       }
     });
     sseWrite(reply.raw, { type: "done", run });
+  } catch (e: any) {
+    sseWrite(reply.raw, { type: "error", message: e?.message || String(e) });
+  } finally {
+    reply.raw.end();
+  }
+});
+
+app.post("/api/books/:bookId/chapters/:filename/mobile-layout/stream", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1), filename: z.string().min(1) });
+  const bodySchema = z.object({
+    modelConfigId: z.string().nullable().optional(),
+    original: z.string().optional()
+  });
+  const params = paramsSchema.parse((req as any).params);
+  const body = bodySchema.parse((req as any).body);
+
+  // @ts-ignore
+  reply.hijack();
+  reply.raw.writeHead(200, {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    Connection: "keep-alive",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Methods": "POST, OPTIONS"
+  });
+  sseWrite(reply.raw, { type: "log", text: "连接已建立…\n" });
+
+  try {
+    sseWrite(reply.raw, { type: "log", text: "开始 AI 排版…\n" });
+    const { text } = await performMobileLayoutWithAiSdk({
+      slug: params.bookId,
+      filename: params.filename,
+      modelConfigId: body.modelConfigId,
+      original: body.original || "",
+      onDelta: (d) => {
+        if (d) sseWrite(reply.raw, { type: "delta", textDelta: d });
+      }
+    });
+    sseWrite(reply.raw, { type: "done", text });
   } catch (e: any) {
     sseWrite(reply.raw, { type: "error", message: e?.message || String(e) });
   } finally {

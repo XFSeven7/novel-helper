@@ -3,13 +3,13 @@ import type { ChapterMeta, TimelineIndex } from "../../api";
 import {
   deleteTimelineRange,
   hideAuditCharacter,
-  hideAuditForeshadow,
-  hideAuditPlace,
   markTimelineEvent
 } from "../../api";
 import { auditCharacterRoleClass } from "../../utils/auditCharacters";
 import { auditCharStateExtraRows, auditCharTopExtraRows } from "../../utils/auditDiff";
+import { ForeshadowPanel } from "./ForeshadowPanel";
 import { MemoryPanel } from "./MemoryPanel";
+import { PlacePanel } from "./PlacePanel";
 
 export type GlobalTabId = "auditCharacters" | "relations" | "places" | "timeline" | "foreshadows";
 
@@ -37,10 +37,6 @@ export type GlobalInfoPanelProps = {
   setAuditCharactersSearch: React.Dispatch<React.SetStateAction<string>>;
   expandedAuditCharIds: Record<string, boolean>;
   setExpandedAuditCharIds: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-  placeGroupCollapsed: Record<string, boolean>;
-  setPlaceGroupCollapsed: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-  placeTextExpanded: Record<string, boolean>;
-  setPlaceTextExpanded: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   foreshadowExpanded: Record<string, boolean>;
   setForeshadowExpanded: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   memoryTab: "chapters" | "ranges";
@@ -64,6 +60,8 @@ export type GlobalInfoPanelProps = {
   setStatus: (msg: string) => void;
   openEditCharacter: (c: unknown) => void;
   openEditPlace: (p: unknown) => void;
+  placeRevealTarget?: { group: string; name: string } | null;
+  onPlaceRevealHandled?: () => void;
   openEditForeshadow: (f: unknown) => void;
   onCompressRangeWithMerge: (startChapter: number, endChapter: number) => void;
   onRefreshTimeline: () => void;
@@ -94,10 +92,6 @@ export function GlobalInfoPanel({
   setAuditCharactersSearch,
   expandedAuditCharIds,
   setExpandedAuditCharIds,
-  placeGroupCollapsed,
-  setPlaceGroupCollapsed,
-  placeTextExpanded,
-  setPlaceTextExpanded,
   foreshadowExpanded,
   setForeshadowExpanded,
   memoryTab,
@@ -121,6 +115,8 @@ export function GlobalInfoPanel({
   setStatus,
   openEditCharacter,
   openEditPlace,
+  placeRevealTarget,
+  onPlaceRevealHandled,
   openEditForeshadow,
   onCompressRangeWithMerge,
   onRefreshTimeline,
@@ -678,150 +674,19 @@ export function GlobalInfoPanel({
       </div>
     </>
     ) : globalTab === "places" ? (
-    <div className="placePanel">
-      {Array.isArray(auditPlacesIndex?.places) && (auditPlacesIndex.places as any[]).length ? (
-        (() => {
-          const all = (auditPlacesIndex.places as any[])
-            .map((p) => ({ ...p, name: String(p?.name || "").trim() }))
-            .filter((p) => p.name);
-          const hiddenSet = new Set(
-            Array.isArray(auditPlacesIndex?.hiddenNames)
-              ? (auditPlacesIndex.hiddenNames as any[]).map((x) => String(x))
-              : []
-          );
-          const visible = all.filter((p) => !hiddenSet.has(p.name));
-          const inferGroup = (name: string) => {
-            const n = String(name || "").trim();
-            if (!n) return "未分组";
-            // 常见写法:青石村·晒谷场 / 青石村-晒谷场 / 青石村 晒谷场
-            const m = n.split(/[·•\-\/\s]+/).map((s) => s.trim()).filter(Boolean);
-            return m[0] ? m[0] : "未分组";
-          };
-          const groups = new Map<string, any[]>();
-          for (const p of visible) {
-            const g = String((p as any).group || "").trim() || inferGroup(p.name);
-            if (!groups.has(g)) groups.set(g, []);
-            groups.get(g)!.push(p);
-          }
-          const groupNames = [...groups.keys()].sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
-          return (
-            <>
-              <div className="placeList">
-                {groupNames.map((g) => {
-                  const list = groups.get(g) || [];
-                  const collapsed = !!placeGroupCollapsed[g];
-                  return (
-                    <div key={g} className="placeGroup">
-                      <button
-                        type="button"
-                        className="placeGroupHead"
-                        onClick={() => setPlaceGroupCollapsed((prev) => ({ ...prev, [g]: !prev[g] }))}
-                        disabled={busy}
-                      >
-                        <span className="placeGroupTitle">{g}</span>
-                        <span className="muted placeGroupCount">{list.length}</span>
-                        <span className={`placeGroupChevron ${collapsed ? "" : "open"}`} aria-hidden>
-                          ›
-                        </span>
-                      </button>
-                      {!collapsed ? (
-                        <div className="placeGroupBody placeGroupBodyCompact">
-                          {list.map((p) => {
-                            const key = `${g}::${p.name}`;
-                            const expanded = !!placeTextExpanded[key];
-                            const noteText = String(p.lastNote || "").trim() || "-";
-                            const noteNeedToggle = noteText.length >= 36;
-                            const descText = String(p.description || "").trim() || "-";
-                            const meta = p.lastChapter ? `第 ${p.lastChapter} 章` : "";
-                            return (
-                              <div key={p.name} className="placeItem" data-place-name={p.name}>
-                                <div className="placeItemTop">
-                                  <div className="placeItemTitleRow">
-                                    <div className="placeName">{p.name}</div>
-                                    {meta ? <div className="muted placeItemMeta">{meta}</div> : null}
-                                  </div>
-                                  <div className="row placeItemActions">
-                                    <button
-                                      type="button"
-                                      className="btnMini"
-                                      disabled={busy || !activeBook}
-                                      onClick={() => openEditPlace(p)}
-                                    >
-                                      编辑
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="btnMini"
-                                      disabled={busy || !activeBook}
-                                      onClick={async () => {
-                                        if (!activeBook) return;
-                                        try {
-                                          const { index } = await hideAuditPlace(activeBook, { name: p.name, hidden: true });
-                                          setAuditPlacesIndex(index);
-                                        } catch (e: any) {
-                                          setStatus(e?.message || String(e));
-                                        }
-                                      }}
-                                    >
-                                      隐藏
-                                    </button>
-                                  </div>
-                                </div>
-
-                                <div className="placeItemBody">
-                                  <div className="placeItemLine">
-                                    <span className="placeItemLabel">简述</span>
-                                    <span className="placeItemValue">{descText}</span>
-                                  </div>
-                                  <div className="placeItemLine">
-                                    <span className="placeItemLabel">本地发生</span>
-                                    <span className="placeItemValue">
-                                      <span className={expanded ? "placeNote" : "placeNote placeNoteClamp2"}>{noteText}</span>
-                                      {noteNeedToggle ? (
-                                        <button
-                                          type="button"
-                                          className="btnLinkMuted placeNoteToggle"
-                                          onClick={() => setPlaceTextExpanded((prev) => ({ ...prev, [key]: !prev[key] }))}
-                                          disabled={busy}
-                                        >
-                                          {expanded ? "收起" : "...展开"}
-                                        </button>
-                                      ) : null}
-                                    </span>
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="muted auditHiddenSummary">
-                {(() => {
-                  const hidden = all.filter((p) => hiddenSet.has(p.name));
-                  if (!hidden.length) return null;
-                  return (
-                    <button
-                      type="button"
-                      className="btnLinkMuted"
-                      disabled={busy || !activeBook}
-                      onClick={() => setHiddenPlacePanelOpen(true)}
-                    >
-                      已隐藏 {hidden.length}/{all.length} 个地点,点击查看
-                    </button>
-                  );
-                })()}
-              </div>
-            </>
-          );
-        })()
-      ) : (
-        <div className="muted auditPanelEmpty">暂无地点卡。完成一次分析后会自动收集地点。</div>
-      )}
-    </div>
+    <PlacePanel
+      busy={busy}
+      activeBook={activeBook}
+      chapters={chapters}
+      auditPlacesIndex={auditPlacesIndex}
+      setAuditPlacesIndex={setAuditPlacesIndex}
+      setHiddenPlacePanelOpen={setHiddenPlacePanelOpen}
+      setStatus={setStatus}
+      openEditPlace={openEditPlace}
+      onOpenChapter={onOpenChapter}
+      revealTarget={placeRevealTarget}
+      onRevealHandled={onPlaceRevealHandled}
+    />
     ) : globalTab === "timeline" ? (
     <MemoryPanel
       busy={busy}
@@ -870,187 +735,20 @@ export function GlobalInfoPanel({
       }}
     />
     ) : (
-    <div className="foreshadowPanel">
-      {(() => {
-        const all = Array.isArray(auditForeshadowsIndex?.foreshadows)
-          ? (auditForeshadowsIndex.foreshadows as any[])
-              .map((f) => ({
-                ...f,
-                id: String(f?.id || "").trim(),
-                title: String(f?.title || "").trim()
-              }))
-              .filter((f) => f.id && f.title)
-          : [];
-        const hiddenSet = new Set(
-          Array.isArray(auditForeshadowsIndex?.hiddenIds)
-            ? (auditForeshadowsIndex.hiddenIds as any[]).map((x) => String(x))
-            : []
-        );
-        const visible = all.filter((f) => !hiddenSet.has(f.id));
-        const hidden = all.filter((f) => hiddenSet.has(f.id));
-        const statusLabel = (s: string) =>
-          s === "closed" ? "已回收" : s === "progress" ? "推进中" : "未回收";
-        return (
-          <>
-            <div className="foreshadowTopRow">
-              <button
-                type="button"
-                className="btnSort"
-                disabled={busy || !activeBook}
-                onClick={() => setForeshadowCreateOpen(true)}
-              >
-                新增伏笔
-              </button>
-              <div className="muted">自动来自审计:openLoops / closedLoops(你也可以手动维护)</div>
-            </div>
-
-            {visible.length ? (
-              <div className="foreshadowList">
-                {visible.map((f) => {
-                  const st = String(f.status || "open");
-                  const badgeCls =
-                    st === "closed"
-                      ? "foreshadowBadge foreshadowBadgeClosed"
-                      : st === "progress"
-                        ? "foreshadowBadge foreshadowBadgeProgress"
-                        : "foreshadowBadge foreshadowBadgeOpen";
-                  const first = Number.isFinite(Number(f.firstChapter)) ? Number(f.firstChapter) : null;
-                  const last = Number.isFinite(Number(f.lastChapter)) ? Number(f.lastChapter) : null;
-                  const expanded = Boolean(foreshadowExpanded[f.id]);
-                  const lastProgressText = String(f.lastProgress || "").trim();
-                  const noteText = String(f.note || "").trim();
-                  const compactText = lastProgressText || noteText;
-                  return (
-                    <div key={f.id} className="foreshadowItem" data-foreshadow-id={f.id}>
-                      <div className="foreshadowItemTop">
-                        <button
-                          type="button"
-                          className="foreshadowExpandBtn"
-                          disabled={busy}
-                          onClick={() =>
-                            setForeshadowExpanded((prev) => ({
-                              ...prev,
-                              [f.id]: !Boolean(prev[f.id])
-                            }))
-                          }
-                          aria-expanded={expanded}
-                          title={expanded ? "收起" : "展开查看"}
-                        >
-                          {expanded ? "▾" : "▸"}
-                        </button>
-                        <div className="foreshadowTitleRow">
-                          <div className="foreshadowTitle">{f.title}</div>
-                          <span className={badgeCls}>{statusLabel(st)}</span>
-                        </div>
-                        <div className="foreshadowItemRight row">
-                          <button
-                            type="button"
-                            className="btnSort"
-                            disabled={busy || !activeBook}
-                            onClick={() => openEditForeshadow(f)}
-                          >
-                            编辑
-                          </button>
-                          <button
-                            type="button"
-                            className="btnSort"
-                            disabled={busy || !activeBook}
-                            onClick={async () => {
-                              if (!activeBook) return;
-                              try {
-                                const { index } = await hideAuditForeshadow(activeBook, {
-                                  id: f.id,
-                                  hidden: true
-                                });
-                                setAuditForeshadowsIndex(index);
-                              } catch (e: any) {
-                                setStatus(e?.message || String(e));
-                              }
-                            }}
-                          >
-                            隐藏
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="foreshadowMeta muted">
-                        {first ? (
-                          <button
-                            type="button"
-                            className="btnLinkMuted"
-                            disabled={busy || !activeBook}
-                            onClick={() => {
-                              const c = chapters.find((x) => x.id === String(first));
-                              if (c) void onOpenChapter(c);
-                            }}
-                          >
-                            首次:第 {first} 章
-                          </button>
-                        ) : (
-                          <span>首次:-</span>
-                        )}
-                        <span className="mutedDot">·</span>
-                        {last ? (
-                          <button
-                            type="button"
-                            className="btnLinkMuted"
-                            disabled={busy || !activeBook}
-                            onClick={() => {
-                              const c = chapters.find((x) => x.id === String(last));
-                              if (c) void onOpenChapter(c);
-                            }}
-                          >
-                            最近:第 {last} 章
-                          </button>
-                        ) : (
-                          <span>最近:-</span>
-                        )}
-                      </div>
-
-                      {!expanded ? (
-                        compactText ? <div className="foreshadowCompact muted">{compactText}</div> : null
-                      ) : lastProgressText || noteText ? (
-                        <div className="foreshadowDetails">
-                          {lastProgressText ? (
-                            <div className="foreshadowRow">
-                              <div className="foreshadowLabel">最近推进</div>
-                              <div className="foreshadowValue">{lastProgressText}</div>
-                            </div>
-                          ) : null}
-                          {noteText ? (
-                            <div className="foreshadowRow">
-                              <div className="foreshadowLabel">备注</div>
-                              <div className="foreshadowValue">{noteText}</div>
-                            </div>
-                          ) : null}
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="muted auditPanelEmpty">
-                暂无伏笔。完成一次审计后会自动沉淀;也可以手动新增。
-              </div>
-            )}
-
-            <div className="muted auditHiddenSummary">
-              {hidden.length ? (
-                <button
-                  type="button"
-                  className="btnLinkMuted"
-                  disabled={busy || !activeBook}
-                  onClick={() => setHiddenForeshadowPanelOpen(true)}
-                >
-                  已隐藏 {hidden.length}/{all.length} 条伏笔,点击查看
-                </button>
-              ) : null}
-            </div>
-          </>
-        );
-      })()}
-    </div>
+    <ForeshadowPanel
+      busy={busy}
+      activeBook={activeBook}
+      chapters={chapters}
+      auditForeshadowsIndex={auditForeshadowsIndex}
+      setAuditForeshadowsIndex={setAuditForeshadowsIndex}
+      foreshadowExpanded={foreshadowExpanded}
+      setForeshadowExpanded={setForeshadowExpanded}
+      setForeshadowCreateOpen={setForeshadowCreateOpen}
+      setHiddenForeshadowPanelOpen={setHiddenForeshadowPanelOpen}
+      setStatus={setStatus}
+      openEditForeshadow={openEditForeshadow}
+      onOpenChapter={onOpenChapter}
+    />
       )}
     </div>
     </>

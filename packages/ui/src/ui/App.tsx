@@ -49,6 +49,12 @@ import { RightPanel, type RightTabId } from "./components/rightPanel/RightPanel"
 import { StatsPanel } from "./components/StatsPanel";
 import { AppModals } from "./components/modals/AppModals";
 import { GlobalInfoPanel, type GlobalTabId } from "./components/GlobalInfo/GlobalInfoPanel";
+import { inferPlaceGroup } from "./components/GlobalInfo/PlacePanel";
+import {
+  chapterStreamUrl,
+  consumeChapterSseStream,
+  stripAiPlainTextOutput
+} from "./utils/chapterSseStream";
 import { InspirationTab } from "./components/inspiration/InspirationTab";
 import { getFullscreenElement } from "./components/layout/fullscreen";
 import { TopBar } from "./components/layout/TopBar";
@@ -1073,8 +1079,7 @@ export function App() {
   const [mergePlaceDraft, setMergePlaceDraft] = useState<any | null>(null);
   const [mergePlaceDraftText, setMergePlaceDraftText] = useState("");
   const [mergePlaceDraftBusy, setMergePlaceDraftBusy] = useState(false);
-  const [placeGroupCollapsed, setPlaceGroupCollapsed] = useState<Record<string, boolean>>({});
-  const [placeTextExpanded, setPlaceTextExpanded] = useState<Record<string, boolean>>({});
+  const [placeRevealTarget, setPlaceRevealTarget] = useState<{ group: string; name: string } | null>(null);
   const [hiddenCharPanelOpen, setHiddenCharPanelOpen] = useState(false);
   const [editCharOpen, setEditCharOpen] = useState(false);
   const [editCharName, setEditCharName] = useState("");
@@ -1153,6 +1158,10 @@ export function App() {
   const [polishPhase, setPolishPhase] = useState<PolishPhase>("idle");
   const [polishOriginal, setPolishOriginal] = useState("");
   const [polishDraft, setPolishDraft] = useState("");
+
+  const [mobileLayoutBusy, setMobileLayoutBusy] = useState(false);
+  const [mobileLayoutDraft, setMobileLayoutDraft] = useState("");
+  const [mobileLayoutOriginal, setMobileLayoutOriginal] = useState("");
 
   const [expandModalOpen, setExpandModalOpen] = useState(false);
   const [expandTargetWords, setExpandTargetWords] = useState("");
@@ -1809,6 +1818,8 @@ export function App() {
       setCurrentChapterEditorHash(null);
       currentChapterEditorHashRef.current = null;
       setSelectedChapter({ bookSlug: activeBook, filename: c.filename });
+      setMobileLayoutDraft("");
+      setMobileLayoutOriginal("");
       const { content } = await readChapter(activeBook, c.filename);
       setChapterContent(content);
       chapterBaselineRef.current = content;
@@ -2181,11 +2192,10 @@ export function App() {
         setExpandedAuditCharIds((prev) => ({ ...prev, [key]: true }));
       }
       if (tab === "places") {
-        // 展开地点:若在折叠组内,先打开对应组(collapsed=false)
         const places = Array.isArray(auditPlacesIndex?.places) ? (auditPlacesIndex.places as any[]) : [];
         const p = places.find((x) => String(x?.name || "").trim() === key);
-        const group = String(p?.group || "").trim();
-        if (group) setPlaceGroupCollapsed((prev) => ({ ...prev, [group]: false }));
+        const group = String(p?.group || "").trim() || inferPlaceGroup(key);
+        setPlaceRevealTarget({ group, name: key });
       }
       if (tab === "chapterAnalysis" || tab === "chapterEntities") {
         setRightTab(tab);
@@ -2691,6 +2701,41 @@ export function App() {
     } finally {
       setPolishBusy(false);
     }
+  }
+
+  async function onMobileLayoutChapter() {
+    if (!activeBook || !selectedChapter) return;
+    if (!okModelConfigs.length) {
+      setStatus("没有可用模型：请先在「设置」中配置模型并测试连接，连接成功后再使用 AI 排版。");
+      return;
+    }
+    setMobileLayoutBusy(true);
+    setStatus("");
+    const original = chapterContent;
+    setMobileLayoutOriginal(original);
+    setMobileLayoutDraft("");
+    try {
+      await putModelConfigs({ configs: modelConfigs as any, activeId: activeModelId ?? null }).catch(() => {});
+      await consumeChapterSseStream(
+        chapterStreamUrl(activeBook, selectedChapter.filename, "mobile-layout"),
+        { modelConfigId: activeModelId ?? null, original },
+        {
+          onDelta: (d) => setMobileLayoutDraft((prev) => prev + d),
+          onDone: (t) => setMobileLayoutDraft(stripAiPlainTextOutput(t))
+        }
+      );
+    } catch (e: any) {
+      setStatus(e?.message || String(e));
+    } finally {
+      setMobileLayoutBusy(false);
+    }
+  }
+
+  function applyMobileLayoutToChapter(text: string) {
+    setChapterContent(text);
+    setMobileLayoutDraft("");
+    setMobileLayoutOriginal("");
+    setStatus("已应用 AI 排版到正文");
   }
 
   async function onExpandWithTargetWords(targetWords: number, extraContext: string) {
@@ -3317,10 +3362,6 @@ export function App() {
                           setAuditCharactersSearch={setAuditCharactersSearch}
                           expandedAuditCharIds={expandedAuditCharIds}
                           setExpandedAuditCharIds={setExpandedAuditCharIds}
-                          placeGroupCollapsed={placeGroupCollapsed}
-                          setPlaceGroupCollapsed={setPlaceGroupCollapsed}
-                          placeTextExpanded={placeTextExpanded}
-                          setPlaceTextExpanded={setPlaceTextExpanded}
                           foreshadowExpanded={foreshadowExpanded}
                           setForeshadowExpanded={setForeshadowExpanded}
                           memoryTab={memoryTab}
@@ -3344,6 +3385,8 @@ export function App() {
                           setStatus={setStatus}
                           openEditCharacter={openEditCharacter}
                           openEditPlace={openEditPlace}
+                          placeRevealTarget={placeRevealTarget}
+                          onPlaceRevealHandled={() => setPlaceRevealTarget(null)}
                           openEditForeshadow={openEditForeshadow}
                           onCompressRangeWithMerge={(a, b) => void compressMemoryRangeWithMerge(a, b)}
                           onRefreshTimeline={() => activeBook && void refreshTimelineIndex(activeBook)}
@@ -3692,6 +3735,17 @@ export function App() {
               timelineIndex={timelineIndex}
               storyFiles={storyFiles}
               onJumpToOrganize={jumpToOrganize}
+              mobileLayout={
+                activeBook && selectedChapter
+                  ? {
+                      busy: mobileLayoutBusy,
+                      draft: mobileLayoutDraft,
+                      original: mobileLayoutOriginal,
+                      onRun: onMobileLayoutChapter
+                    }
+                  : null
+              }
+              onApplyMobileLayout={applyMobileLayoutToChapter}
             />
 
           )}

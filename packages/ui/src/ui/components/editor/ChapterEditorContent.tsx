@@ -21,6 +21,7 @@ export type ChapterEditorContentProps = {
   setChapterContent: (value: string) => void;
   chapterTextareaRef: React.RefObject<HTMLTextAreaElement | null>;
   textareaClassName?: string;
+  mobileFontPx?: number;
   expandModeOn: boolean;
   setExpandModeOn: React.Dispatch<React.SetStateAction<boolean>>;
   expandBusy: boolean;
@@ -59,6 +60,7 @@ export function ChapterEditorContent({
   setChapterContent,
   chapterTextareaRef,
   textareaClassName,
+  mobileFontPx,
   expandModeOn,
   setExpandModeOn,
   expandBusy,
@@ -321,6 +323,9 @@ export function ChapterEditorContent({
 ) : (
     <textarea
       className={textareaClassName}
+      style={
+        mobileFontPx ? { fontSize: `${mobileFontPx}px`, lineHeight: 1.85 } : undefined
+      }
       ref={chapterTextareaRef}
       value={chapterContent}
       onChange={(e) => setChapterContent(e.target.value)}
