@@ -10,6 +10,7 @@ export type BookSynopsisPanelProps = {
   bookOverviewAutosaveHint: string;
   onToggleCompleted: () => void | Promise<void>;
   onDeleteBook: () => void;
+  onOpenPlanning?: () => void;
 };
 
 export function BookSynopsisPanel({
@@ -20,7 +21,8 @@ export function BookSynopsisPanel({
   setSynopsisDraft,
   bookOverviewAutosaveHint,
   onToggleCompleted,
-  onDeleteBook
+  onDeleteBook,
+  onOpenPlanning
 }: BookSynopsisPanelProps) {
   return (
     <aside className="right">
@@ -69,6 +71,16 @@ export function BookSynopsisPanel({
         >
           {bookOverviewAutosaveHint}
         </div>
+        {activeBookMeta?.setupSessionId ? (
+          <button
+            type="button"
+            className="btnSort bookPlanningReviewBtn"
+            disabled={busy || !activeBook}
+            onClick={() => onOpenPlanning?.()}
+          >
+            回顾 / 继续规划
+          </button>
+        ) : null}
       </section>
     </aside>
   );

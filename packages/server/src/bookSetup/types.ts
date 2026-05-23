@@ -26,6 +26,9 @@ export type BookSetupDraft = {
   skippedSteps: BookSetupStepId[];
   visitedSteps: BookSetupStepId[];
 
+  /** 已 commit 绑定的书；有值时自动同步到该书且不可再次 commit */
+  linkedBookId?: string;
+
   title?: string;
   slug?: string;
   metaSynopsis?: string;

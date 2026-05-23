@@ -99,6 +99,7 @@ import {
 } from "./outlineStore.js";
 import { runOutlineAi, type OutlineAiMode } from "./outlineAi.js";
 import { registerBookSetupRoutes } from "./bookSetup/routes.js";
+import { migrateBookIds } from "./migrateBookIds.js";
 import { mergeOccurredNotes } from "./characterOccurredNotes.js";
 import {
   truncateForPrompt,
@@ -130,6 +131,9 @@ await app.register(cors, {
 
 const PORT = Number(process.env.PORT || 3177);
 initDataDir(resolveDataDir(process.env.NOVEL_HELPER_DATA_DIR));
+void migrateBookIds(getDataDir()).catch((e) => {
+  console.warn("[migrateBookIds]", e instanceof Error ? e.message : e);
+});
 
 type ModelProviderId = "openai" | "deepseek" | "gemini" | "qwen" | "ollama" | "custom";
 type ModelConfig = {
@@ -1991,28 +1995,32 @@ app.post("/api/books", async (req, reply) => {
     synopsis: z.string().max(20000).optional()
   });
   const body = bodySchema.parse((req as any).body);
-  const slug = safeSlug(body.slug?.trim() || body.title);
-  if (!slug) return reply.code(400).send({ message: "Invalid slug/title" });
+  const bookId = crypto.randomUUID();
+  const displaySlug = safeSlug(body.slug?.trim() || body.title) || undefined;
 
   try {
-    const meta = await createNovel(getDataDir(), slug, body.title, body.synopsis);
+    const meta = await createNovel(getDataDir(), bookId, body.title, body.synopsis, {
+      slug: displaySlug
+    });
     return { book: novelSummaryFromMeta(meta, 0, []) };
   } catch (e: any) {
     return reply.code(409).send({ message: e?.message || "Conflict" });
   }
 });
 
-app.get("/api/books/:slug", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.get("/api/books/:bookId", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
   const books = await listNovels(getDataDir());
-  const book = books.find((b: any) => String(b?.slug || "").trim() === params.slug);
+  const book = books.find(
+    (b) => b.bookId === params.bookId || String(b.slug || "").trim() === params.bookId
+  );
   if (!book) return reply.code(404).send({ message: "Not found" });
   return { book };
 });
 
-app.patch("/api/books/:slug", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.patch("/api/books/:bookId", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     synopsis: z.string().max(20000).optional(),
     completed: z.boolean().optional()
@@ -2022,10 +2030,10 @@ app.patch("/api/books/:slug", async (req, reply) => {
   try {
     let book: any = null;
     if (body.synopsis !== undefined) {
-      book = await updateNovelSynopsis(getDataDir(), params.slug, body.synopsis);
+      book = await updateNovelSynopsis(getDataDir(), params.bookId, body.synopsis);
     }
     if (body.completed !== undefined) {
-      book = await updateNovelCompleted(getDataDir(), params.slug, body.completed);
+      book = await updateNovelCompleted(getDataDir(), params.bookId, body.completed);
     }
     if (!book) return reply.code(400).send({ message: "No-op" });
     return { book };
@@ -2034,37 +2042,37 @@ app.patch("/api/books/:slug", async (req, reply) => {
   }
 });
 
-app.delete("/api/books/:slug", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.delete("/api/books/:bookId", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
   try {
-    await deleteNovel(getDataDir(), params.slug);
+    await deleteNovel(getDataDir(), params.bookId);
     return { ok: true };
   } catch {
     return reply.code(404).send({ message: "Not found" });
   }
 });
 
-app.post("/api/books/:slug/restore", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/restore", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
   try {
-    await restoreNovel(getDataDir(), params.slug);
+    await restoreNovel(getDataDir(), params.bookId);
     return { ok: true };
   } catch {
     return reply.code(404).send({ message: "Not found" });
   }
 });
 
-app.get("/api/books/:slug/chapters", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.get("/api/books/:bookId/chapters", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const chapters = await listChapters(getDataDir(), params.slug);
+  const chapters = await listChapters(getDataDir(), params.bookId);
   return { chapters };
 });
 
-app.post("/api/books/:slug/chapters", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/chapters", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     title: z.string().min(1),
     content: z.string().optional(),
@@ -2072,29 +2080,29 @@ app.post("/api/books/:slug/chapters", async (req) => {
   });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const chapter = await createChapter(getDataDir(), params.slug, body.title, body.content, body.chapterIndex);
-  const allChapters = await listChapters(getDataDir(), params.slug);
-  await ensureOutlineIndex(getDataDir(), params.slug, allChapters);
+  const chapter = await createChapter(getDataDir(), params.bookId, body.title, body.content, body.chapterIndex);
+  const allChapters = await listChapters(getDataDir(), params.bookId);
+  await ensureOutlineIndex(getDataDir(), params.bookId, allChapters);
   return { chapter };
 });
 
-app.get("/api/books/:slug/chapters/:filename", async (req, reply) => {
+app.get("/api/books/:bookId/chapters/:filename", async (req, reply) => {
   const paramsSchema = z.object({
-    slug: z.string().min(1),
+    bookId: z.string().min(1),
     filename: z.string().min(1)
   });
   const params = paramsSchema.parse((req as any).params);
   try {
-    const content = await readChapter(getDataDir(), params.slug, params.filename);
+    const content = await readChapter(getDataDir(), params.bookId, params.filename);
     return { content };
   } catch {
     return reply.code(404).send({ message: "Not found" });
   }
 });
 
-app.put("/api/books/:slug/chapters/:filename", async (req) => {
+app.put("/api/books/:bookId/chapters/:filename", async (req) => {
   const paramsSchema = z.object({
-    slug: z.string().min(1),
+    bookId: z.string().min(1),
     filename: z.string().min(1)
   });
   const bodySchema = z.object({
@@ -2102,13 +2110,13 @@ app.put("/api/books/:slug/chapters/:filename", async (req) => {
   });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  await updateChapter(getDataDir(), params.slug, params.filename, body.content);
+  await updateChapter(getDataDir(), params.bookId, params.filename, body.content);
   return { ok: true };
 });
 
-app.patch("/api/books/:slug/chapters/:filename", async (req, reply) => {
+app.patch("/api/books/:bookId/chapters/:filename", async (req, reply) => {
   const paramsSchema = z.object({
-    slug: z.string().min(1),
+    bookId: z.string().min(1),
     filename: z.string().min(1)
   });
   const bodySchema = z.object({
@@ -2117,60 +2125,60 @@ app.patch("/api/books/:slug/chapters/:filename", async (req, reply) => {
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
   try {
-    const chapter = await renameChapterTitle(getDataDir(), params.slug, params.filename, body.title);
+    const chapter = await renameChapterTitle(getDataDir(), params.bookId, params.filename, body.title);
     return { chapter };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || "Rename failed" });
   }
 });
 
-app.delete("/api/books/:slug/chapters/:filename", async (req, reply) => {
+app.delete("/api/books/:bookId/chapters/:filename", async (req, reply) => {
   const paramsSchema = z.object({
-    slug: z.string().min(1),
+    bookId: z.string().min(1),
     filename: z.string().min(1)
   });
   const params = paramsSchema.parse((req as any).params);
   try {
-    await deleteChapter(getDataDir(), params.slug, params.filename);
-    const allChapters = await listChapters(getDataDir(), params.slug);
-    await ensureOutlineIndex(getDataDir(), params.slug, allChapters);
+    await deleteChapter(getDataDir(), params.bookId, params.filename);
+    const allChapters = await listChapters(getDataDir(), params.bookId);
+    await ensureOutlineIndex(getDataDir(), params.bookId, allChapters);
     return { ok: true };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || "Delete failed" });
   }
 });
 
-app.get("/api/books/:slug/outline", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.get("/api/books/:bookId/outline", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
   try {
-    const chapters = await listChapters(getDataDir(), params.slug);
-    const outline = await ensureOutlineIndex(getDataDir(), params.slug, chapters);
+    const chapters = await listChapters(getDataDir(), params.bookId);
+    const outline = await ensureOutlineIndex(getDataDir(), params.bookId, chapters);
     return { outline };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || String(e) });
   }
 });
 
-app.patch("/api/books/:slug/outline", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.patch("/api/books/:bookId/outline", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
   const body = (req as any).body;
   try {
-    const chapters = await listChapters(getDataDir(), params.slug);
+    const chapters = await listChapters(getDataDir(), params.bookId);
     const filenames = chapters.map((c) => c.filename);
     const idx = normalizeOutlineIndex(body?.outline ?? body);
     const warnings = validateOutlineAgainstChapters(idx, filenames);
     if (warnings.length) return reply.code(400).send({ message: warnings.join("；") });
-    const saved = await writeOutlineIndex(getDataDir(), params.slug, idx);
+    const saved = await writeOutlineIndex(getDataDir(), params.bookId, idx);
     return { outline: saved };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || String(e) });
   }
 });
 
-app.post("/api/books/:slug/outline/ai", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/outline/ai", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     mode: z.enum(["snowflake", "fromChapters", "refineChapterPlan", "volumeChapterPlans", "foreshadowAudit"]),
     modelConfigId: z.string().nullable().optional(),
@@ -2197,11 +2205,11 @@ app.post("/api/books/:slug/outline/ai", async (req, reply) => {
     const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
     if (!cfg) return reply.code(400).send({ message: "未配置模型" });
 
-    const chapters = await listChapters(getDataDir(), params.slug);
-    const outline = await ensureOutlineIndex(getDataDir(), params.slug, chapters);
+    const chapters = await listChapters(getDataDir(), params.bookId);
+    const outline = await ensureOutlineIndex(getDataDir(), params.bookId, chapters);
     const { preview, prompt, warnings } = await runOutlineAi({
       dataDir: getDataDir(),
-      slug: params.slug,
+      slug: params.bookId,
       mode: body.mode as OutlineAiMode,
       outline,
       cfg,
@@ -2219,8 +2227,8 @@ app.post("/api/books/:slug/outline/ai", async (req, reply) => {
   }
 });
 
-app.post("/api/books/:slug/outline/ai/apply", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/outline/ai/apply", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     preview: z.any(),
     overwrite: z.boolean().optional()
@@ -2228,10 +2236,10 @@ app.post("/api/books/:slug/outline/ai/apply", async (req, reply) => {
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
   try {
-    const chapters = await listChapters(getDataDir(), params.slug);
+    const chapters = await listChapters(getDataDir(), params.bookId);
     const filenames = chapters.map((c) => c.filename);
     const validFilenames = new Set(filenames);
-    const current = await ensureOutlineIndex(getDataDir(), params.slug, chapters);
+    const current = await ensureOutlineIndex(getDataDir(), params.bookId, chapters);
 
     if (body.preview?.report) {
       return reply.code(400).send({ message: "伏笔体检报告不可应用到大纲" });
@@ -2248,20 +2256,20 @@ app.post("/api/books/:slug/outline/ai/apply", async (req, reply) => {
     });
     const valWarnings = validateOutlineAgainstChapters(merged, filenames);
     if (valWarnings.length) return reply.code(400).send({ message: valWarnings.join("；") });
-    const saved = await writeOutlineIndex(getDataDir(), params.slug, merged);
+    const saved = await writeOutlineIndex(getDataDir(), params.bookId, merged);
     return { outline: saved, warnings: [...warnings, ...valWarnings] };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || String(e) });
   }
 });
 
-app.get("/api/books/:slug/stats", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.get("/api/books/:bookId/stats", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const querySchema = z.object({ backfill: z.enum(["mtime"]).optional() });
   const params = paramsSchema.parse((req as any).params);
   const query = querySchema.parse((req as any).query ?? {});
   try {
-    const stats = await computeBookStats(getDataDir(), params.slug, {
+    const stats = await computeBookStats(getDataDir(), params.bookId, {
       backfillMtime: query.backfill === "mtime"
     });
     return { stats };
@@ -2270,15 +2278,15 @@ app.get("/api/books/:slug/stats", async (req, reply) => {
   }
 });
 
-app.get("/api/books/:slug/story", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.get("/api/books/:bookId/story", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const { storyFiles, charFiles } = await listStoryFiles(getDataDir(), params.slug);
+  const { storyFiles, charFiles } = await listStoryFiles(getDataDir(), params.bookId);
   return { storyFiles, charFiles };
 });
 
-app.post("/api/books/:slug/story/characters", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/story/characters", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     name: z.string().min(1),
     role: z.string().min(1).optional(),
@@ -2287,37 +2295,37 @@ app.post("/api/books/:slug/story/characters", async (req, reply) => {
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
   try {
-    const out = await createCharacterCard(getDataDir(), params.slug, body.name, { role: body.role, tags: body.tags });
+    const out = await createCharacterCard(getDataDir(), params.bookId, body.name, { role: body.role, tags: body.tags });
     return { character: out };
   } catch (e: any) {
     return reply.code(409).send({ message: e?.message || "Conflict" });
   }
 });
 
-app.get("/api/books/:slug/story/file", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.get("/api/books/:bookId/story/file", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const querySchema = z.object({ path: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
   const query = querySchema.parse((req as any).query);
   try {
-    const content = await readStoryFile(getDataDir(), params.slug, query.path);
+    const content = await readStoryFile(getDataDir(), params.bookId, query.path);
     return { content };
   } catch {
     return reply.code(404).send({ message: "Not found" });
   }
 });
 
-app.put("/api/books/:slug/story/file", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.put("/api/books/:bookId/story/file", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({ path: z.string().min(1), content: z.string() });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  await updateStoryFile(getDataDir(), params.slug, body.path, body.content);
+  await updateStoryFile(getDataDir(), params.bookId, body.path, body.content);
   return { ok: true };
 });
 
-app.post("/api/books/:slug/story/characters/merge", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/story/characters/merge", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     primaryPath: z.string().min(1),
     secondaryPaths: z.array(z.string().min(1)).min(1),
@@ -2347,11 +2355,11 @@ app.post("/api/books/:slug/story/characters/merge", async (req, reply) => {
     if (!cfg) throw new Error("未配置模型");
 
     // 先读全量内容（失败则不做任何写入）
-    const primaryContent = await readStoryFile(getDataDir(), params.slug, body.primaryPath);
+    const primaryContent = await readStoryFile(getDataDir(), params.bookId, body.primaryPath);
     const primaryTitle = path.basename(body.primaryPath).replace(/\.md$/, "");
     const secondaryCards: Array<{ path: string; title: string; content: string }> = [];
     for (const p of secondary) {
-      const c = await readStoryFile(getDataDir(), params.slug, p);
+      const c = await readStoryFile(getDataDir(), params.bookId, p);
       secondaryCards.push({ path: p, title: path.basename(p).replace(/\.md$/, ""), content: c });
     }
 
@@ -2368,12 +2376,12 @@ app.post("/api/books/:slug/story/characters/merge", async (req, reply) => {
     }
 
     // 先写主卡，成功后再备份搬运次卡
-    await updateStoryFile(getDataDir(), params.slug, body.primaryPath, mergedTrim.endsWith("\n") ? mergedTrim : `${mergedTrim}\n`);
+    await updateStoryFile(getDataDir(), params.bookId, body.primaryPath, mergedTrim.endsWith("\n") ? mergedTrim : `${mergedTrim}\n`);
 
     const now = new Date();
     const stamp = now.toISOString().replace(/[:.]/g, "-");
     const mergedDirRel = "story/characters/_merged";
-    const mergedDirAbs = path.join(getDataDir(), params.slug, mergedDirRel);
+    const mergedDirAbs = path.join(getDataDir(), params.bookId, mergedDirRel);
     await fs.mkdir(mergedDirAbs, { recursive: true });
 
     const exists = async (p: string) => {
@@ -2395,35 +2403,35 @@ app.post("/api/books/:slug/story/characters/merge", async (req, reply) => {
     };
 
     for (const card of secondaryCards) {
-      const srcAbs = path.join(getDataDir(), params.slug, card.path);
+      const srcAbs = path.join(getDataDir(), params.bookId, card.path);
       const destAbs = await allocDest(path.basename(card.path));
       await fs.rename(srcAbs, destAbs);
     }
 
-    const { charFiles } = await listStoryFiles(getDataDir(), params.slug);
+    const { charFiles } = await listStoryFiles(getDataDir(), params.bookId);
     return { ok: true, charFiles };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || String(e) });
   }
 });
 
-app.post("/api/books/:slug/chapters/:filename/audit", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1), filename: z.string().min(1) });
+app.post("/api/books/:bookId/chapters/:filename/audit", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1), filename: z.string().min(1) });
   const bodySchema = z.object({ modelConfigId: z.string().nullable().optional() });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
 
   try {
     // 非流式：仍走原逻辑（兼容旧行为）
-    const run = await performAudit(params.slug, params.filename, body.modelConfigId);
+    const run = await performAudit(params.bookId, params.filename, body.modelConfigId);
     return { run };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || String(e) });
   }
 });
 
-app.post("/api/books/:slug/chapters/:filename/audit/stream", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1), filename: z.string().min(1) });
+app.post("/api/books/:bookId/chapters/:filename/audit/stream", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1), filename: z.string().min(1) });
   const bodySchema = z.object({ modelConfigId: z.string().nullable().optional() });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
@@ -2447,7 +2455,7 @@ app.post("/api/books/:slug/chapters/:filename/audit/stream", async (req, reply) 
   try {
     log("开始审计…");
     const run = await performAuditWithAiSdk({
-      slug: params.slug,
+      slug: params.bookId,
       filename: params.filename,
       modelConfigId: body.modelConfigId,
       onEvent: (e) => {
@@ -2464,8 +2472,8 @@ app.post("/api/books/:slug/chapters/:filename/audit/stream", async (req, reply) 
   }
 });
 
-app.post("/api/books/:slug/chapters/:filename/polish/stream", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1), filename: z.string().min(1) });
+app.post("/api/books/:bookId/chapters/:filename/polish/stream", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1), filename: z.string().min(1) });
   const bodySchema = z.object({
     modelConfigId: z.string().nullable().optional(),
     original: z.string().optional()
@@ -2488,7 +2496,7 @@ app.post("/api/books/:slug/chapters/:filename/polish/stream", async (req, reply)
   try {
     sseWrite(reply.raw, { type: "log", text: "开始润色…\n" });
     const { text } = await performPolishWithAiSdk({
-      slug: params.slug,
+      slug: params.bookId,
       filename: params.filename,
       modelConfigId: body.modelConfigId,
       original: body.original || "",
@@ -2504,8 +2512,8 @@ app.post("/api/books/:slug/chapters/:filename/polish/stream", async (req, reply)
   }
 });
 
-app.post("/api/books/:slug/chapters/:filename/expand/stream", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1), filename: z.string().min(1) });
+app.post("/api/books/:bookId/chapters/:filename/expand/stream", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1), filename: z.string().min(1) });
   const bodySchema = z.object({
     modelConfigId: z.string().nullable().optional(),
     original: z.string().optional(),
@@ -2530,7 +2538,7 @@ app.post("/api/books/:slug/chapters/:filename/expand/stream", async (req, reply)
   try {
     sseWrite(reply.raw, { type: "log", text: "开始调整…\n" });
     const { text } = await performExpandWithAiSdk({
-      slug: params.slug,
+      slug: params.bookId,
       filename: params.filename,
       modelConfigId: body.modelConfigId,
       original: body.original || "",
@@ -2548,13 +2556,13 @@ app.post("/api/books/:slug/chapters/:filename/expand/stream", async (req, reply)
   }
 });
 
-app.get("/api/books/:slug/audit/latest", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.get("/api/books/:bookId/audit/latest", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const querySchema = z.object({ chapter: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
   const query = querySchema.parse((req as any).query);
   try {
-    const run = await readAuditRun(getDataDir(), params.slug, query.chapter);
+    const run = await readAuditRun(getDataDir(), params.bookId, query.chapter);
     if (!run) return reply.code(404).send({ message: "Not found" });
     return { run };
   } catch {
@@ -2562,38 +2570,38 @@ app.get("/api/books/:slug/audit/latest", async (req, reply) => {
   }
 });
 
-app.get("/api/books/:slug/audit/stale-chapters", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.get("/api/books/:bookId/audit/stale-chapters", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const chapters = await listAuditChapterStale(getDataDir(), params.slug);
+  const chapters = await listAuditChapterStale(getDataDir(), params.bookId);
   return { chapters };
 });
 
-app.get("/api/books/:slug/chapters/draft-status", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.get("/api/books/:bookId/chapters/draft-status", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const outOfSync = await listChapterFilenamesOutOfSyncWithLatestDraft(getDataDir(), params.slug);
+  const outOfSync = await listChapterFilenamesOutOfSyncWithLatestDraft(getDataDir(), params.bookId);
   return { outOfSync };
 });
 
-app.get("/api/books/:slug/chapters/:filename/versions", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1), filename: z.string().min(1) });
+app.get("/api/books/:bookId/chapters/:filename/versions", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1), filename: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
   try {
-    return await listChapterVersions(getDataDir(), params.slug, params.filename);
+    return await listChapterVersions(getDataDir(), params.bookId, params.filename);
   } catch (e: any) {
     if (e instanceof ChapterVersionError) return reply.code(e.statusCode).send({ message: e.message });
     return reply.code(400).send({ message: e?.message || String(e) });
   }
 });
 
-app.post("/api/books/:slug/chapters/:filename/versions", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1), filename: z.string().min(1) });
+app.post("/api/books/:bookId/chapters/:filename/versions", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1), filename: z.string().min(1) });
   const bodySchema = z.object({ label: z.string().optional() });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body ?? {});
   try {
-    const version = await createChapterVersion(getDataDir(), params.slug, params.filename, {
+    const version = await createChapterVersion(getDataDir(), params.bookId, params.filename, {
       label: body.label
     });
     return { version };
@@ -2603,9 +2611,9 @@ app.post("/api/books/:slug/chapters/:filename/versions", async (req, reply) => {
   }
 });
 
-app.get("/api/books/:slug/chapters/:filename/versions/:versionId", async (req, reply) => {
+app.get("/api/books/:bookId/chapters/:filename/versions/:versionId", async (req, reply) => {
   const paramsSchema = z.object({
-    slug: z.string().min(1),
+    bookId: z.string().min(1),
     filename: z.string().min(1),
     versionId: z.string().min(1)
   });
@@ -2613,7 +2621,7 @@ app.get("/api/books/:slug/chapters/:filename/versions/:versionId", async (req, r
   try {
     return await readChapterVersionContent(
       getDataDir(),
-      params.slug,
+      params.bookId,
       params.filename,
       params.versionId
     );
@@ -2623,80 +2631,80 @@ app.get("/api/books/:slug/chapters/:filename/versions/:versionId", async (req, r
   }
 });
 
-app.post("/api/books/:slug/chapters/:filename/versions/:versionId/restore", async (req, reply) => {
+app.post("/api/books/:bookId/chapters/:filename/versions/:versionId/restore", async (req, reply) => {
   const paramsSchema = z.object({
-    slug: z.string().min(1),
+    bookId: z.string().min(1),
     filename: z.string().min(1),
     versionId: z.string().min(1)
   });
   const params = paramsSchema.parse((req as any).params);
   try {
-    return await restoreChapterVersion(getDataDir(), params.slug, params.filename, params.versionId);
+    return await restoreChapterVersion(getDataDir(), params.bookId, params.filename, params.versionId);
   } catch (e: any) {
     if (e instanceof ChapterVersionError) return reply.code(e.statusCode).send({ message: e.message });
     return reply.code(400).send({ message: e?.message || String(e) });
   }
 });
 
-app.get("/api/books/:slug/audit/analysis", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.get("/api/books/:bookId/audit/analysis", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const querySchema = z.object({ chapter: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
   const query = querySchema.parse((req as any).query);
   try {
-    const text = await readAuditAnalysisText(getDataDir(), params.slug, query.chapter);
+    const text = await readAuditAnalysisText(getDataDir(), params.bookId, query.chapter);
     return { text };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || String(e) });
   }
 });
 
-app.post("/api/books/:slug/audit/analysis/save", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/audit/analysis/save", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({ chapter: z.string().min(1), text: z.string().default("") });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
   try {
-    await writeAuditAnalysisText(getDataDir(), params.slug, body.chapter, body.text || "");
+    await writeAuditAnalysisText(getDataDir(), params.bookId, body.chapter, body.text || "");
     return { ok: true };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || String(e) });
   }
 });
 
-app.get("/api/books/:slug/audit/ledger", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.get("/api/books/:bookId/audit/ledger", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const ledger = await readAuditLedger(getDataDir(), params.slug);
+  const ledger = await readAuditLedger(getDataDir(), params.bookId);
   return { ledger };
 });
 
-app.get("/api/books/:slug/audit/characters", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.get("/api/books/:bookId/audit/characters", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const idx = await readAuditCharactersIndex(getDataDir(), params.slug);
+  const idx = await readAuditCharactersIndex(getDataDir(), params.bookId);
   return { index: idx };
 });
 
-app.post("/api/books/:slug/audit/characters/hide", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/audit/characters/hide", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({ name: z.string().min(1), hidden: z.boolean() });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
 
-  const idx = await readAuditCharactersIndex(getDataDir(), params.slug);
+  const idx = await readAuditCharactersIndex(getDataDir(), params.bookId);
   const set = new Set((idx.hiddenNames || []).map((x: any) => String(x)));
   const name = body.name.trim();
   if (body.hidden) set.add(name);
   else set.delete(name);
   idx.hiddenNames = [...set];
   idx.updatedAt = new Date().toISOString();
-  await writeAuditCharactersIndex(getDataDir(), params.slug, idx);
+  await writeAuditCharactersIndex(getDataDir(), params.bookId, idx);
   return { ok: true, index: idx };
 });
 
-app.post("/api/books/:slug/audit/characters/update", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/audit/characters/update", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     name: z.string().min(1),
     role: z.string().optional(),
@@ -2761,7 +2769,7 @@ app.post("/api/books/:slug/audit/characters/update", async (req, reply) => {
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
 
-  const idx = await readAuditCharactersIndex(getDataDir(), params.slug);
+  const idx = await readAuditCharactersIndex(getDataDir(), params.bookId);
   const name = body.name.trim();
   const i = (idx.characters || []).findIndex((c: any) => String(c?.name || "").trim() === name);
   if (i < 0) return reply.code(404).send({ message: "角色不存在" });
@@ -2918,12 +2926,12 @@ app.post("/api/books/:slug/audit/characters/update", async (req, reply) => {
     updatedAt: now
   };
   idx.updatedAt = now;
-  await writeAuditCharactersIndex(getDataDir(), params.slug, idx);
+  await writeAuditCharactersIndex(getDataDir(), params.bookId, idx);
   return { ok: true, index: idx };
 });
 
-app.post("/api/books/:slug/audit/characters/merge", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/audit/characters/merge", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     primaryName: z.string().min(1),
     secondaryNames: z.array(z.string().min(1)).min(1)
@@ -2939,7 +2947,7 @@ app.post("/api/books/:slug/audit/characters/merge", async (req, reply) => {
     return reply.code(400).send({ message: "参数非法" });
   }
 
-  const idx = await readAuditCharactersIndex(getDataDir(), params.slug);
+  const idx = await readAuditCharactersIndex(getDataDir(), params.bookId);
   const now = new Date().toISOString();
   const normStr = (v: any) => (typeof v === "string" ? v.trim() : "");
   const uniqStrs = (arr: any) =>
@@ -3081,12 +3089,12 @@ app.post("/api/books/:slug/audit/characters/merge", async (req, reply) => {
     String(a?.name || "").localeCompare(String(b?.name || ""), "zh-Hans-CN")
   );
   idx.updatedAt = now;
-  await writeAuditCharactersIndex(getDataDir(), params.slug, idx);
+  await writeAuditCharactersIndex(getDataDir(), params.bookId, idx);
   return { ok: true, index: idx, mergedNames: secondaryNames };
 });
 
-app.post("/api/books/:slug/audit/characters/merge/preview", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/audit/characters/merge/preview", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     primaryName: z.string().min(1),
     secondaryNames: z.array(z.string().min(1)).min(1),
@@ -3106,7 +3114,7 @@ app.post("/api/books/:slug/audit/characters/merge/preview", async (req, reply) =
     const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
     if (!cfg) throw new Error("未配置模型");
 
-    const idx = await readAuditCharactersIndex(getDataDir(), params.slug);
+    const idx = await readAuditCharactersIndex(getDataDir(), params.bookId);
     const chars = Array.isArray(idx.characters) ? idx.characters : [];
     const primary = chars.find((c: any) => String(c?.name || "").trim() === primaryName);
     const secondaryProfiles = secondaryNames
@@ -3129,8 +3137,8 @@ app.post("/api/books/:slug/audit/characters/merge/preview", async (req, reply) =
   }
 });
 
-app.post("/api/books/:slug/audit/characters/merge/apply", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/audit/characters/merge/apply", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     primaryName: z.string().min(1),
     secondaryNames: z.array(z.string().min(1)).min(1),
@@ -3145,7 +3153,7 @@ app.post("/api/books/:slug/audit/characters/merge/apply", async (req, reply) => 
   if (!primaryName || secondaryNames.length < 1) return reply.code(400).send({ message: "参数非法" });
   if (!body.draft || typeof body.draft !== "object") return reply.code(400).send({ message: "draft 非法" });
 
-  const idx = await readAuditCharactersIndex(getDataDir(), params.slug);
+  const idx = await readAuditCharactersIndex(getDataDir(), params.bookId);
   const chars = Array.isArray(idx.characters) ? idx.characters : [];
   const pi = chars.findIndex((c: any) => String(c?.name || "").trim() === primaryName);
   if (pi < 0) return reply.code(404).send({ message: "角色不存在" });
@@ -3220,35 +3228,35 @@ app.post("/api/books/:slug/audit/characters/merge/apply", async (req, reply) => 
 
   idx.characters = nextChars.sort((a: any, b: any) => String(a?.name || "").localeCompare(String(b?.name || ""), "zh-Hans-CN"));
   idx.updatedAt = now;
-  await writeAuditCharactersIndex(getDataDir(), params.slug, idx);
+  await writeAuditCharactersIndex(getDataDir(), params.bookId, idx);
   return { ok: true, index: idx };
 });
 
-app.get("/api/books/:slug/audit/places", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.get("/api/books/:bookId/audit/places", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const idx = await readAuditPlacesIndex(getDataDir(), params.slug);
+  const idx = await readAuditPlacesIndex(getDataDir(), params.bookId);
   return { index: idx };
 });
 
-app.post("/api/books/:slug/audit/places/hide", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/audit/places/hide", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({ name: z.string().min(1), hidden: z.boolean() });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const idx = await readAuditPlacesIndex(getDataDir(), params.slug);
+  const idx = await readAuditPlacesIndex(getDataDir(), params.bookId);
   const set = new Set((idx.hiddenNames || []).map((x: any) => String(x)));
   const name = body.name.trim();
   if (body.hidden) set.add(name);
   else set.delete(name);
   idx.hiddenNames = [...set];
   idx.updatedAt = new Date().toISOString();
-  await writeAuditPlacesIndex(getDataDir(), params.slug, idx);
+  await writeAuditPlacesIndex(getDataDir(), params.bookId, idx);
   return { ok: true, index: idx };
 });
 
-app.post("/api/books/:slug/audit/places/update", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/audit/places/update", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     name: z.string().min(1),
     description: z.string().optional(),
@@ -3256,7 +3264,7 @@ app.post("/api/books/:slug/audit/places/update", async (req, reply) => {
   });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const idx = await readAuditPlacesIndex(getDataDir(), params.slug);
+  const idx = await readAuditPlacesIndex(getDataDir(), params.bookId);
   const name = body.name.trim();
   const i = (idx.places || []).findIndex((p: any) => String(p?.name || "").trim() === name);
   if (i < 0) return reply.code(404).send({ message: "地点不存在" });
@@ -3270,12 +3278,12 @@ app.post("/api/books/:slug/audit/places/update", async (req, reply) => {
     updatedAt: now
   };
   idx.updatedAt = now;
-  await writeAuditPlacesIndex(getDataDir(), params.slug, idx);
+  await writeAuditPlacesIndex(getDataDir(), params.bookId, idx);
   return { ok: true, index: idx };
 });
 
-app.post("/api/books/:slug/audit/places/merge/preview", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/audit/places/merge/preview", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     primaryName: z.string().min(1),
     secondaryNames: z.array(z.string().min(1)).min(1),
@@ -3295,7 +3303,7 @@ app.post("/api/books/:slug/audit/places/merge/preview", async (req, reply) => {
     const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
     if (!cfg) throw new Error("未配置模型");
 
-    const idx = await readAuditPlacesIndex(getDataDir(), params.slug);
+    const idx = await readAuditPlacesIndex(getDataDir(), params.bookId);
     const places = Array.isArray(idx.places) ? idx.places : [];
     const primary = places.find((p: any) => String(p?.name || "").trim() === primaryName);
     const secondary = secondaryNames
@@ -3323,8 +3331,8 @@ app.post("/api/books/:slug/audit/places/merge/preview", async (req, reply) => {
   }
 });
 
-app.post("/api/books/:slug/audit/places/merge/apply", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/audit/places/merge/apply", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     primaryName: z.string().min(1),
     secondaryNames: z.array(z.string().min(1)).min(1),
@@ -3339,7 +3347,7 @@ app.post("/api/books/:slug/audit/places/merge/apply", async (req, reply) => {
   if (!primaryName || secondaryNames.length < 1) return reply.code(400).send({ message: "参数非法" });
   if (!body.draft || typeof body.draft !== "object") return reply.code(400).send({ message: "draft 非法" });
 
-  const idx = await readAuditPlacesIndex(getDataDir(), params.slug);
+  const idx = await readAuditPlacesIndex(getDataDir(), params.bookId);
   const places = Array.isArray(idx.places) ? idx.places : [];
   const pi = places.findIndex((p: any) => String(p?.name || "").trim() === primaryName);
   if (pi < 0) return reply.code(404).send({ message: "地点不存在" });
@@ -3389,35 +3397,35 @@ app.post("/api/books/:slug/audit/places/merge/apply", async (req, reply) => {
 
   idx.places = nextPlaces.sort((a: any, b: any) => String(a?.name || "").localeCompare(String(b?.name || ""), "zh-Hans-CN"));
   idx.updatedAt = now;
-  await writeAuditPlacesIndex(getDataDir(), params.slug, idx);
+  await writeAuditPlacesIndex(getDataDir(), params.bookId, idx);
   return { ok: true, index: idx };
 });
 
-app.get("/api/books/:slug/audit/orgs", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.get("/api/books/:bookId/audit/orgs", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const idx = await readAuditOrgsIndex(getDataDir(), params.slug);
+  const idx = await readAuditOrgsIndex(getDataDir(), params.bookId);
   return { index: idx };
 });
 
-app.post("/api/books/:slug/audit/orgs/hide", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/audit/orgs/hide", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({ name: z.string().min(1), hidden: z.boolean() });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const idx = await readAuditOrgsIndex(getDataDir(), params.slug);
+  const idx = await readAuditOrgsIndex(getDataDir(), params.bookId);
   const set = new Set((idx.hiddenNames || []).map((x: any) => String(x)));
   const name = body.name.trim();
   if (body.hidden) set.add(name);
   else set.delete(name);
   idx.hiddenNames = [...set];
   idx.updatedAt = new Date().toISOString();
-  await writeAuditOrgsIndex(getDataDir(), params.slug, idx);
+  await writeAuditOrgsIndex(getDataDir(), params.bookId, idx);
   return { ok: true, index: idx };
 });
 
-app.post("/api/books/:slug/audit/orgs/update", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/audit/orgs/update", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     name: z.string().min(1),
     description: z.string().optional(),
@@ -3425,7 +3433,7 @@ app.post("/api/books/:slug/audit/orgs/update", async (req, reply) => {
   });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const idx = await readAuditOrgsIndex(getDataDir(), params.slug);
+  const idx = await readAuditOrgsIndex(getDataDir(), params.bookId);
   const name = body.name.trim();
   const i = (idx.orgs || []).findIndex((o: any) => String(o?.name || "").trim() === name);
   if (i < 0) return reply.code(404).send({ message: "组织不存在" });
@@ -3439,30 +3447,30 @@ app.post("/api/books/:slug/audit/orgs/update", async (req, reply) => {
     updatedAt: now
   };
   idx.updatedAt = now;
-  await writeAuditOrgsIndex(getDataDir(), params.slug, idx);
+  await writeAuditOrgsIndex(getDataDir(), params.bookId, idx);
   return { ok: true, index: idx };
 });
 
-app.get("/api/books/:slug/audit/foreshadows", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.get("/api/books/:bookId/audit/foreshadows", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const idx = await readAuditForeshadowsIndex(getDataDir(), params.slug);
+  const idx = await readAuditForeshadowsIndex(getDataDir(), params.bookId);
   return { index: idx };
 });
 
-app.get("/api/books/:slug/audit/progress", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.get("/api/books/:bookId/audit/progress", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const idx = await readAuditProgressIndex(getDataDir(), params.slug);
+  const idx = await readAuditProgressIndex(getDataDir(), params.bookId);
   return { index: idx };
 });
 
-app.post("/api/books/:slug/audit/progress/mark", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/audit/progress/mark", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({ id: z.string().min(1), status: z.enum(["open", "progress", "done"]) });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const idx = await readAuditProgressIndex(getDataDir(), params.slug);
+  const idx = await readAuditProgressIndex(getDataDir(), params.bookId);
   const id = body.id.trim();
   const i = (idx.items || []).findIndex((x: any) => String(x?.id || "").trim() === id);
   if (i < 0) return reply.code(404).send({ message: "事项不存在" });
@@ -3470,35 +3478,35 @@ app.post("/api/books/:slug/audit/progress/mark", async (req, reply) => {
   const prev = idx.items[i] || {};
   idx.items[i] = { ...prev, id, status: body.status, updatedAt: now };
   idx.updatedAt = now;
-  await writeAuditProgressIndex(getDataDir(), params.slug, idx as any);
+  await writeAuditProgressIndex(getDataDir(), params.bookId, idx as any);
   return { ok: true, index: idx };
 });
 
-app.post("/api/books/:slug/audit/progress/cleanupDone", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/audit/progress/cleanupDone", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const idx = await readAuditProgressIndex(getDataDir(), params.slug);
+  const idx = await readAuditProgressIndex(getDataDir(), params.bookId);
   const now = new Date().toISOString();
   idx.items = (idx.items || []).filter((x: any) => String(x?.status || "") !== "done");
   idx.updatedAt = now;
-  await writeAuditProgressIndex(getDataDir(), params.slug, idx as any);
+  await writeAuditProgressIndex(getDataDir(), params.bookId, idx as any);
   return { ok: true, index: idx };
 });
 
-app.get("/api/books/:slug/writing-pack", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.get("/api/books/:bookId/writing-pack", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const querySchema = z.object({ chapter: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
   const query = querySchema.safeParse((req as any).query);
   if (!query.success) return reply.code(400).send({ message: "缺少 chapter" });
   const chapterFilename = query.data.chapter.trim();
   const chapterId = chapterFilename.replace(/\.md$/, "");
-  const pack = await readWritingPack(getDataDir(), params.slug, chapterId);
+  const pack = await readWritingPack(getDataDir(), params.bookId, chapterId);
   return { pack };
 });
 
-app.post("/api/books/:slug/writing-pack/generate", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/writing-pack/generate", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     chapterFilename: z.string().min(1),
     modelConfigId: z.string().nullable().optional()
@@ -3509,7 +3517,7 @@ app.post("/api/books/:slug/writing-pack/generate", async (req, reply) => {
   const chapterId = chapterFilename.replace(/\.md$/, "");
 
   try {
-    const chapters = await listChapters(getDataDir(), params.slug);
+    const chapters = await listChapters(getDataDir(), params.bookId);
     const targetMeta = chapters.find((c: any) => String(c?.filename || "").trim() === chapterFilename);
     const chapterNo = parseChapterNoFromFilename(chapterFilename);
     const chapterTitle = String(targetMeta?.title || "").trim() || chapterFilename.replace(/\.md$/, "");
@@ -3537,7 +3545,7 @@ app.post("/api/books/:slug/writing-pack/generate", async (req, reply) => {
     for (const m of prevMetas.slice(-N)) {
       const fn = String(m?.filename || "").trim();
       if (!fn) continue;
-      const run = await readAuditRun(getDataDir(), params.slug, fn).catch(() => null);
+      const run = await readAuditRun(getDataDir(), params.bookId, fn).catch(() => null);
       const gist = String((run as any)?.gistL1 || "").trim();
       const chars = Array.isArray((run as any)?.entities?.characters) ? (run as any).entities.characters : [];
       const events = Array.isArray((run as any)?.entities?.events) ? (run as any).entities.events : [];
@@ -3585,12 +3593,12 @@ app.post("/api/books/:slug/writing-pack/generate", async (req, reply) => {
       });
     }
 
-    const timelineIndex = await readTimelineIndex(getDataDir(), params.slug).catch(() => null as any);
+    const timelineIndex = await readTimelineIndex(getDataDir(), params.bookId).catch(() => null as any);
     const compressedRanges = Array.isArray(timelineIndex?.compressedRanges)
       ? timelineIndex.compressedRanges.slice(-M)
       : [];
 
-    const progressIndex = await readAuditProgressIndex(getDataDir(), params.slug).catch(() => ({ items: [] } as any));
+    const progressIndex = await readAuditProgressIndex(getDataDir(), params.bookId).catch(() => ({ items: [] } as any));
     const progressAll = Array.isArray((progressIndex as any)?.items) ? (progressIndex as any).items : [];
     const progressOpen = progressAll.filter((x: any) => String(x?.status || "") !== "done");
     const relScore = (it: any) => {
@@ -3621,7 +3629,7 @@ app.post("/api/books/:slug/writing-pack/generate", async (req, reply) => {
       }))
       .filter((x: any) => x.id && x.title);
 
-    const foreshadowsIndex = await readAuditForeshadowsIndex(getDataDir(), params.slug).catch(() => null as any);
+    const foreshadowsIndex = await readAuditForeshadowsIndex(getDataDir(), params.bookId).catch(() => null as any);
     const hidden = new Set((foreshadowsIndex?.hiddenIds || []).map((x: any) => String(x)));
     const foreshadowsAll = Array.isArray(foreshadowsIndex?.foreshadows) ? foreshadowsIndex.foreshadows : [];
     const foreshadowsOpen = foreshadowsAll.filter(
@@ -3706,15 +3714,15 @@ app.post("/api/books/:slug/writing-pack/generate", async (req, reply) => {
     };
 
     // 最终条数保护（progress<=4, foreshadows<=2, risks<=3 已限制）
-    await writeWritingPack(getDataDir(), params.slug, chapterId, pack);
+    await writeWritingPack(getDataDir(), params.bookId, chapterId, pack);
     return { ok: true, pack };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || String(e) });
   }
 });
 
-app.post("/api/books/:slug/chapters/:filename/title/suggest", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1), filename: z.string().min(1) });
+app.post("/api/books/:bookId/chapters/:filename/title/suggest", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1), filename: z.string().min(1) });
   const bodySchema = z.object({
     modelConfigId: z.string().nullable().optional(),
     count: z.number().int().min(2).max(8).optional(),
@@ -3731,7 +3739,7 @@ app.post("/api/books/:slug/chapters/:filename/title/suggest", async (req, reply)
     const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
     if (!cfg) throw new Error("未配置模型");
 
-    const raw = await readChapter(getDataDir(), params.slug, params.filename);
+    const raw = await readChapter(getDataDir(), params.bookId, params.filename);
     const content = String(raw || "").slice(0, 12000);
     const n = body.count ?? 5;
     const style = body.style ?? "boom";
@@ -3765,8 +3773,8 @@ app.post("/api/books/:slug/chapters/:filename/title/suggest", async (req, reply)
   }
 });
 
-app.post("/api/books/:slug/chapters/:filename/title/suggest/batch", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1), filename: z.string().min(1) });
+app.post("/api/books/:bookId/chapters/:filename/title/suggest/batch", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1), filename: z.string().min(1) });
   const bodySchema = z.object({
     modelConfigId: z.string().nullable().optional(),
     count: z.number().int().min(2).max(8).optional(),
@@ -3799,7 +3807,7 @@ app.post("/api/books/:slug/chapters/:filename/title/suggest/batch", async (req, 
     const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
     if (!cfg) throw new Error("未配置模型");
 
-    const raw = await readChapter(getDataDir(), params.slug, params.filename);
+    const raw = await readChapter(getDataDir(), params.bookId, params.filename);
     const content = String(raw || "").slice(0, 12000);
     const n = body.count ?? 5;
     const styles = body.styles?.length
@@ -3831,8 +3839,8 @@ app.post("/api/books/:slug/chapters/:filename/title/suggest/batch", async (req, 
   }
 });
 
-app.post("/api/books/:slug/search", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/search", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     q: z.string().min(1),
     // 兼容旧前端：scope 参数已忽略（现在只搜索章节正文）
@@ -3857,7 +3865,7 @@ app.post("/api/books/:slug/search", async (req, reply) => {
   const offset = body.offset ?? 0;
 
   try {
-    const cache = await buildOrRefreshBookSearchCache(params.slug);
+    const cache = await buildOrRefreshBookSearchCache(params.bookId);
     const hits: SearchHit[] = [];
 
     const docs = [...cache.docsByPath.values()];
@@ -3924,8 +3932,8 @@ app.post("/api/books/:slug/search", async (req, reply) => {
   }
 });
 
-app.post("/api/books/:slug/audit/foreshadows/create", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/audit/foreshadows/create", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     title: z.string().min(1),
     status: z.enum(["open", "progress", "closed"]).optional(),
@@ -3935,7 +3943,7 @@ app.post("/api/books/:slug/audit/foreshadows/create", async (req, reply) => {
   });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const idx = await readAuditForeshadowsIndex(getDataDir(), params.slug);
+  const idx = await readAuditForeshadowsIndex(getDataDir(), params.bookId);
   const title = body.title.trim();
   const id = title.replace(/\s+/g, " ").slice(0, 160);
   if ((idx.foreshadows || []).some((f: any) => String(f?.id || "").trim() === id)) {
@@ -3958,12 +3966,12 @@ app.post("/api/books/:slug/audit/foreshadows/create", async (req, reply) => {
     updatedAt: now
   });
   idx.updatedAt = now;
-  await writeAuditForeshadowsIndex(getDataDir(), params.slug, idx);
+  await writeAuditForeshadowsIndex(getDataDir(), params.bookId, idx);
   return { ok: true, index: idx };
 });
 
-app.post("/api/books/:slug/audit/foreshadows/update", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/audit/foreshadows/update", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     id: z.string().min(1),
     title: z.string().optional(),
@@ -3974,7 +3982,7 @@ app.post("/api/books/:slug/audit/foreshadows/update", async (req, reply) => {
   });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const idx = await readAuditForeshadowsIndex(getDataDir(), params.slug);
+  const idx = await readAuditForeshadowsIndex(getDataDir(), params.bookId);
   const id = body.id.trim();
   const i = (idx.foreshadows || []).findIndex((f: any) => String(f?.id || "").trim() === id);
   if (i < 0) return reply.code(404).send({ message: "伏笔不存在" });
@@ -4000,52 +4008,52 @@ app.post("/api/books/:slug/audit/foreshadows/update", async (req, reply) => {
     updatedAt: now
   };
   idx.updatedAt = now;
-  await writeAuditForeshadowsIndex(getDataDir(), params.slug, idx);
+  await writeAuditForeshadowsIndex(getDataDir(), params.bookId, idx);
   return { ok: true, index: idx };
 });
 
-app.post("/api/books/:slug/audit/foreshadows/hide", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/audit/foreshadows/hide", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({ id: z.string().min(1), hidden: z.boolean() });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const idx = await readAuditForeshadowsIndex(getDataDir(), params.slug);
+  const idx = await readAuditForeshadowsIndex(getDataDir(), params.bookId);
   const set = new Set((idx.hiddenIds || []).map((x: any) => String(x)));
   const id = body.id.trim();
   if (body.hidden) set.add(id);
   else set.delete(id);
   idx.hiddenIds = [...set];
   idx.updatedAt = new Date().toISOString();
-  await writeAuditForeshadowsIndex(getDataDir(), params.slug, idx);
+  await writeAuditForeshadowsIndex(getDataDir(), params.bookId, idx);
   return { ok: true, index: idx };
 });
 
-app.get("/api/books/:slug/timeline/index", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.get("/api/books/:bookId/timeline/index", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const idx = await readTimelineIndex(getDataDir(), params.slug);
+  const idx = await readTimelineIndex(getDataDir(), params.bookId);
   return { index: idx };
 });
 
-app.post("/api/books/:slug/timeline/event/mark", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/timeline/event/mark", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({ id: z.string().min(1), status: z.enum(["open", "done"]) });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
 
-  const idx = normalizeTimelineIndex(await readTimelineIndex(getDataDir(), params.slug));
+  const idx = normalizeTimelineIndex(await readTimelineIndex(getDataDir(), params.bookId));
   const set = new Set(idx.manual?.doneEventIds ?? []);
   if (body.status === "done") set.add(body.id);
   else set.delete(body.id);
   idx.manual.doneEventIds = [...set];
   idx.updatedAt = new Date().toISOString();
-  await writeTimelineIndex(getDataDir(), params.slug, idx);
-  await writeStoryTimelineMarkdownFromIndex(getDataDir(), params.slug, idx);
+  await writeTimelineIndex(getDataDir(), params.bookId, idx);
+  await writeStoryTimelineMarkdownFromIndex(getDataDir(), params.bookId, idx);
   return { ok: true, index: idx };
 });
 
-app.post("/api/books/:slug/timeline/compress", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/timeline/compress", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     startChapter: z.number().int().min(1),
     endChapter: z.number().int().min(1),
@@ -4062,7 +4070,7 @@ app.post("/api/books/:slug/timeline/compress", async (req, reply) => {
   const a = Math.min(body.startChapter, body.endChapter);
   const b = Math.max(body.startChapter, body.endChapter);
 
-  const idx = normalizeTimelineIndex(await readTimelineIndex(getDataDir(), params.slug));
+  const idx = normalizeTimelineIndex(await readTimelineIndex(getDataDir(), params.bookId));
   const chapters = idx.chapters.filter((c) => c.chapter >= a && c.chapter <= b);
   if (chapters.length === 0) return reply.code(400).send({ message: "该区间没有已分析的章节摘要" });
 
@@ -4088,28 +4096,28 @@ app.post("/api/books/:slug/timeline/compress", async (req, reply) => {
   idx.compressedRanges.sort((x, y) => x.startChapter - y.startChapter || x.endChapter - y.endChapter);
   idx.updatedAt = now;
 
-  await writeTimelineIndex(getDataDir(), params.slug, idx);
-  await writeStoryTimelineMarkdownFromIndex(getDataDir(), params.slug, idx);
+  await writeTimelineIndex(getDataDir(), params.bookId, idx);
+  await writeStoryTimelineMarkdownFromIndex(getDataDir(), params.bookId, idx);
   return { ok: true, index: idx };
 });
 
-app.post("/api/books/:slug/timeline/range/delete", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/timeline/range/delete", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({ startChapter: z.number().int().min(1), endChapter: z.number().int().min(1) });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
 
   const a = Math.min(body.startChapter, body.endChapter);
   const b = Math.max(body.startChapter, body.endChapter);
-  const idx = normalizeTimelineIndex(await readTimelineIndex(getDataDir(), params.slug));
+  const idx = normalizeTimelineIndex(await readTimelineIndex(getDataDir(), params.bookId));
 
   const before = idx.compressedRanges.length;
   idx.compressedRanges = idx.compressedRanges.filter((r) => !(r.startChapter === a && r.endChapter === b));
   if (idx.compressedRanges.length === before) return reply.code(404).send({ message: "区间不存在" });
 
   idx.updatedAt = new Date().toISOString();
-  await writeTimelineIndex(getDataDir(), params.slug, idx);
-  await writeStoryTimelineMarkdownFromIndex(getDataDir(), params.slug, idx);
+  await writeTimelineIndex(getDataDir(), params.bookId, idx);
+  await writeStoryTimelineMarkdownFromIndex(getDataDir(), params.bookId, idx);
   return { ok: true, index: idx };
 });
 
@@ -4121,15 +4129,15 @@ app.post("/api/books/:slug/timeline/range/delete", async (req, reply) => {
 // 灵感库（meta/inspiration.json）
 // -----------------------------
 
-app.get("/api/books/:slug/inspiration", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.get("/api/books/:bookId/inspiration", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const idx = normalizeInspirationIndex(await readInspirationIndex(getDataDir(), params.slug));
+  const idx = normalizeInspirationIndex(await readInspirationIndex(getDataDir(), params.bookId));
   return { index: idx };
 });
 
-app.post("/api/books/:slug/inspiration/upsert", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/inspiration/upsert", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     item: z.object({
       id: z.string().optional(),
@@ -4147,7 +4155,7 @@ app.post("/api/books/:slug/inspiration/upsert", async (req, reply) => {
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
 
-  const idx = normalizeInspirationIndex(await readInspirationIndex(getDataDir(), params.slug));
+  const idx = normalizeInspirationIndex(await readInspirationIndex(getDataDir(), params.bookId));
   const now = new Date().toISOString();
   const incoming = normalizeIdeaItem({ ...body.item, updatedAt: now, createdAt: (body.item as any).createdAt || now });
   if (!incoming) return reply.code(400).send({ message: "Invalid item" });
@@ -4158,12 +4166,12 @@ app.post("/api/books/:slug/inspiration/upsert", async (req, reply) => {
     idx.items.unshift(incoming);
   }
   idx.updatedAt = now;
-  await writeInspirationIndex(getDataDir(), params.slug, idx);
+  await writeInspirationIndex(getDataDir(), params.bookId, idx);
   return { ok: true, index: idx, item: incoming };
 });
 
-app.post("/api/books/:slug/inspiration/status", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/inspiration/status", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     id: z.string().min(1),
     status: z.enum(["active", "hidden", "deleted"])
@@ -4171,30 +4179,30 @@ app.post("/api/books/:slug/inspiration/status", async (req) => {
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
 
-  const idx = normalizeInspirationIndex(await readInspirationIndex(getDataDir(), params.slug));
+  const idx = normalizeInspirationIndex(await readInspirationIndex(getDataDir(), params.bookId));
   const i = idx.items.findIndex((x) => x.id === body.id);
   if (i < 0) return { ok: false, message: "Not found", index: idx };
   const now = new Date().toISOString();
   idx.items[i] = { ...idx.items[i], status: body.status, updatedAt: now };
   idx.updatedAt = now;
-  await writeInspirationIndex(getDataDir(), params.slug, idx);
+  await writeInspirationIndex(getDataDir(), params.bookId, idx);
   return { ok: true, index: idx };
 });
 
-app.post("/api/books/:slug/inspiration/purge", async (req) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/inspiration/purge", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const idx = normalizeInspirationIndex(await readInspirationIndex(getDataDir(), params.slug));
+  const idx = normalizeInspirationIndex(await readInspirationIndex(getDataDir(), params.bookId));
   const before = idx.items.length;
   idx.items = idx.items.filter((x) => x.status !== "deleted");
   const purged = before - idx.items.length;
   idx.updatedAt = new Date().toISOString();
-  await writeInspirationIndex(getDataDir(), params.slug, idx);
+  await writeInspirationIndex(getDataDir(), params.bookId, idx);
   return { ok: true, index: idx, purged };
 });
 
-app.post("/api/books/:slug/inspiration/generate", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/inspiration/generate", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     modelConfigId: z.string().nullable().optional(),
     kind: z.enum(["character", "place", "org", "item", "event", "lore", "technique", "other"]),
@@ -4215,21 +4223,21 @@ app.post("/api/books/:slug/inspiration/generate", async (req, reply) => {
   const count = body.count ?? 3;
   const useMemory = Boolean(body.useMemory);
   const kind = body.kind;
-  const timelineIndex = await readTimelineIndex(getDataDir(), params.slug);
+  const timelineIndex = await readTimelineIndex(getDataDir(), params.bookId);
   const memoryText = useMemory
     ? kind === "org"
       ? buildMultiChapterCompressedMemoryOnly(timelineIndex)
       : buildMemoryContextFromTimeline(timelineIndex)
     : "";
-  const knownCharacterNames = await listKnownCharacterNames(getDataDir(), params.slug);
-  const knownPlaceNames = await listKnownPlaceNames(getDataDir(), params.slug);
+  const knownCharacterNames = await listKnownCharacterNames(getDataDir(), params.bookId);
+  const knownPlaceNames = await listKnownPlaceNames(getDataDir(), params.bookId);
   const opts = body.options ?? {};
   const free = String(body.freeText || "").trim();
   const itemOwnerCharacterName =
     kind === "item" || kind === "technique" ? String(body.itemOwnerCharacterName || "").trim() : "";
   const itemOwnerInfo =
     kind === "item" || kind === "technique"
-      ? await resolveItemOwnerInfo(getDataDir(), params.slug, itemOwnerCharacterName || undefined)
+      ? await resolveItemOwnerInfo(getDataDir(), params.bookId, itemOwnerCharacterName || undefined)
       : null;
 
   const prompt = buildInspirationPrompt({
@@ -4258,7 +4266,7 @@ app.post("/api/books/:slug/inspiration/generate", async (req, reply) => {
   const cards = Array.isArray(arr) ? arr : [];
   if (!cards.length) return reply.code(400).send({ message: "模型未返回有效 JSON 数组" });
 
-  const idx = normalizeInspirationIndex(await readInspirationIndex(getDataDir(), params.slug));
+  const idx = normalizeInspirationIndex(await readInspirationIndex(getDataDir(), params.bookId));
   const now = new Date().toISOString();
   const items: IdeaItem[] = [];
   const stringifyInspKind =
@@ -4320,12 +4328,12 @@ app.post("/api/books/:slug/inspiration/generate", async (req, reply) => {
   if (!items.length) return reply.code(400).send({ message: "模型输出为空或不可用" });
   idx.items = [...items, ...idx.items];
   idx.updatedAt = now;
-  await writeInspirationIndex(getDataDir(), params.slug, idx);
+  await writeInspirationIndex(getDataDir(), params.bookId, idx);
   return { ok: true, index: idx, items, debug: { prompt, rawText } };
 });
 
-app.post("/api/books/:slug/inspiration/generate-preview", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/inspiration/generate-preview", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     modelConfigId: z.string().nullable().optional(),
     kind: z.enum(["character", "place", "org", "item", "event", "lore", "technique", "other"]),
@@ -4346,14 +4354,14 @@ app.post("/api/books/:slug/inspiration/generate-preview", async (req, reply) => 
   const count = body.count ?? 3;
   const useMemory = Boolean(body.useMemory);
   const kind = body.kind;
-  const timelineIndex = await readTimelineIndex(getDataDir(), params.slug);
+  const timelineIndex = await readTimelineIndex(getDataDir(), params.bookId);
   const memoryText = useMemory
     ? kind === "org"
       ? buildMultiChapterCompressedMemoryOnly(timelineIndex)
       : buildMemoryContextFromTimeline(timelineIndex)
     : "";
-  const knownCharacterNames = await listKnownCharacterNames(getDataDir(), params.slug);
-  const knownPlaceNames = await listKnownPlaceNames(getDataDir(), params.slug);
+  const knownCharacterNames = await listKnownCharacterNames(getDataDir(), params.bookId);
+  const knownPlaceNames = await listKnownPlaceNames(getDataDir(), params.bookId);
 
   const opts = body.options ?? {};
   const free = String(body.freeText || "").trim();
@@ -4361,7 +4369,7 @@ app.post("/api/books/:slug/inspiration/generate-preview", async (req, reply) => 
     kind === "item" || kind === "technique" ? String(body.itemOwnerCharacterName || "").trim() : "";
   const itemOwnerInfo =
     kind === "item" || kind === "technique"
-      ? await resolveItemOwnerInfo(getDataDir(), params.slug, itemOwnerCharacterName || undefined)
+      ? await resolveItemOwnerInfo(getDataDir(), params.bookId, itemOwnerCharacterName || undefined)
       : null;
 
   const prompt = buildInspirationPrompt({
@@ -4451,8 +4459,8 @@ app.post("/api/books/:slug/inspiration/generate-preview", async (req, reply) => 
   return { ok: true, items, debug: { prompt, rawText } };
 });
 
-app.post("/api/books/:slug/inspiration/variant", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/books/:bookId/inspiration/variant", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     modelConfigId: z.string().nullable().optional(),
     id: z.string().min(1),
@@ -4468,7 +4476,7 @@ app.post("/api/books/:slug/inspiration/variant", async (req, reply) => {
   const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
   if (!cfg) return reply.code(400).send({ message: "未配置模型" });
 
-  const idx = normalizeInspirationIndex(await readInspirationIndex(getDataDir(), params.slug));
+  const idx = normalizeInspirationIndex(await readInspirationIndex(getDataDir(), params.bookId));
   const base = idx.items.find((x) => x.id === body.id);
   if (!base) return reply.code(404).send({ message: "原条目不存在" });
 
@@ -4520,7 +4528,7 @@ app.post("/api/books/:slug/inspiration/variant", async (req, reply) => {
   if (!items.length) return reply.code(400).send({ message: "模型输出为空或不可用" });
   idx.items = [...items, ...idx.items];
   idx.updatedAt = now;
-  await writeInspirationIndex(getDataDir(), params.slug, idx);
+  await writeInspirationIndex(getDataDir(), params.bookId, idx);
   return { ok: true, index: idx, items, debug: { prompt, rawText } };
 });
 
@@ -4537,26 +4545,26 @@ app.post("/api/novels", async (req, reply) => {
     synopsis: z.string().max(20000).optional()
   });
   const body = bodySchema.parse((req as any).body);
-  const slug = safeSlug(body.slug?.trim() || body.title);
-  if (!slug) return reply.code(400).send({ message: "Invalid slug/title" });
+  const bookId = crypto.randomUUID();
+  const displaySlug = safeSlug(body.slug?.trim() || body.title) || undefined;
 
   try {
-    const meta = await createNovel(getDataDir(), slug, body.title, body.synopsis);
+    const meta = await createNovel(getDataDir(), bookId, body.title, body.synopsis, { slug: displaySlug });
     return { novel: novelSummaryFromMeta(meta, 0, []) };
   } catch (e: any) {
     return reply.code(409).send({ message: e?.message || "Conflict" });
   }
 });
 
-app.get("/api/novels/:slug/chapters", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.get("/api/novels/:bookId/chapters", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
-  const chapters = await listChapters(getDataDir(), params.slug);
+  const chapters = await listChapters(getDataDir(), params.bookId);
   return { chapters };
 });
 
-app.post("/api/novels/:slug/chapters", async (req, reply) => {
-  const paramsSchema = z.object({ slug: z.string().min(1) });
+app.post("/api/novels/:bookId/chapters", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({
     title: z.string().min(1),
     content: z.string().optional(),
@@ -4564,27 +4572,27 @@ app.post("/api/novels/:slug/chapters", async (req, reply) => {
   });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  const chapter = await createChapter(getDataDir(), params.slug, body.title, body.content, body.chapterIndex);
+  const chapter = await createChapter(getDataDir(), params.bookId, body.title, body.content, body.chapterIndex);
   return { chapter };
 });
 
-app.get("/api/novels/:slug/chapters/:filename", async (req, reply) => {
+app.get("/api/novels/:bookId/chapters/:filename", async (req, reply) => {
   const paramsSchema = z.object({
-    slug: z.string().min(1),
+    bookId: z.string().min(1),
     filename: z.string().min(1)
   });
   const params = paramsSchema.parse((req as any).params);
   try {
-    const content = await readChapter(getDataDir(), params.slug, params.filename);
+    const content = await readChapter(getDataDir(), params.bookId, params.filename);
     return { content };
   } catch {
     return reply.code(404).send({ message: "Not found" });
   }
 });
 
-app.put("/api/novels/:slug/chapters/:filename", async (req, reply) => {
+app.put("/api/novels/:bookId/chapters/:filename", async (req, reply) => {
   const paramsSchema = z.object({
-    slug: z.string().min(1),
+    bookId: z.string().min(1),
     filename: z.string().min(1)
   });
   const bodySchema = z.object({
@@ -4592,13 +4600,13 @@ app.put("/api/novels/:slug/chapters/:filename", async (req, reply) => {
   });
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
-  await updateChapter(getDataDir(), params.slug, params.filename, body.content);
+  await updateChapter(getDataDir(), params.bookId, params.filename, body.content);
   return { ok: true };
 });
 
-app.patch("/api/novels/:slug/chapters/:filename", async (req, reply) => {
+app.patch("/api/novels/:bookId/chapters/:filename", async (req, reply) => {
   const paramsSchema = z.object({
-    slug: z.string().min(1),
+    bookId: z.string().min(1),
     filename: z.string().min(1)
   });
   const bodySchema = z.object({
@@ -4607,21 +4615,21 @@ app.patch("/api/novels/:slug/chapters/:filename", async (req, reply) => {
   const params = paramsSchema.parse((req as any).params);
   const body = bodySchema.parse((req as any).body);
   try {
-    const chapter = await renameChapterTitle(getDataDir(), params.slug, params.filename, body.title);
+    const chapter = await renameChapterTitle(getDataDir(), params.bookId, params.filename, body.title);
     return { chapter };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || "Rename failed" });
   }
 });
 
-app.delete("/api/novels/:slug/chapters/:filename", async (req, reply) => {
+app.delete("/api/novels/:bookId/chapters/:filename", async (req, reply) => {
   const paramsSchema = z.object({
-    slug: z.string().min(1),
+    bookId: z.string().min(1),
     filename: z.string().min(1)
   });
   const params = paramsSchema.parse((req as any).params);
   try {
-    await deleteChapter(getDataDir(), params.slug, params.filename);
+    await deleteChapter(getDataDir(), params.bookId, params.filename);
     return { ok: true };
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || "Delete failed" });

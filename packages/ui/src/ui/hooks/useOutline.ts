@@ -8,7 +8,7 @@ import {
   type OutlineIndex
 } from "../api";
 
-export function useOutline(slug: string | null) {
+export function useOutline(slug: string | null, refreshToken = 0) {
   const [outline, setOutline] = useState<OutlineIndex | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -37,7 +37,7 @@ export function useOutline(slug: string | null) {
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, refreshToken]);
 
   const saveNow = useCallback(
     async (next: OutlineIndex) => {

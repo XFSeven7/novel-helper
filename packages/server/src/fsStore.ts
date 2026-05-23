@@ -3,9 +3,14 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 export type NovelMeta = {
-  slug: string;
+  /** 全书唯一标识（UUID）；目录名与之相同 */
+  bookId: string;
   title: string;
   createdAt: string;
+  /** 可选展示别名，不保证唯一 */
+  slug?: string;
+  /** 归档的建书规划 session */
+  setupSessionId?: string;
   /** 书籍简介（写入 meta.json；旧数据可无此字段） */
   synopsis?: string;
   /** 已完结 */
@@ -16,12 +21,21 @@ export type NovelMeta = {
   abandonedAt?: string;
 };
 
-function normalizeNovelMeta(parsed: NovelMeta, slugFallback: string): NovelMeta {
+function normalizeNovelMeta(parsed: NovelMeta, dirName: string): NovelMeta {
+  const bookId =
+    (typeof parsed.bookId === "string" && parsed.bookId.trim()) ||
+    dirName;
+  const slugRaw = typeof parsed.slug === "string" ? parsed.slug.trim() : "";
   return {
-    slug: parsed.slug ?? slugFallback,
-    title: parsed.title ?? slugFallback,
+    bookId,
+    slug: slugRaw || (dirName !== bookId ? dirName : undefined),
+    title: parsed.title ?? dirName,
     createdAt: parsed.createdAt ?? new Date(0).toISOString(),
     synopsis: typeof parsed.synopsis === "string" ? parsed.synopsis : "",
+    setupSessionId:
+      typeof (parsed as { setupSessionId?: string }).setupSessionId === "string"
+        ? (parsed as { setupSessionId?: string }).setupSessionId!.trim()
+        : undefined,
     completed: Boolean((parsed as any).completed),
     completedAt: typeof (parsed as any).completedAt === "string" ? (parsed as any).completedAt : "",
     abandoned: Boolean((parsed as any).abandoned),
@@ -804,25 +818,53 @@ export async function writeWritingPack(dataDir: string, novelSlug: string, chapt
   await fs.writeFile(p, JSON.stringify(pack, null, 2), "utf8");
 }
 
-export async function deleteNovel(dataDir: string, slug: string): Promise<void> {
-  // 兼容旧逻辑：保留函数名，但改为“废弃书籍”
-  const novelDir = path.join(dataDir, slug);
+export async function patchNovelMetaFields(
+  dataDir: string,
+  bookId: string,
+  fields: Partial<Pick<NovelMeta, "title" | "synopsis" | "slug" | "setupSessionId">>
+): Promise<NovelSummary> {
+  const novelDir = path.join(dataDir, bookId);
   const metaPath = path.join(novelDir, "meta.json");
   if (!(await exists(metaPath))) throw new Error("Not found");
   const raw = await fs.readFile(metaPath, "utf8");
   const parsed = JSON.parse(raw) as NovelMeta;
-  const meta = normalizeNovelMeta(parsed, slug);
+  const meta = normalizeNovelMeta(parsed, bookId);
+  const next: NovelMeta = {
+    ...meta,
+    ...(fields.title !== undefined ? { title: fields.title.trim() || meta.title } : {}),
+    ...(fields.synopsis !== undefined
+      ? { synopsis: fields.synopsis.slice(0, MAX_SYNOPSIS_LEN) }
+      : {}),
+    ...(fields.slug !== undefined ? { slug: fields.slug.trim() || undefined } : {}),
+    ...(fields.setupSessionId !== undefined
+      ? { setupSessionId: fields.setupSessionId.trim() || undefined }
+      : {})
+  };
+  await fs.writeFile(metaPath, JSON.stringify(next, null, 2), "utf8");
+  const chapterCount = await countChapterMarkdownFiles(novelDir);
+  const missingChapterIndexes = await missingChapterIndexesFromDir(novelDir);
+  return novelSummaryFromMeta(next, chapterCount, missingChapterIndexes);
+}
+
+export async function deleteNovel(dataDir: string, bookId: string): Promise<void> {
+  // 兼容旧逻辑：保留函数名，但改为“废弃书籍”
+  const novelDir = path.join(dataDir, bookId);
+  const metaPath = path.join(novelDir, "meta.json");
+  if (!(await exists(metaPath))) throw new Error("Not found");
+  const raw = await fs.readFile(metaPath, "utf8");
+  const parsed = JSON.parse(raw) as NovelMeta;
+  const meta = normalizeNovelMeta(parsed, bookId);
   const next: NovelMeta = { ...meta, abandoned: true, abandonedAt: new Date().toISOString() };
   await fs.writeFile(metaPath, JSON.stringify(next, null, 2), "utf8");
 }
 
-export async function restoreNovel(dataDir: string, slug: string): Promise<void> {
-  const novelDir = path.join(dataDir, slug);
+export async function restoreNovel(dataDir: string, bookId: string): Promise<void> {
+  const novelDir = path.join(dataDir, bookId);
   const metaPath = path.join(novelDir, "meta.json");
   if (!(await exists(metaPath))) throw new Error("Not found");
   const raw = await fs.readFile(metaPath, "utf8");
   const parsed = JSON.parse(raw) as NovelMeta;
-  const meta = normalizeNovelMeta(parsed, slug);
+  const meta = normalizeNovelMeta(parsed, bookId);
   const next: NovelMeta = { ...meta, abandoned: false, abandonedAt: "" };
   await fs.writeFile(metaPath, JSON.stringify(next, null, 2), "utf8");
 }
@@ -1170,15 +1212,15 @@ export async function listNovels(dataDir: string): Promise<NovelSummary[]> {
   const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
   const metas: NovelSummary[] = [];
 
-  for (const slug of dirs) {
-    const metaPath = path.join(dataDir, slug, "meta.json");
+  for (const dirName of dirs) {
+    const metaPath = path.join(dataDir, dirName, "meta.json");
     if (!(await exists(metaPath))) continue;
     try {
       const raw = await fs.readFile(metaPath, "utf8");
       const parsed = JSON.parse(raw) as NovelMeta;
-      const meta = normalizeNovelMeta(parsed, slug);
+      const meta = normalizeNovelMeta(parsed, dirName);
       if (meta.abandoned) continue;
-      const novelDir = path.join(dataDir, slug);
+      const novelDir = path.join(dataDir, meta.bookId);
       const chapterCount = await countChapterMarkdownFiles(novelDir);
       const missingChapterIndexes = await missingChapterIndexesFromDir(novelDir);
       metas.push(novelSummaryFromMeta(meta, chapterCount, missingChapterIndexes));
@@ -1193,23 +1235,36 @@ export async function listNovels(dataDir: string): Promise<NovelSummary[]> {
 
 const MAX_SYNOPSIS_LEN = 20000;
 
-export async function createNovel(dataDir: string, slug: string, title: string, synopsis?: string) {
+export async function createNovel(
+  dataDir: string,
+  bookId: string,
+  title: string,
+  synopsis?: string,
+  extra?: Pick<NovelMeta, "slug" | "setupSessionId">
+) {
   await ensureDir(dataDir);
-  const novelDir = path.join(dataDir, slug);
+  const novelDir = path.join(dataDir, bookId);
   const metaPath = path.join(novelDir, "meta.json");
   const chaptersDir = path.join(novelDir, "chapters");
   const storyDir = path.join(novelDir, "story");
   const charactersDir = path.join(storyDir, "characters");
 
   if (await exists(metaPath)) {
-    throw new Error(`Novel already exists: ${slug}`);
+    throw new Error(`Novel already exists: ${bookId}`);
   }
 
   await ensureDir(chaptersDir);
   await ensureDir(charactersDir);
   const syn =
     typeof synopsis === "string" ? synopsis.trim().slice(0, MAX_SYNOPSIS_LEN) : "";
-  const meta: NovelMeta = { slug, title, createdAt: new Date().toISOString(), synopsis: syn };
+  const meta: NovelMeta = {
+    bookId,
+    title,
+    createdAt: new Date().toISOString(),
+    synopsis: syn,
+    ...(extra?.slug?.trim() ? { slug: extra.slug.trim() } : {}),
+    ...(extra?.setupSessionId?.trim() ? { setupSessionId: extra.setupSessionId.trim() } : {})
+  };
   await fs.writeFile(metaPath, JSON.stringify(meta, null, 2), "utf8");
 
   const defaults: Array<{ rel: string; content: string }> = [
@@ -1250,13 +1305,13 @@ export async function createNovel(dataDir: string, slug: string, title: string, 
   return meta;
 }
 
-export async function updateNovelSynopsis(dataDir: string, slug: string, synopsis: string): Promise<NovelSummary> {
-  const novelDir = path.join(dataDir, slug);
+export async function updateNovelSynopsis(dataDir: string, bookId: string, synopsis: string): Promise<NovelSummary> {
+  const novelDir = path.join(dataDir, bookId);
   const metaPath = path.join(novelDir, "meta.json");
   if (!(await exists(metaPath))) throw new Error("Not found");
   const raw = await fs.readFile(metaPath, "utf8");
   const parsed = JSON.parse(raw) as NovelMeta;
-  const meta = normalizeNovelMeta(parsed, slug);
+  const meta = normalizeNovelMeta(parsed, bookId);
   const next: NovelMeta = { ...meta, synopsis: synopsis.slice(0, MAX_SYNOPSIS_LEN) };
   await fs.writeFile(metaPath, JSON.stringify(next, null, 2), "utf8");
   const chapterCount = await countChapterMarkdownFiles(novelDir);
@@ -1264,13 +1319,13 @@ export async function updateNovelSynopsis(dataDir: string, slug: string, synopsi
   return novelSummaryFromMeta(next, chapterCount, missingChapterIndexes);
 }
 
-export async function updateNovelCompleted(dataDir: string, slug: string, completed: boolean): Promise<NovelSummary> {
-  const novelDir = path.join(dataDir, slug);
+export async function updateNovelCompleted(dataDir: string, bookId: string, completed: boolean): Promise<NovelSummary> {
+  const novelDir = path.join(dataDir, bookId);
   const metaPath = path.join(novelDir, "meta.json");
   if (!(await exists(metaPath))) throw new Error("Not found");
   const raw = await fs.readFile(metaPath, "utf8");
   const parsed = JSON.parse(raw) as NovelMeta;
-  const meta = normalizeNovelMeta(parsed, slug);
+  const meta = normalizeNovelMeta(parsed, bookId);
   const now = new Date().toISOString();
   const next: NovelMeta = {
     ...meta,

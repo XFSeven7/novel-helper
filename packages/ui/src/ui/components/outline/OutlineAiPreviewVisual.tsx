@@ -27,12 +27,14 @@ export function OutlineAiPreviewVisual({ preview, chapters }: OutlineAiPreviewVi
   const volumes = preview.volumes || [];
   const plans = preview.chapterPlans || {};
   const planKeys = Object.keys(plans).sort();
+  const hasMainline = Boolean(book?.mainlineStages?.length);
   const hasBook =
     book &&
     (book.logline?.trim() ||
       SYNOPSIS_LABELS.some(({ key }) => book.synopsis?.[key]?.trim()) ||
       book.targetWords ||
-      book.targetChapters);
+      book.targetChapters ||
+      hasMainline);
   const hasVolumes = volumes.length > 0;
   const hasPlans = planKeys.length > 0;
 
@@ -74,6 +76,22 @@ function BookPreviewSection({ book }: { book: OutlineIndex["book"] }) {
           {book.targetWords && book.targetChapters ? " · " : null}
           {book.targetChapters ? `目标章数 ${book.targetChapters}` : null}
         </p>
+      ) : null}
+      {book.mainlineStages?.length ? (
+        <div className="outlineAiPreviewBlock">
+          <div className="outlineAiPreviewLabel">主线阶段（{book.mainlineStages.length}）</div>
+          <ol className="outlineAiMainlineList">
+            {book.mainlineStages.map((st, i) => (
+              <li key={st.id || i}>
+                <strong>{st.label || `阶段${i + 1}`}</strong>
+                {st.chapterRange?.trim() ? (
+                  <span className="muted"> · {st.chapterRange}</span>
+                ) : null}
+                {st.note?.trim() ? <p className="outlineAiPreviewText">{st.note}</p> : null}
+              </li>
+            ))}
+          </ol>
+        </div>
       ) : null}
     </section>
   );

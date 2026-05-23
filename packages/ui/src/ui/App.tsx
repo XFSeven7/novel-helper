@@ -179,6 +179,7 @@ export function App() {
   });
   const [bookSetupPlans, setBookSetupPlans] = useState<BookSetupPlanEntry[]>([]);
   const [bookSetupSessionId, setBookSetupSessionId] = useState<string | null>(null);
+  const [outlineRefreshKey, setOutlineRefreshKey] = useState(0);
   const [chapterGapModalOpen, setChapterGapModalOpen] = useState(false);
   const [chapterGapModalBookSlug, setChapterGapModalBookSlug] = useState("");
   const [chapterGapModalIndexes, setChapterGapModalIndexes] = useState<number[]>([]);
@@ -442,7 +443,7 @@ export function App() {
     return chapters.find((c) => c.filename === selectedChapter.filename) || null;
   }, [chapters, selectedChapter]);
 
-  const activeBookMeta = useMemo(() => books.find((b) => b.slug === activeBook) ?? null, [books, activeBook]);
+  const activeBookMeta = useMemo(() => books.find((b) => b.bookId === activeBook) ?? null, [books, activeBook]);
 
   const sortedActiveMissingChapterIndexes = useMemo(
     () => normalizeChapterGapList(activeBookMeta?.missingChapterIndexes ?? []),
@@ -590,7 +591,7 @@ export function App() {
     try {
       const { book } = await patchBookSynopsis(slug, draft);
       synopsisBaselineRef.current = draft;
-      setBooks((prev) => prev.map((b) => (b.slug === slug ? book : b)));
+      setBooks((prev) => prev.map((b) => (b.bookId === slug ? book : b)));
       setBookOverviewAutosaveHint("已保存");
       window.setTimeout(() => {
         setBookOverviewAutosaveHint((s) => (s === "已保存" ? "" : s));
@@ -1368,7 +1369,7 @@ export function App() {
       prevBookSlugRef.current = "";
       return;
     }
-    const m = books.find((b) => b.slug === activeBook);
+    const m = books.find((b) => b.bookId === activeBook);
     if (!m) return;
     if (prevBookSlugRef.current !== activeBook) {
       prevBookSlugRef.current = activeBook;
@@ -1459,7 +1460,7 @@ export function App() {
     await flushChapterSave();
     await flushCardSave();
     await flushSynopsisSave();
-    setActiveBook(b.slug);
+    setActiveBook(b.bookId);
     setNavHome(false);
     setNavCollapsed(false);
     setRightCollapsed(false);
@@ -1473,7 +1474,7 @@ export function App() {
     setCardAutosaveHint("");
     setChapterTitleEditing(false);
     // 进入书籍后默认展示书籍概览(selectedChapter=null)
-    void loadInspiration(b.slug);
+    void loadInspiration(b.bookId);
   }
 
   function openCreateBookModal() {
@@ -1513,6 +1514,26 @@ export function App() {
     }
     setBookSetupSessionId(sessionId);
     setBookSetupWizardOpen(true);
+  }
+
+  function openPlanningFromBook() {
+    if (!hasAiModel) {
+      setStatus("请先在设置中配置 AI 模型（设置 → 模型）");
+      return;
+    }
+    const sid = activeBookMeta?.setupSessionId;
+    if (!sid) return;
+    setBookSetupSessionId(sid);
+    setBookSetupWizardOpen(true);
+  }
+
+  async function handleLinkedPlanningSync() {
+    const { books: list } = await listBooks();
+    setBooks(list);
+    const m = list.find((b) => b.bookId === activeBookRef.current);
+    if (m?.synopsis != null) setSynopsisDraft(m.synopsis);
+    setOutlineRefreshKey((k) => k + 1);
+    setStatus("规划已同步到本书（含大纲阶段）");
   }
 
   async function discardBookPlan(sessionId: string) {
@@ -1561,12 +1582,13 @@ export function App() {
     await refreshBookSetupPlans();
     setBookSetupSessionId(null);
     setShelfTab("books");
-    setActiveBook(book.slug);
+    setActiveBook(book.bookId);
     setNavHome(false);
     setNavCollapsed(false);
     setRightCollapsed(false);
+    setOutlineRefreshKey((k) => k + 1);
     setStatus(`已创建书籍：${book.title}`);
-    void loadInspiration(book.slug);
+    void loadInspiration(book.bookId);
   }
 
   async function submitCreateBookModal() {
@@ -1581,12 +1603,12 @@ export function App() {
       setModalNewTitle("");
       setModalNewSynopsis("");
       await refreshBooks();
-      setActiveBook(book.slug);
+      setActiveBook(book.bookId);
       setNavHome(false);
       setNavCollapsed(false);
       setRightCollapsed(false);
       setStatus(`已创建书籍:${book.title}`);
-      void loadInspiration(book.slug);
+      void loadInspiration(book.bookId);
     } catch (e: any) {
       setStatus(e?.message || String(e));
     } finally {
@@ -1612,10 +1634,10 @@ export function App() {
     setBusy(true);
     setStatus("");
     try {
-      await deleteBook(b.slug);
+      await deleteBook(b.bookId);
       closeDeleteBookModal();
       await refreshBooks();
-      if (activeBookRef.current === b.slug) {
+      if (activeBookRef.current === b.bookId) {
         setNavHome(true);
         setHomeCenterTab("welcome");
         setActiveBook("");
@@ -1697,7 +1719,7 @@ export function App() {
   function openShelfChapterGapModal(b: BookMeta) {
     const gaps = normalizeChapterGapList(b.missingChapterIndexes ?? []);
     if (gaps.length === 0) return;
-    setChapterGapModalBookSlug(b.slug);
+    setChapterGapModalBookSlug(b.bookId);
     setChapterGapModalIndexes(gaps);
     setChapterGapModalDraftTitle("");
     setChapterGapModalOpen(true);
@@ -1718,7 +1740,7 @@ export function App() {
     setAuditCharactersIndex(null);
     setTimelineIndex(null);
 
-    const gaps = normalizeChapterGapList(books.find((b) => b.slug === activeBook)?.missingChapterIndexes ?? []);
+    const gaps = normalizeChapterGapList(books.find((b) => b.bookId === activeBook)?.missingChapterIndexes ?? []);
     if (gaps.length > 0) {
       setChapterGapModalBookSlug(activeBook);
       setChapterGapModalIndexes(gaps);
@@ -1758,7 +1780,7 @@ export function App() {
   async function goBookOverview() {
     await flushChapterSave();
     const slug = activeBookRef.current;
-    const m = books.find((bk) => bk.slug === slug);
+    const m = books.find((bk) => bk.bookId === slug);
     const s = m?.synopsis ?? "";
     setSynopsisDraft(s);
     synopsisBaselineRef.current = s;
@@ -3156,6 +3178,7 @@ export function App() {
                       busy={busy}
                       activeModelId={activeModelId}
                       bookSynopsis={activeBookMeta?.synopsis}
+                      refreshToken={outlineRefreshKey}
                       onOpenChapter={(c) => void onOpenChapter(c)}
                       onStatus={setStatus}
                     />
@@ -3431,7 +3454,7 @@ export function App() {
                 <span className="centerMetaSep">·</span>
                 <span>{activeBookMeta.status}</span>
                 <span className="centerMetaSep">·</span>
-                <span className="muted">标识 {activeBookMeta.slug}</span>
+                <span className="muted">ID {activeBookMeta.bookId.slice(0, 8)}…</span>
               </div>
             ) : (
               <div className="centerMeta">字数:{chapterWordCount}</div>
@@ -3672,13 +3695,14 @@ export function App() {
                   activeBook,
                   !Boolean(activeBookMeta?.completed)
                 );
-                setBooks((prev) => prev.map((b) => (b.slug === activeBook ? book : b)));
+                setBooks((prev) => prev.map((b) => (b.bookId === activeBook ? book : b)));
                 setStatus(book.completed ? "已标记为已完结。" : "已取消完结标记。");
               } catch (e: any) {
                 setStatus(e?.message || String(e));
               }
             }}
             onDeleteBook={() => activeBookMeta && openDeleteBookModal(activeBookMeta)}
+            onOpenPlanning={openPlanningFromBook}
           />
         ) : !rightCollapsed ? (
         <RightPanel
@@ -4010,6 +4034,7 @@ export function App() {
         setBusy={setBusy}
         activeModelId={activeModelId}
         onStatus={setStatus}
+        onLinkedSync={() => void handleLinkedPlanningSync()}
       />
 
       {/* 合并入口已迁移到"编辑角色"弹窗中 */}

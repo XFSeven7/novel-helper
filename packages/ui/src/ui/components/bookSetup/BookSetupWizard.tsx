@@ -32,6 +32,34 @@ const STEPS: Array<{ id: BookSetupStepId; title: string; hint: string }> = [
 
 const STEP_INDEX = Object.fromEntries(STEPS.map((s, i) => [s.id, i])) as Record<BookSetupStepId, number>;
 
+/** 与服务端 listMissingForReview / readyToCreate 对齐 */
+function listMissingForCreate(draft: BookSetupDraft): string[] {
+  const missing: string[] = [];
+  if (!draft.title?.trim()) missing.push("书名");
+  if (!draft.outline.book.logline?.trim()) missing.push("一句话梗概");
+  const syn = draft.outline.book.synopsis;
+  const synCount = syn
+    ? [syn.setup, syn.development, syn.twist, syn.climax, syn.ending].filter((x) =>
+        String(x || "").trim()
+      ).length
+    : 0;
+  if (synCount < 2 && (draft.concept?.trim().length ?? 0) < 30) {
+    missing.push("五段梗概或创作概念（至少其一足够具体）");
+  }
+  if (!draft.skippedSteps.includes("volumes") && draft.outline.volumes.length < 1) {
+    missing.push("至少一卷分卷规划");
+  }
+  return missing;
+}
+
+function createBookDisabledTitle(draft: BookSetupDraft, ready: boolean, busy: boolean): string | undefined {
+  if (busy) return "处理中，请稍候…";
+  if (ready) return undefined;
+  const missing = listMissingForCreate(draft);
+  if (missing.length) return `尚未满足创建条件，还缺：${missing.join("、")}`;
+  return "尚未满足创建条件，请完善左侧各步骤后返回总览";
+}
+
 const TAB_LABELS: Record<BookSetupStepId, string> = {
   intent: "意向",
   scale: "体量",
@@ -141,7 +169,15 @@ export type BookSetupWizardProps = {
   onPlanActivity?: () => void;
   showDiscard?: boolean;
   onDiscardPlan?: () => void | Promise<void>;
+  /** 修改已绑定书的规划并自动同步后回调 */
+  onLinkedSync?: () => void;
 };
+
+function noteSyncWarning(res: { syncWarning?: string }, onStatus?: (msg: string) => void) {
+  if (res.syncWarning?.trim()) {
+    onStatus?.(`规划已保存，同步到本书失败：${res.syncWarning.trim()}`);
+  }
+}
 
 export function BookSetupWizard({
   open,
@@ -155,7 +191,8 @@ export function BookSetupWizard({
   onSessionIdChange,
   onPlanActivity,
   showDiscard,
-  onDiscardPlan
+  onDiscardPlan,
+  onLinkedSync
 }: BookSetupWizardProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [draft, setDraft] = useState<BookSetupDraft | null>(null);
@@ -184,15 +221,17 @@ export function BookSetupWizard({
     if (!next || !sid) return next;
     pendingPersistRef.current = null;
     try {
-      const { draft: saved } = await patchBookSetupSession(sid, { draft: next });
-      setDraft(saved);
+      const res = await patchBookSetupSession(sid, { draft: next });
+      setDraft(res.draft);
+      noteSyncWarning(res, onStatus);
+      if (res.draft.linkedBookId) onLinkedSync?.();
       onPlanActivity?.();
-      return saved;
+      return res.draft;
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
       return next;
     }
-  }, [sessionId, onPlanActivity]);
+  }, [sessionId, onPlanActivity, onStatus, onLinkedSync]);
 
   const schedulePersist = useCallback(
     (next: BookSetupDraft) => {
@@ -212,16 +251,18 @@ export function BookSetupWizard({
       cancelPendingPersist();
       if (!sessionId) return next;
       try {
-        const { draft: saved } = await patchBookSetupSession(sessionId, { draft: next });
-        setDraft(saved);
+        const res = await patchBookSetupSession(sessionId, { draft: next });
+        setDraft(res.draft);
+        noteSyncWarning(res, onStatus);
+        if (res.draft.linkedBookId) onLinkedSync?.();
         onPlanActivity?.();
-        return saved;
+        return res.draft;
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : String(e));
         return next;
       }
     },
-    [sessionId, cancelPendingPersist, onPlanActivity]
+    [sessionId, cancelPendingPersist, onPlanActivity, onStatus, onLinkedSync]
   );
 
   useEffect(() => {
@@ -270,6 +311,7 @@ export function BookSetupWizard({
 
   const stepId = draft?.currentStep ?? "intent";
   const isReview = stepId === "review";
+  const isLinked = Boolean(draft?.linkedBookId?.trim());
 
   useEffect(() => {
     setLastSuggestion(null);
@@ -357,6 +399,8 @@ export function BookSetupWizard({
       }
       cancelPendingPersist();
       setDraft(nextDraft);
+      noteSyncWarning(res, onStatus);
+      if (nextDraft.linkedBookId) onLinkedSync?.();
       onPlanActivity?.();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -396,9 +440,11 @@ export function BookSetupWizard({
       if (hasSuggestion) {
         next = applySuggestionToDraft(next, stepId, res.suggestion!);
       }
+      noteSyncWarning(res, onStatus);
       const saved = await persistNow(next);
       setLastSuggestion(null);
       const finalDraft = saved ?? next;
+      if (finalDraft.linkedBookId) onLinkedSync?.();
       if (stepId === "mainline") {
         const n = finalDraft.outline.book.mainlineStages?.length ?? 0;
         onStatus?.(
@@ -436,6 +482,7 @@ export function BookSetupWizard({
       if (res.suggestion?.mainlineStages !== undefined) {
         next = applySuggestionToDraft(next, "mainline", res.suggestion);
       }
+      noteSyncWarning(res, onStatus);
       const saved = await persistNow(next);
       const finalDraft = saved ?? next;
       const n = finalDraft.outline.book.mainlineStages?.length ?? 0;
@@ -444,6 +491,7 @@ export function BookSetupWizard({
           (n > 0 ? `已重新规划 ${n} 个主线阶段` : "已清空主线阶段，请继续补充")
       );
       setDraft(finalDraft);
+      if (finalDraft.linkedBookId) onLinkedSync?.();
       setLastSuggestion(null);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
@@ -459,24 +507,24 @@ export function BookSetupWizard({
     schedulePersist(next);
   };
 
-  const missingReview = useMemo(() => {
-    if (!draft) return [];
-    const m: string[] = [];
-    if (!draft.title?.trim()) m.push("书名");
-    if (!draft.outline.book.logline?.trim()) m.push("一句话梗概");
-    if (!draft.skippedSteps.includes("volumes") && draft.outline.volumes.length < 1) m.push("分卷");
-    return m;
-  }, [draft]);
+  const missingReview = useMemo(() => (draft ? listMissingForCreate(draft) : []), [draft]);
+
+  const createBookTitle = useMemo(() => {
+    if (!draft) return "草案加载中…";
+    return createBookDisabledTitle(draft, draft.readyToCreate, busy || chatBusy);
+  }, [draft, busy, chatBusy]);
 
   if (!open) return null;
 
   const visited = draft?.visitedSteps ?? [];
 
   return (
-    <BookSetupBackdrop onClose={onClose} busy={busy}>
-      <h2 className="modalHeading">规划新书</h2>
+    <BookSetupBackdrop>
+      <h2 id="book-setup-wizard-title" className="modalHeading">
+        规划新书
+      </h2>
       <p className="muted bookSetupWizardIntro">
-        左侧填写本步信息，右侧与 AI 讨论；主线步会随聊天自动更新阶段，其他步可点「应用到本步」。确认后创建本地书籍。
+        左侧填表、右侧 AI；主线随聊更新，其他步点「应用到本步」。
       </p>
 
       {error ? <div className="modalError">{error}</div> : null}
@@ -510,7 +558,10 @@ export function BookSetupWizard({
 
               {isReview ? (
                 <div className="bookSetupReview">
-                  {missingReview.length ? (
+                  {isLinked ? (
+                    <p className="muted bookSetupLinkedHint">修改将自动同步到本书（大纲与书名/简介）。</p>
+                  ) : null}
+                  {missingReview.length && !isLinked ? (
                     <p className="muted">仍建议补充：{missingReview.join("、")}</p>
                   ) : null}
                   <OutlineAiPreviewVisual preview={draft.outline} chapters={[]} />
@@ -522,8 +573,10 @@ export function BookSetupWizard({
             <BookSetupActions
               stepIdx={stepIdx}
               isReview={isReview}
+              isLinked={isLinked}
               ready={draft.readyToCreate}
               busy={busy || chatBusy}
+              createBookTitle={createBookTitle}
               onPrev={() => void prevStep()}
               onSkip={() => void skipStep()}
               onNext={() => void nextStep()}
@@ -561,20 +614,14 @@ export function BookSetupWizard({
   );
 }
 
-function BookSetupBackdrop({ children, onClose, busy }: { children: React.ReactNode; onClose: () => void; busy: boolean }) {
+function BookSetupBackdrop({ children }: { children: React.ReactNode }) {
   return (
-    <div
-      className="modalBackdrop modalBackdropEditChar"
-      role="presentation"
-      onClick={() => {
-        if (!busy) onClose();
-      }}
-    >
+    <div className="modalBackdrop modalBackdropEditChar" role="presentation">
       <div
         className="modalPanel modalPanelOpaque modalPanelEditChar bookSetupWizard"
         role="dialog"
         aria-modal="true"
-        onClick={(e) => e.stopPropagation()}
+        aria-labelledby="book-setup-wizard-title"
       >
         {children}
       </div>
@@ -684,30 +731,29 @@ function BookSetupMainlineEditor({
     <BookSetupFields>
       <div className="bookSetupMainlineStickyNav">
         <div className="bookSetupMainlineToolbar">
-          <div className="bookSetupMainlineToolbarTitle">阶段快速调整</div>
-          <div className="bookSetupMainlineToolbarRow">
-            <label className="bookSetupMainlineCount">
-              <span className="modalLabel">阶段数量</span>
-              <input
-                type="number"
-                className="modalInput bookSetupMainlineCountInput"
-                min={0}
-                max={24}
-                value={stages.length}
-                onChange={(e) => resizeStageCount(Number(e.target.value))}
-              />
-            </label>
-            <button
-              type="button"
-              className="btnSort"
-              onClick={() => {
-                resizeStageCount(stages.length + 1);
-                setActiveIndex(stages.length);
-              }}
-            >
-              + 加一阶段
-            </button>
-          </div>
+          <span className="bookSetupMainlineToolbarTitle">阶段</span>
+          <label className="bookSetupMainlineCountInline">
+            <span className="bookSetupMainlineCountLabel">共</span>
+            <input
+              type="number"
+              className="bookSetupMainlineCountInput"
+              min={0}
+              max={24}
+              value={stages.length}
+              aria-label="阶段数量"
+              onChange={(e) => resizeStageCount(Number(e.target.value))}
+            />
+          </label>
+          <button
+            type="button"
+            className="btnSort bookSetupMainlineAddBtn"
+            onClick={() => {
+              resizeStageCount(stages.length + 1);
+              setActiveIndex(stages.length);
+            }}
+          >
+            + 添加
+          </button>
         </div>
         {stages.length > 0 ? (
           <div className="bookSetupMainlineChips" role="tablist" aria-label="阶段切换">
@@ -1185,8 +1231,10 @@ function BookSetupChatPane({
 function BookSetupActions({
   stepIdx,
   isReview,
+  isLinked,
   ready,
   busy,
+  createBookTitle,
   onPrev,
   onSkip,
   onNext,
@@ -1195,18 +1243,21 @@ function BookSetupActions({
 }: {
   stepIdx: number;
   isReview: boolean;
+  isLinked: boolean;
   ready: boolean;
   busy: boolean;
+  createBookTitle?: string;
   onPrev: () => void;
   onSkip: () => void;
   onNext: () => void;
   onCommit: () => void;
   onClose: () => void;
 }) {
+  const commitDisabled = busy || !ready;
   return (
     <div className="modalActions modalActionsWrap">
       <button type="button" className="btnModalSecondary" disabled={busy} onClick={onClose}>
-        取消
+        {isLinked ? "关闭" : "取消"}
       </button>
       {stepIdx > 0 ? (
         <button type="button" className="btnModalSecondary" disabled={busy} onClick={onPrev}>
@@ -1223,10 +1274,21 @@ function BookSetupActions({
           下一步
         </button>
       ) : null}
-      {isReview ? (
-        <button type="button" className="btnModalPrimary" disabled={busy || !ready} onClick={onCommit}>
-          创建书籍
-        </button>
+      {isReview && !isLinked ? (
+        <span
+          className="bookSetupCommitWrap"
+          title={commitDisabled && createBookTitle ? createBookTitle : undefined}
+        >
+          <button
+            type="button"
+            className="btnModalPrimary"
+            disabled={commitDisabled}
+            aria-disabled={commitDisabled}
+            onClick={onCommit}
+          >
+            创建书籍
+          </button>
+        </span>
       ) : null}
     </div>
   );

@@ -1,11 +1,15 @@
 export type BookMeta = {
-  slug: string;
+  bookId: string;
   title: string;
   createdAt: string;
   chapterCount: number;
   status: "进行中" | "已完结";
   /** 介于 1..最大序号之间的空缺（文件名符合「序号_标题.md」） */
   missingChapterIndexes: number[];
+  /** 可选展示别名 */
+  slug?: string;
+  /** 归档的建书规划 session */
+  setupSessionId?: string;
   synopsis?: string;
   completed?: boolean;
 };
@@ -71,64 +75,64 @@ export async function createBook(input: { title: string; slug?: string; synopsis
   });
 }
 
-export async function patchBookSynopsis(slug: string, synopsis: string) {
-  return await http<{ book: BookMeta }>(`/api/books/${encodeURIComponent(slug)}`, {
+export async function patchBookSynopsis(bookId: string, synopsis: string) {
+  return await http<{ book: BookMeta }>(`/api/books/${encodeURIComponent(bookId)}`, {
     method: "PATCH",
     body: JSON.stringify({ synopsis })
   });
 }
 
-export async function patchBookCompleted(slug: string, completed: boolean) {
-  return await http<{ book: BookMeta }>(`/api/books/${encodeURIComponent(slug)}`, {
+export async function patchBookCompleted(bookId: string, completed: boolean) {
+  return await http<{ book: BookMeta }>(`/api/books/${encodeURIComponent(bookId)}`, {
     method: "PATCH",
     body: JSON.stringify({ completed })
   });
 }
 
-export async function deleteBook(slug: string) {
-  return await http<{ ok: true }>(`/api/books/${encodeURIComponent(slug)}`, { method: "DELETE" });
+export async function deleteBook(bookId: string) {
+  return await http<{ ok: true }>(`/api/books/${encodeURIComponent(bookId)}`, { method: "DELETE" });
 }
 
-export async function restoreBook(slug: string) {
-  return await http<{ ok: true }>(`/api/books/${encodeURIComponent(slug)}/restore`, { method: "POST" });
+export async function restoreBook(bookId: string) {
+  return await http<{ ok: true }>(`/api/books/${encodeURIComponent(bookId)}/restore`, { method: "POST" });
 }
 
-export async function listChapters(slug: string) {
-  return await http<{ chapters: ChapterMeta[] }>(`/api/books/${encodeURIComponent(slug)}/chapters`);
+export async function listChapters(bookId: string) {
+  return await http<{ chapters: ChapterMeta[] }>(`/api/books/${encodeURIComponent(bookId)}/chapters`);
 }
 
 export async function createChapter(
-  slug: string,
+  bookId: string,
   input: { title: string; content?: string; chapterIndex?: number }
 ) {
-  return await http<{ chapter: ChapterMeta }>(`/api/books/${encodeURIComponent(slug)}/chapters`, {
+  return await http<{ chapter: ChapterMeta }>(`/api/books/${encodeURIComponent(bookId)}/chapters`, {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
-export async function readChapter(slug: string, filename: string) {
+export async function readChapter(bookId: string, filename: string) {
   return await http<{ content: string }>(
-    `/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}`
+    `/api/books/${encodeURIComponent(bookId)}/chapters/${encodeURIComponent(filename)}`
   );
 }
 
-export async function updateChapter(slug: string, filename: string, content: string) {
+export async function updateChapter(bookId: string, filename: string, content: string) {
   return await http<{ ok: true }>(
-    `/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}`,
+    `/api/books/${encodeURIComponent(bookId)}/chapters/${encodeURIComponent(filename)}`,
     { method: "PUT", body: JSON.stringify({ content }) }
   );
 }
 
-export async function renameChapter(slug: string, filename: string, title: string) {
+export async function renameChapter(bookId: string, filename: string, title: string) {
   return await http<{ chapter: ChapterMeta }>(
-    `/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}`,
+    `/api/books/${encodeURIComponent(bookId)}/chapters/${encodeURIComponent(filename)}`,
     { method: "PATCH", body: JSON.stringify({ title }) }
   );
 }
 
 export async function suggestChapterTitles(
-  slug: string,
+  bookId: string,
   filename: string,
   input: {
     modelConfigId: string | null;
@@ -137,13 +141,13 @@ export async function suggestChapterTitles(
   }
 ) {
   return await http<{ ok: true; titles: string[] }>(
-    `/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}/title/suggest`,
+    `/api/books/${encodeURIComponent(bookId)}/chapters/${encodeURIComponent(filename)}/title/suggest`,
     { method: "POST", body: JSON.stringify(input) }
   );
 }
 
 export async function suggestChapterTitlesBatch(
-  slug: string,
+  bookId: string,
   filename: string,
   input: {
     modelConfigId: string | null;
@@ -152,14 +156,14 @@ export async function suggestChapterTitlesBatch(
   }
 ) {
   return await http<{ ok: true; results: Array<{ style: string; titles: string[] }> }>(
-    `/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}/title/suggest/batch`,
+    `/api/books/${encodeURIComponent(bookId)}/chapters/${encodeURIComponent(filename)}/title/suggest/batch`,
     { method: "POST", body: JSON.stringify(input) }
   );
 }
 
-export async function deleteChapter(slug: string, filename: string) {
+export async function deleteChapter(bookId: string, filename: string) {
   return await http<{ ok: true }>(
-    `/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}`,
+    `/api/books/${encodeURIComponent(bookId)}/chapters/${encodeURIComponent(filename)}`,
     { method: "DELETE" }
   );
 }
@@ -244,16 +248,16 @@ export async function openAppDataDirectory(dirPath?: string) {
   return result;
 }
 
-export async function auditChapter(slug: string, filename: string, modelConfigId: string | null) {
-  return await http<{ run: any }>(`/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}/audit`, {
+export async function auditChapter(bookId: string, filename: string, modelConfigId: string | null) {
+  return await http<{ run: any }>(`/api/books/${encodeURIComponent(bookId)}/chapters/${encodeURIComponent(filename)}/audit`, {
     method: "POST",
     body: JSON.stringify({ modelConfigId })
   });
 }
 
-export async function getAuditLatest(slug: string, chapterFilename: string) {
+export async function getAuditLatest(bookId: string, chapterFilename: string) {
   return await http<{ run: any }>(
-    `/api/books/${encodeURIComponent(slug)}/audit/latest?chapter=${encodeURIComponent(chapterFilename)}`
+    `/api/books/${encodeURIComponent(bookId)}/audit/latest?chapter=${encodeURIComponent(chapterFilename)}`
   );
 }
 
@@ -266,38 +270,38 @@ export type ChapterVersionMeta = {
   source: "manual";
 };
 
-export async function getChapterDraftStatus(slug: string) {
+export async function getChapterDraftStatus(bookId: string) {
   return await http<{ outOfSync: string[] }>(
-    `/api/books/${encodeURIComponent(slug)}/chapters/draft-status`
+    `/api/books/${encodeURIComponent(bookId)}/chapters/draft-status`
   );
 }
 
-export async function listChapterVersions(slug: string, filename: string) {
+export async function listChapterVersions(bookId: string, filename: string) {
   return await http<{ versions: ChapterVersionMeta[]; latestContentHash: string | null }>(
-    `/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}/versions`
+    `/api/books/${encodeURIComponent(bookId)}/chapters/${encodeURIComponent(filename)}/versions`
   );
 }
 
 export async function createChapterVersion(
-  slug: string,
+  bookId: string,
   filename: string,
   input: { label?: string }
 ) {
   return await http<{ version: ChapterVersionMeta }>(
-    `/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}/versions`,
+    `/api/books/${encodeURIComponent(bookId)}/chapters/${encodeURIComponent(filename)}/versions`,
     { method: "POST", body: JSON.stringify(input) }
   );
 }
 
-export async function getChapterVersion(slug: string, filename: string, versionId: string) {
+export async function getChapterVersion(bookId: string, filename: string, versionId: string) {
   return await http<{ version: ChapterVersionMeta; content: string }>(
-    `/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}/versions/${encodeURIComponent(versionId)}`
+    `/api/books/${encodeURIComponent(bookId)}/chapters/${encodeURIComponent(filename)}/versions/${encodeURIComponent(versionId)}`
   );
 }
 
-export async function restoreChapterVersion(slug: string, filename: string, versionId: string) {
+export async function restoreChapterVersion(bookId: string, filename: string, versionId: string) {
   return await http<{ wordCount: number }>(
-    `/api/books/${encodeURIComponent(slug)}/chapters/${encodeURIComponent(filename)}/versions/${encodeURIComponent(versionId)}/restore`,
+    `/api/books/${encodeURIComponent(bookId)}/chapters/${encodeURIComponent(filename)}/versions/${encodeURIComponent(versionId)}/restore`,
     { method: "POST", body: JSON.stringify({}) }
   );
 }
@@ -309,42 +313,42 @@ export type AuditChapterStaleEntry = {
   auditedHash: string;
 };
 
-export async function getAuditChapterStale(slug: string) {
+export async function getAuditChapterStale(bookId: string) {
   return await http<{ chapters: AuditChapterStaleEntry[] }>(
-    `/api/books/${encodeURIComponent(slug)}/audit/stale-chapters`
+    `/api/books/${encodeURIComponent(bookId)}/audit/stale-chapters`
   );
 }
 
-export async function getAuditAnalysis(slug: string, chapterFilename: string) {
+export async function getAuditAnalysis(bookId: string, chapterFilename: string) {
   return await http<{ text: string }>(
-    `/api/books/${encodeURIComponent(slug)}/audit/analysis?chapter=${encodeURIComponent(chapterFilename)}`
+    `/api/books/${encodeURIComponent(bookId)}/audit/analysis?chapter=${encodeURIComponent(chapterFilename)}`
   );
 }
 
-export async function saveAuditAnalysis(slug: string, input: { chapterFilename: string; text: string }) {
-  return await http<{ ok: true }>(`/api/books/${encodeURIComponent(slug)}/audit/analysis/save`, {
+export async function saveAuditAnalysis(bookId: string, input: { chapterFilename: string; text: string }) {
+  return await http<{ ok: true }>(`/api/books/${encodeURIComponent(bookId)}/audit/analysis/save`, {
     method: "POST",
     body: JSON.stringify({ chapter: input.chapterFilename, text: input.text ?? "" })
   });
 }
 
-export async function getAuditLedger(slug: string) {
-  return await http<{ ledger: any }>(`/api/books/${encodeURIComponent(slug)}/audit/ledger`);
+export async function getAuditLedger(bookId: string) {
+  return await http<{ ledger: any }>(`/api/books/${encodeURIComponent(bookId)}/audit/ledger`);
 }
 
-export async function getAuditCharacters(slug: string) {
-  return await http<{ index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/characters`);
+export async function getAuditCharacters(bookId: string) {
+  return await http<{ index: any }>(`/api/books/${encodeURIComponent(bookId)}/audit/characters`);
 }
 
-export async function hideAuditCharacter(slug: string, input: { name: string; hidden: boolean }) {
-  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/characters/hide`, {
+export async function hideAuditCharacter(bookId: string, input: { name: string; hidden: boolean }) {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(bookId)}/audit/characters/hide`, {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
 export async function updateAuditCharacter(
-  slug: string,
+  bookId: string,
   input: {
     name: string;
     role?: string;
@@ -393,93 +397,93 @@ export async function updateAuditCharacter(
     personalityAnalysis?: string;
   }
 ) {
-  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/characters/update`, {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(bookId)}/audit/characters/update`, {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
-export async function mergeAuditCharacters(slug: string, input: { primaryName: string; secondaryNames: string[] }) {
-  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/characters/merge`, {
+export async function mergeAuditCharacters(bookId: string, input: { primaryName: string; secondaryNames: string[] }) {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(bookId)}/audit/characters/merge`, {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
 export async function previewMergeAuditCharacters(
-  slug: string,
+  bookId: string,
   input: { primaryName: string; secondaryNames: string[]; modelConfigId: string | null }
 ) {
-  return await http<{ ok: true; draft: any }>(`/api/books/${encodeURIComponent(slug)}/audit/characters/merge/preview`, {
+  return await http<{ ok: true; draft: any }>(`/api/books/${encodeURIComponent(bookId)}/audit/characters/merge/preview`, {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
 export async function applyMergeAuditCharacters(
-  slug: string,
+  bookId: string,
   input: { primaryName: string; secondaryNames: string[]; draft: any }
 ) {
-  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/characters/merge/apply`, {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(bookId)}/audit/characters/merge/apply`, {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
-export async function getAuditPlaces(slug: string) {
-  return await http<{ index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/places`);
+export async function getAuditPlaces(bookId: string) {
+  return await http<{ index: any }>(`/api/books/${encodeURIComponent(bookId)}/audit/places`);
 }
 
-export async function hideAuditPlace(slug: string, input: { name: string; hidden: boolean }) {
-  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/places/hide`, {
+export async function hideAuditPlace(bookId: string, input: { name: string; hidden: boolean }) {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(bookId)}/audit/places/hide`, {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
 export async function updateAuditPlace(
-  slug: string,
+  bookId: string,
   input: { name: string; description?: string; lastNote?: string }
 ) {
-  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/places/update`, {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(bookId)}/audit/places/update`, {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
 export async function previewMergeAuditPlaces(
-  slug: string,
+  bookId: string,
   input: { primaryName: string; secondaryNames: string[]; modelConfigId: string | null }
 ) {
-  return await http<{ ok: true; draft: any }>(`/api/books/${encodeURIComponent(slug)}/audit/places/merge/preview`, {
+  return await http<{ ok: true; draft: any }>(`/api/books/${encodeURIComponent(bookId)}/audit/places/merge/preview`, {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
 export async function applyMergeAuditPlaces(
-  slug: string,
+  bookId: string,
   input: { primaryName: string; secondaryNames: string[]; draft: any }
 ) {
-  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/places/merge/apply`, {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(bookId)}/audit/places/merge/apply`, {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
-export async function getAuditOrgs(slug: string) {
-  return await http<{ index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/orgs`);
+export async function getAuditOrgs(bookId: string) {
+  return await http<{ index: any }>(`/api/books/${encodeURIComponent(bookId)}/audit/orgs`);
 }
 
-export async function hideAuditOrg(slug: string, input: { name: string; hidden: boolean }) {
-  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/orgs/hide`, {
+export async function hideAuditOrg(bookId: string, input: { name: string; hidden: boolean }) {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(bookId)}/audit/orgs/hide`, {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
-export async function updateAuditOrg(slug: string, input: { name: string; description?: string; lastNote?: string }) {
-  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/orgs/update`, {
+export async function updateAuditOrg(bookId: string, input: { name: string; description?: string; lastNote?: string }) {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(bookId)}/audit/orgs/update`, {
     method: "POST",
     body: JSON.stringify(input)
   });
@@ -504,23 +508,23 @@ export type ForeshadowsIndex = {
   hiddenIds: string[];
 };
 
-export async function getAuditForeshadows(slug: string) {
-  return await http<{ index: ForeshadowsIndex }>(`/api/books/${encodeURIComponent(slug)}/audit/foreshadows`);
+export async function getAuditForeshadows(bookId: string) {
+  return await http<{ index: ForeshadowsIndex }>(`/api/books/${encodeURIComponent(bookId)}/audit/foreshadows`);
 }
 
-export async function getAuditProgress(slug: string) {
-  return await http<{ index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/progress`);
+export async function getAuditProgress(bookId: string) {
+  return await http<{ index: any }>(`/api/books/${encodeURIComponent(bookId)}/audit/progress`);
 }
 
-export async function markAuditProgressItem(slug: string, input: { id: string; status: "open" | "progress" | "done" }) {
-  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/progress/mark`, {
+export async function markAuditProgressItem(bookId: string, input: { id: string; status: "open" | "progress" | "done" }) {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(bookId)}/audit/progress/mark`, {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
-export async function cleanupAuditProgressDone(slug: string) {
-  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(slug)}/audit/progress/cleanupDone`, {
+export async function cleanupAuditProgressDone(bookId: string) {
+  return await http<{ ok: true; index: any }>(`/api/books/${encodeURIComponent(bookId)}/audit/progress/cleanupDone`, {
     method: "POST",
     body: JSON.stringify({})
   });
@@ -545,17 +549,17 @@ export type WritingPack = {
   disclaimer: string;
 };
 
-export async function getWritingPack(slug: string, chapterFilename: string) {
+export async function getWritingPack(bookId: string, chapterFilename: string) {
   return await http<{ pack: WritingPack | null }>(
-    `/api/books/${encodeURIComponent(slug)}/writing-pack?chapter=${encodeURIComponent(chapterFilename)}`
+    `/api/books/${encodeURIComponent(bookId)}/writing-pack?chapter=${encodeURIComponent(chapterFilename)}`
   );
 }
 
 export async function generateWritingPack(
-  slug: string,
+  bookId: string,
   input: { chapterFilename: string; modelConfigId: string | null }
 ) {
-  return await http<{ ok: true; pack: WritingPack }>(`/api/books/${encodeURIComponent(slug)}/writing-pack/generate`, {
+  return await http<{ ok: true; pack: WritingPack }>(`/api/books/${encodeURIComponent(bookId)}/writing-pack/generate`, {
     method: "POST",
     body: JSON.stringify(input)
   });
@@ -572,7 +576,7 @@ export type BookSearchHit = {
 export type BookSearchGroup = { kind: BookSearchHit["kind"]; count: number; hits: BookSearchHit[] };
 
 export async function searchBook(
-  slug: string,
+  bookId: string,
   input: {
     q: string;
     sort?: "asc" | "desc";
@@ -582,34 +586,34 @@ export async function searchBook(
     offset?: number;
   }
 ) {
-  return await http<{ total: number; groups: BookSearchGroup[] }>(`/api/books/${encodeURIComponent(slug)}/search`, {
+  return await http<{ total: number; groups: BookSearchGroup[] }>(`/api/books/${encodeURIComponent(bookId)}/search`, {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
 export async function createAuditForeshadow(
-  slug: string,
+  bookId: string,
   input: { title: string; status?: ForeshadowStatus; lastProgress?: string; note?: string; chapters?: number[] }
 ) {
-  return await http<{ ok: true; index: ForeshadowsIndex }>(`/api/books/${encodeURIComponent(slug)}/audit/foreshadows/create`, {
+  return await http<{ ok: true; index: ForeshadowsIndex }>(`/api/books/${encodeURIComponent(bookId)}/audit/foreshadows/create`, {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
 export async function updateAuditForeshadow(
-  slug: string,
+  bookId: string,
   input: { id: string; title?: string; status?: ForeshadowStatus; lastProgress?: string; note?: string; chapters?: number[] }
 ) {
-  return await http<{ ok: true; index: ForeshadowsIndex }>(`/api/books/${encodeURIComponent(slug)}/audit/foreshadows/update`, {
+  return await http<{ ok: true; index: ForeshadowsIndex }>(`/api/books/${encodeURIComponent(bookId)}/audit/foreshadows/update`, {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
-export async function hideAuditForeshadow(slug: string, input: { id: string; hidden: boolean }) {
-  return await http<{ ok: true; index: ForeshadowsIndex }>(`/api/books/${encodeURIComponent(slug)}/audit/foreshadows/hide`, {
+export async function hideAuditForeshadow(bookId: string, input: { id: string; hidden: boolean }) {
+  return await http<{ ok: true; index: ForeshadowsIndex }>(`/api/books/${encodeURIComponent(bookId)}/audit/foreshadows/hide`, {
     method: "POST",
     body: JSON.stringify(input)
   });
@@ -644,8 +648,8 @@ export type TimelineIndex = {
   manual: { doneEventIds: string[] };
 };
 
-export async function getTimelineIndex(slug: string) {
-  return await http<{ index: TimelineIndex }>(`/api/books/${encodeURIComponent(slug)}/timeline/index`);
+export async function getTimelineIndex(bookId: string) {
+  return await http<{ index: TimelineIndex }>(`/api/books/${encodeURIComponent(bookId)}/timeline/index`);
 }
 
 export type IdeaItemStatus = "active" | "hidden" | "deleted";
@@ -672,34 +676,34 @@ export type IdeaItem = {
 };
 export type InspirationIndex = { version: 1; updatedAt: string; items: IdeaItem[] };
 
-export async function getInspirationIndex(slug: string) {
-  return await http<{ index: InspirationIndex }>(`/api/books/${encodeURIComponent(slug)}/inspiration`);
+export async function getInspirationIndex(bookId: string) {
+  return await http<{ index: InspirationIndex }>(`/api/books/${encodeURIComponent(bookId)}/inspiration`);
 }
 
 export async function upsertInspirationItem(
-  slug: string,
+  bookId: string,
   item: Partial<IdeaItem> & { content: string }
 ) {
-  return await http<{ ok: true; index: InspirationIndex; item: IdeaItem }>(`/api/books/${encodeURIComponent(slug)}/inspiration/upsert`, {
+  return await http<{ ok: true; index: InspirationIndex; item: IdeaItem }>(`/api/books/${encodeURIComponent(bookId)}/inspiration/upsert`, {
     method: "POST",
     body: JSON.stringify({ item })
   });
 }
 
-export async function setInspirationItemStatus(slug: string, input: { id: string; status: IdeaItemStatus }) {
-  return await http<{ ok: true; index: InspirationIndex }>(`/api/books/${encodeURIComponent(slug)}/inspiration/status`, {
+export async function setInspirationItemStatus(bookId: string, input: { id: string; status: IdeaItemStatus }) {
+  return await http<{ ok: true; index: InspirationIndex }>(`/api/books/${encodeURIComponent(bookId)}/inspiration/status`, {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
-export async function purgeInspirationDeleted(slug: string) {
-  return await http<{ ok: true; index: InspirationIndex; purged: number }>(`/api/books/${encodeURIComponent(slug)}/inspiration/purge`, {
+export async function purgeInspirationDeleted(bookId: string) {
+  return await http<{ ok: true; index: InspirationIndex; purged: number }>(`/api/books/${encodeURIComponent(bookId)}/inspiration/purge`, {
     method: "POST"
   });
 }
 
-export async function generateInspiration(slug: string, input: {
+export async function generateInspiration(bookId: string, input: {
   modelConfigId: string | null;
   kind: "character" | "place" | "org" | "item" | "event" | "lore" | "technique" | "other";
   count?: number;
@@ -709,7 +713,7 @@ export async function generateInspiration(slug: string, input: {
   itemOwnerCharacterName?: string;
 }) {
   return await http<{ ok: true; index: InspirationIndex; items: IdeaItem[]; debug?: { prompt: string; rawText: string } }>(
-    `/api/books/${encodeURIComponent(slug)}/inspiration/generate`,
+    `/api/books/${encodeURIComponent(bookId)}/inspiration/generate`,
     {
     method: "POST",
     body: JSON.stringify(input)
@@ -717,7 +721,7 @@ export async function generateInspiration(slug: string, input: {
   );
 }
 
-export async function generateInspirationPreview(slug: string, input: {
+export async function generateInspirationPreview(bookId: string, input: {
   modelConfigId: string | null;
   kind: "character" | "place" | "org" | "item" | "event" | "lore" | "technique" | "other";
   count?: number;
@@ -727,7 +731,7 @@ export async function generateInspirationPreview(slug: string, input: {
   itemOwnerCharacterName?: string;
 }) {
   return await http<{ ok: true; items: IdeaItem[]; debug?: { prompt: string; rawText: string } }>(
-    `/api/books/${encodeURIComponent(slug)}/inspiration/generate-preview`,
+    `/api/books/${encodeURIComponent(bookId)}/inspiration/generate-preview`,
     {
     method: "POST",
     body: JSON.stringify(input)
@@ -735,7 +739,7 @@ export async function generateInspirationPreview(slug: string, input: {
   );
 }
 
-export async function generateInspirationVariants(slug: string, input: {
+export async function generateInspirationVariants(bookId: string, input: {
   modelConfigId: string | null;
   id: string;
   count?: number;
@@ -743,7 +747,7 @@ export async function generateInspirationVariants(slug: string, input: {
   freeText?: string;
 }) {
   return await http<{ ok: true; index: InspirationIndex; items: IdeaItem[]; debug?: { prompt: string; rawText: string } }>(
-    `/api/books/${encodeURIComponent(slug)}/inspiration/variant`,
+    `/api/books/${encodeURIComponent(bookId)}/inspiration/variant`,
     {
     method: "POST",
     body: JSON.stringify(input)
@@ -752,69 +756,69 @@ export async function generateInspirationVariants(slug: string, input: {
 }
 
 export async function compressTimelineRange(
-  slug: string,
+  bookId: string,
   input: { startChapter: number; endChapter: number; modelConfigId: string | null }
 ) {
-  return await http<{ ok: true; index: TimelineIndex }>(`/api/books/${encodeURIComponent(slug)}/timeline/compress`, {
+  return await http<{ ok: true; index: TimelineIndex }>(`/api/books/${encodeURIComponent(bookId)}/timeline/compress`, {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
 export async function deleteTimelineRange(
-  slug: string,
+  bookId: string,
   input: { startChapter: number; endChapter: number }
 ) {
-  return await http<{ ok: true; index: TimelineIndex }>(`/api/books/${encodeURIComponent(slug)}/timeline/range/delete`, {
+  return await http<{ ok: true; index: TimelineIndex }>(`/api/books/${encodeURIComponent(bookId)}/timeline/range/delete`, {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
 export async function markTimelineEvent(
-  slug: string,
+  bookId: string,
   input: { id: string; status: "open" | "done" }
 ) {
-  return await http<{ ok: true; index: TimelineIndex }>(`/api/books/${encodeURIComponent(slug)}/timeline/event/mark`, {
+  return await http<{ ok: true; index: TimelineIndex }>(`/api/books/${encodeURIComponent(bookId)}/timeline/event/mark`, {
     method: "POST",
     body: JSON.stringify(input)
   });
 }
 
-export async function listStory(slug: string) {
+export async function listStory(bookId: string) {
   return await http<{ storyFiles: StoryFile[]; charFiles: StoryFile[] }>(
-    `/api/books/${encodeURIComponent(slug)}/story`
+    `/api/books/${encodeURIComponent(bookId)}/story`
   );
 }
 
-export async function readStoryFile(slug: string, relPath: string) {
+export async function readStoryFile(bookId: string, relPath: string) {
   return await http<{ content: string }>(
-    `/api/books/${encodeURIComponent(slug)}/story/file?path=${encodeURIComponent(relPath)}`
+    `/api/books/${encodeURIComponent(bookId)}/story/file?path=${encodeURIComponent(relPath)}`
   );
 }
 
-export async function updateStoryFile(slug: string, relPath: string, content: string) {
-  return await http<{ ok: true }>(`/api/books/${encodeURIComponent(slug)}/story/file`, {
+export async function updateStoryFile(bookId: string, relPath: string, content: string) {
+  return await http<{ ok: true }>(`/api/books/${encodeURIComponent(bookId)}/story/file`, {
     method: "PUT",
     body: JSON.stringify({ path: relPath, content })
   });
 }
 
 export async function createCharacter(
-  slug: string,
+  bookId: string,
   input: { name: string; role?: string; tags?: string[] }
 ) {
   return await http<{ character: { relPath: string } }>(
-    `/api/books/${encodeURIComponent(slug)}/story/characters`,
+    `/api/books/${encodeURIComponent(bookId)}/story/characters`,
     { method: "POST", body: JSON.stringify(input) }
   );
 }
 
 export async function mergeCharacterCards(
-  slug: string,
+  bookId: string,
   input: { primaryPath: string; secondaryPaths: string[]; modelConfigId: string | null }
 ) {
-  return await http<{ ok: true; charFiles: StoryFile[] }>(`/api/books/${encodeURIComponent(slug)}/story/characters/merge`, {
+  return await http<{ ok: true; charFiles: StoryFile[] }>(`/api/books/${encodeURIComponent(bookId)}/story/characters/merge`, {
     method: "POST",
     body: JSON.stringify(input)
   });
@@ -842,8 +846,8 @@ export type BookStats = {
   availableYears: number[];
 };
 
-export async function getBookStats(slug: string) {
-  return await http<{ stats: BookStats }>(`/api/books/${encodeURIComponent(slug)}/stats`);
+export async function getBookStats(bookId: string) {
+  return await http<{ stats: BookStats }>(`/api/books/${encodeURIComponent(bookId)}/stats`);
 }
 
 export type BookOutline = {
@@ -904,19 +908,19 @@ export type OutlineAiMode =
   | "volumeChapterPlans"
   | "foreshadowAudit";
 
-export async function getOutline(slug: string) {
-  return await http<{ outline: OutlineIndex }>(`/api/books/${encodeURIComponent(slug)}/outline`);
+export async function getOutline(bookId: string) {
+  return await http<{ outline: OutlineIndex }>(`/api/books/${encodeURIComponent(bookId)}/outline`);
 }
 
-export async function patchOutline(slug: string, outline: OutlineIndex) {
-  return await http<{ outline: OutlineIndex }>(`/api/books/${encodeURIComponent(slug)}/outline`, {
+export async function patchOutline(bookId: string, outline: OutlineIndex) {
+  return await http<{ outline: OutlineIndex }>(`/api/books/${encodeURIComponent(bookId)}/outline`, {
     method: "PATCH",
     body: JSON.stringify({ outline })
   });
 }
 
 export async function generateOutlineAi(
-  slug: string,
+  bookId: string,
   body: {
     mode: OutlineAiMode;
     modelConfigId?: string | null;
@@ -934,17 +938,17 @@ export async function generateOutlineAi(
   }
 ) {
   return await http<{ preview: Partial<OutlineIndex> | { report: string }; warnings?: string[] }>(
-    `/api/books/${encodeURIComponent(slug)}/outline/ai`,
+    `/api/books/${encodeURIComponent(bookId)}/outline/ai`,
     { method: "POST", body: JSON.stringify(body) }
   );
 }
 
 export async function applyOutlineAiPreview(
-  slug: string,
+  bookId: string,
   body: { preview: Partial<OutlineIndex> | { report: string }; overwrite?: boolean }
 ) {
   return await http<{ outline: OutlineIndex; warnings?: string[] }>(
-    `/api/books/${encodeURIComponent(slug)}/outline/ai/apply`,
+    `/api/books/${encodeURIComponent(bookId)}/outline/ai/apply`,
     { method: "POST", body: JSON.stringify(body) }
   );
 }
@@ -970,6 +974,7 @@ export type BookSetupDraft = {
   currentStep: BookSetupStepId;
   skippedSteps: BookSetupStepId[];
   visitedSteps?: BookSetupStepId[];
+  linkedBookId?: string;
   title?: string;
   slug?: string;
   metaSynopsis?: string;
@@ -1005,6 +1010,7 @@ export type BookSetupChatResponse = {
   missingFields?: string[];
   suggestion?: BookSetupChatSuggestion;
   draft?: BookSetupDraft;
+  syncWarning?: string;
 };
 
 const BOOK_SETUP_SESSION_KEY = "novel-helper-book-setup-session";
@@ -1074,7 +1080,7 @@ export async function getBookSetupSession(sessionId: string) {
 }
 
 export async function patchBookSetupSession(sessionId: string, body: { draft?: Partial<BookSetupDraft>; currentStep?: BookSetupStepId }) {
-  return await http<{ draft: BookSetupDraft }>(`/api/book-setup/sessions/${encodeURIComponent(sessionId)}`, {
+  return await http<{ draft: BookSetupDraft; syncWarning?: string }>(`/api/book-setup/sessions/${encodeURIComponent(sessionId)}`, {
     method: "PATCH",
     body: JSON.stringify(body)
   });
@@ -1111,7 +1117,7 @@ export async function redesignBookSetupMainline(
 }
 
 export async function commitBookSetupSession(sessionId: string, body?: { title?: string; slug?: string }) {
-  return await http<{ book: BookMeta; slug: string }>(
+  return await http<{ book: BookMeta; bookId: string }>(
     `/api/book-setup/sessions/${encodeURIComponent(sessionId)}/commit`,
     { method: "POST", body: JSON.stringify(body ?? {}) }
   );

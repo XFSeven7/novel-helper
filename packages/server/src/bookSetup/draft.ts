@@ -1,4 +1,5 @@
-import { createDefaultOutlineIndex, type BookOutline, type OutlineIndex } from "../outlineStore.js";
+import { createDefaultOutlineIndex, type BookOutline, type OutlineIndex, writeOutlineIndex } from "../outlineStore.js";
+import { patchNovelMetaFields } from "../fsStore.js";
 import type { BookSetupChatSuggestion, BookSetupDraft, BookSetupStepId } from "./types.js";
 
 export function createEmptyDraft(): BookSetupDraft {
@@ -49,9 +50,37 @@ export function applyDraftPatch(draft: BookSetupDraft, patch: Partial<BookSetupD
   return touchDraft(next);
 }
 
+export async function syncDraftToBook(
+  dataDir: string,
+  bookId: string,
+  draft: BookSetupDraft
+): Promise<void> {
+  await writeOutlineIndex(dataDir, bookId, draftToOutlineIndex(draft));
+  const synopsis = (draft.metaSynopsis?.trim() || draft.concept?.trim() || "").slice(0, 20000);
+  await patchNovelMetaFields(dataDir, bookId, {
+    ...(draft.title?.trim() ? { title: draft.title.trim() } : {}),
+    synopsis,
+    ...(draft.slug !== undefined ? { slug: draft.slug.trim() } : {})
+  });
+}
+
+function normalizeMainlineStagesForOutline(
+  stages: BookSetupDraft["outline"]["book"]["mainlineStages"]
+): BookOutline["mainlineStages"] {
+  if (!stages?.length) return undefined;
+  const next = stages.map((s, i) => ({
+    id: (s.id || `stage-${i + 1}`).trim(),
+    label: (s.label ?? "").trim() || `阶段${i + 1}`,
+    chapterRange: typeof s.chapterRange === "string" ? s.chapterRange : "",
+    note: typeof s.note === "string" ? s.note : ""
+  }));
+  return next.length ? next : undefined;
+}
+
 export function draftToOutlineIndex(draft: BookSetupDraft): OutlineIndex {
   const book: BookOutline = {
     ...draft.outline.book,
+    mainlineStages: normalizeMainlineStagesForOutline(draft.outline.book.mainlineStages),
     targetWords: draft.targetWords ?? draft.outline.book.targetWords,
     targetChapters: draft.targetChapters ?? draft.outline.book.targetChapters,
     structureFramework: draft.structureFramework ?? draft.outline.book.structureFramework

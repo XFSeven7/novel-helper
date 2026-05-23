@@ -48,7 +48,7 @@ export function BookShelfNav({
           displayedBooks.map((b) => {
             const gapCount = normalizeChapterGapList(b.missingChapterIndexes ?? []).length;
             return (
-              <div key={b.slug} className="bookShelfItem">
+              <div key={b.bookId} className="bookShelfItem">
                 <div
                   role="button"
                   tabIndex={busy ? -1 : 0}
@@ -64,7 +64,7 @@ export function BookShelfNav({
                       void onOpenBook(b);
                     }
                   }}
-                  title={`打开全书 · ${b.slug}\n创建:${formatBookCreatedAt(b.createdAt)}\n${b.status} · ${b.chapterCount}章${
+                  title={`打开全书 · ${b.bookId}\n创建:${formatBookCreatedAt(b.createdAt)}\n${b.status} · ${b.chapterCount}章${
                     gapCount ? `\n缺失序号 ${gapCount} 处(进入该书后在左侧书名下处理)` : ""
                   }`}
                 >

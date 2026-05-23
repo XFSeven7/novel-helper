@@ -2047,7 +2047,7 @@ export function AppModals(props: AppModalsProps) {
       </h2>
       <p className="modalChapterGapMuted">
         {(() => {
-          const m = books.find((bk: any) => bk.slug === chapterGapModalBookSlug);
+          const m = books.find((bk: any) => bk.bookId === chapterGapModalBookSlug);
           return m ? `《${m.title}》` : chapterGapModalBookSlug;
         })()}
       </p>
@@ -2238,7 +2238,7 @@ export function AppModals(props: AppModalsProps) {
           <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
             {(books || []).map((b: any, idx: any) => (
                 <button
-                  key={b.slug}
+                  key={b.bookId}
                   type="button"
                   ref={idx === 0 ? searchPickBookFirstBtnRef : undefined}
                   className="chapterEntityItem"
@@ -2253,7 +2253,7 @@ export function AppModals(props: AppModalsProps) {
                   title={`跳转到《${b.title}》`}
                 >
                   <span className="chapterEntityName">{b.title}</span>
-                  <span className="muted chapterEntityMeta">{b.slug}</span>
+                  <span className="muted chapterEntityMeta">{b.bookId.slice(0, 8)}</span>
                 </button>
               ))}
           </div>

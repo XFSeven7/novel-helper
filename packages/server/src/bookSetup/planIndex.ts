@@ -66,6 +66,10 @@ export async function listPlans(dataDir: string): Promise<BookSetupPlanEntry[]> 
       changed = true;
       continue;
     }
+    if (draft.linkedBookId?.trim()) {
+      changed = true;
+      continue;
+    }
     const fresh = entryFromDraft(entry.sessionId, draft, entry.registeredAt);
     if (
       fresh.updatedAt !== entry.updatedAt ||
@@ -92,6 +96,9 @@ export async function isPlanRegistered(dataDir: string, sessionId: string): Prom
 }
 
 export async function registerPlan(dataDir: string, sessionId: string, draft: BookSetupDraft): Promise<BookSetupPlanEntry> {
+  if (draft.linkedBookId?.trim()) {
+    return entryFromDraft(sessionId, draft);
+  }
   const index = await readIndex(dataDir);
   const existing = index.plans.find((p) => p.sessionId === sessionId);
   const entry = entryFromDraft(sessionId, draft, existing?.registeredAt);

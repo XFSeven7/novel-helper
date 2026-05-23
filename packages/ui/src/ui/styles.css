@@ -968,6 +968,8 @@ code {
 
 .btnNewBookPlan {
   font-weight: 600;
+  padding: 5px 10px;
+  font-size: 12px;
 }
 
 .btnNewBookQuick {
@@ -979,20 +981,26 @@ code {
 }
 
 .modalPanel.bookSetupWizard {
-  width: min(1080px, 96vw);
-  height: min(90vh, 880px);
-  max-height: min(90vh, 880px);
+  width: min(1000px, 94vw);
+  height: min(86vh, 800px);
+  max-height: min(86vh, 800px);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 18px 20px;
+  gap: 6px;
+  padding: 12px 14px;
   box-sizing: border-box;
+}
+
+.modalPanel.bookSetupWizard .modalHeading {
+  font-size: 15px;
+  margin: 0 0 2px;
 }
 
 .bookSetupWizardIntro {
   margin: 0;
-  font-size: 13px;
+  font-size: 11px;
+  line-height: 1.35;
   flex-shrink: 0;
 }
 
@@ -1015,7 +1023,7 @@ code {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding-right: 14px;
+  padding-right: 10px;
   border-right: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
 }
 
@@ -1032,29 +1040,30 @@ code {
 }
 
 .bookSetupStepTitle {
-  margin: 0 0 4px;
-  font-size: 16px;
+  margin: 0 0 2px;
+  font-size: 14px;
 }
 
 .bookSetupStepHint {
-  margin: 0 0 10px;
-  font-size: 13px;
+  margin: 0 0 6px;
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .bookSetupTabs {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 10px;
+  gap: 3px;
+  margin-bottom: 6px;
   flex-shrink: 0;
 }
 
 .bookSetupTab {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  font-size: 11px;
+  gap: 3px;
+  padding: 3px 6px;
+  font-size: 10px;
   line-height: 1.3;
   border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
   background: color-mix(in srgb, var(--panel2) 70%, transparent);
@@ -1085,7 +1094,19 @@ code {
 .bookSetupFields {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
+}
+
+.modalPanel.bookSetupWizard .bookSetupFields .modalLabel {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.modalPanel.bookSetupWizard .bookSetupFields .modalInput,
+.modalPanel.bookSetupWizard .bookSetupFields textarea.modalInput {
+  padding: 5px 8px;
+  font-size: 12px;
+  line-height: 1.4;
 }
 
 .bookSetupMainlineStickyNav {
@@ -1094,66 +1115,76 @@ code {
   z-index: 3;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  margin: -2px 0 8px;
-  padding: 8px 0 10px;
+  gap: 5px;
+  margin: 0 0 6px;
+  padding: 4px 0 6px;
   background: var(--panel);
-  box-shadow: 0 8px 12px -8px color-mix(in srgb, var(--panel) 40%, #000);
+  box-shadow: 0 6px 10px -8px color-mix(in srgb, var(--panel) 40%, #000);
 }
 
 .bookSetupMainlineToolbar {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
-  background: color-mix(in srgb, var(--accent) 6%, var(--panel2));
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border));
+  background: color-mix(in srgb, var(--accent) 5%, var(--panel2));
 }
 
 .bookSetupMainlineToolbarTitle {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 650;
-  color: color-mix(in srgb, var(--text) 90%, transparent);
+  color: color-mix(in srgb, var(--text) 88%, transparent);
+  flex-shrink: 0;
 }
 
-.bookSetupMainlineToolbarRow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 8px 12px;
-}
-
-.bookSetupMainlineCount {
-  display: flex;
-  flex-direction: column;
+.bookSetupMainlineCountInline {
+  display: inline-flex;
+  align-items: center;
   gap: 4px;
-  min-width: 88px;
+}
+
+.bookSetupMainlineCountLabel {
+  font-size: 10px;
+  color: var(--muted);
 }
 
 .bookSetupMainlineCountInput {
-  width: 72px;
-  padding-top: 5px;
-  padding-bottom: 5px;
+  box-sizing: border-box;
+  width: 42px;
+  padding: 3px 5px;
+  font-size: 12px;
+  line-height: 1.2;
+  border: 1px solid var(--input-border, var(--border));
+  background: var(--input-bg, var(--panel));
+  color: var(--text);
+}
+
+.bookSetupMainlineAddBtn {
+  padding: 3px 8px;
+  font-size: 10px;
 }
 
 .bookSetupMainlineChips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 4px;
 }
 
 .bookSetupMainlineChip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   max-width: 100%;
-  padding: 4px 10px;
+  padding: 2px 8px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   background: var(--panel);
   color: var(--text);
-  font-size: 11px;
+  font-size: 10px;
   cursor: pointer;
   text-align: left;
 }
@@ -1176,6 +1207,7 @@ code {
 .bookSetupMainlineChipNum {
   flex-shrink: 0;
   font-weight: 650;
+  font-size: 9px;
   color: color-mix(in srgb, var(--accent) 75%, var(--text));
 }
 
@@ -1195,8 +1227,8 @@ code {
 .bookSetupVolumeRow {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding-bottom: 10px;
+  gap: 4px;
+  padding-bottom: 6px;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
 }
 
@@ -1210,7 +1242,7 @@ code {
 
 .bookSetupStageTitle {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 650;
   color: color-mix(in srgb, var(--accent) 70%, var(--text));
 }
@@ -1236,6 +1268,32 @@ code {
   margin-top: 0;
 }
 
+.bookSetupLinkedHint {
+  margin: 0 0 6px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.modalPanel.bookSetupWizard .modalActionsWrap {
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.modalPanel.bookSetupWizard .btnModalSecondary,
+.modalPanel.bookSetupWizard .btnModalPrimary {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.bookSetupCommitWrap {
+  display: inline-flex;
+  cursor: default;
+}
+
+.bookSetupCommitWrap:has(button:disabled) {
+  cursor: not-allowed;
+}
+
 .bookSetupChatPane {
   flex: 1;
   min-width: 0;
@@ -1243,13 +1301,13 @@ code {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding-left: 14px;
+  padding-left: 10px;
 }
 
 .bookSetupChatPaneTitle {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 650;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   flex-shrink: 0;
   color: color-mix(in srgb, var(--text) 88%, transparent);
 }
@@ -1269,13 +1327,13 @@ code {
   height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 10px;
+  padding: 6px 8px;
   border: 1px solid var(--input-border, var(--border));
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 5px;
 }
 
 .bookSetupChatEmpty {
@@ -1284,8 +1342,8 @@ code {
 }
 
 .bookSetupChatBubble {
-  padding: 8px 10px;
-  border-radius: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
   max-width: 100%;
 }
 
@@ -1639,26 +1697,43 @@ code {
   font-weight: 650;
 }
 
+.navTitleCompact {
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+
+.navShelfHintCompact {
+  font-size: 10px;
+  line-height: 1.35;
+  margin: 0 0 6px;
+}
+
+.outlineHintCompact {
+  font-size: 10px;
+  line-height: 1.35;
+  margin: 0 0 6px;
+}
+
 .bookPlanningList {
-  margin-top: 4px;
+  margin-top: 2px;
 }
 
 .bookPlanningItem {
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
-  padding-bottom: 6px;
+  padding-bottom: 4px;
 }
 
 .bookPlanningRow {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
-  padding: 6px 4px;
+  gap: 1px;
+  padding: 4px 2px;
 }
 
 .bookPlanningTitle {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -1671,20 +1746,20 @@ code {
 }
 
 .bookPlanningMeta {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--muted);
 }
 
 .bookPlanningActions {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  padding: 0 4px 4px;
+  gap: 3px;
+  padding: 0 2px 2px;
 }
 
 .bookPlanningActBtn {
-  font-size: 10px;
-  padding: 2px 8px;
+  font-size: 9px;
+  padding: 1px 6px;
 }
 
 .bookPlanningActBtnDanger:not(:disabled):hover {
@@ -1693,22 +1768,41 @@ code {
 }
 
 .bookPlanningModelHint {
-  margin: 0 0 8px;
-  font-size: 11px;
+  margin: 0 0 4px;
+  font-size: 10px;
 }
 
 .bookSetupFormHead {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 8px;
+  gap: 8px;
+  margin-bottom: 4px;
 }
 
 .bookSetupDiscardBtn {
   flex-shrink: 0;
   font-size: 11px;
   white-space: nowrap;
+}
+
+.bookPlanningReviewBtn {
+  margin-top: 10px;
+  width: 100%;
+}
+
+.outlineAiMainlineList {
+  margin: 6px 0 0;
+  padding-left: 1.2em;
+  font-size: 13px;
+}
+
+.outlineAiMainlineList li {
+  margin-bottom: 8px;
+}
+
+.outlineAiMainlineList li p {
+  margin: 4px 0 0;
 }
 
 .navSortBar {

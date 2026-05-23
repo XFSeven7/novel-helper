@@ -160,11 +160,11 @@ export function normalizeOutlineIndex(parsed: any): OutlineIndex {
     ? bookRaw.mainlineStages
         .map((s: any, i: number) => ({
           id: String(s?.id || `stage-${i + 1}`).trim(),
-          label: String(s?.label || "").trim(),
+          label: String(s?.label || "").trim() || `阶段${i + 1}`,
           chapterRange: typeof s?.chapterRange === "string" ? s.chapterRange : undefined,
           note: typeof s?.note === "string" ? s.note : undefined
         }))
-        .filter((s: { id: string; label: string }) => s.id && s.label)
+        .filter((s: { id: string }) => s.id)
     : undefined;
 
   const volumes: VolumeOutline[] = [];

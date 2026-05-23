@@ -46,8 +46,8 @@ export function BookPlanningNav({
 }) {
   return (
     <>
-      <div className="navTitle">新书规划</div>
-      <p className="navShelfHint muted">进行中的建书草案保存在本地；建书成功后自动进入书架。</p>
+      <div className="navTitle navTitleCompact">新书规划</div>
+      <p className="navShelfHint navShelfHintCompact muted">本地草案；建书后进入书架。</p>
       <div className="navNewBookRow">
         <button type="button" className="btnNewBookFull btnNewBookPlan" onClick={onNewPlan} disabled={busy || !hasModel}>
           新建规划

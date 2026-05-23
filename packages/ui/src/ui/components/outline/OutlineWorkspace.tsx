@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import type { ChapterMeta, OutlineAiMode, OutlineIndex, VolumeOutline } from "../../api";
 import { useOutline } from "../../hooks/useOutline";
 import { OutlineAiPreviewModal } from "./OutlineAiPreviewModal";
+import { OutlineMainlinePanel } from "./OutlineMainlinePanel";
 import { OutlineTextarea } from "./OutlineTextarea";
 
 export type OutlineWorkspaceProps = {
@@ -12,9 +13,11 @@ export type OutlineWorkspaceProps = {
   bookSynopsis?: string;
   onOpenChapter: (chapter: ChapterMeta) => void;
   onStatus?: (msg: string) => void;
+  /** 变更时强制重新拉取 outline（如规划同步到本书后） */
+  refreshToken?: number;
 };
 
-type SubTab = "book" | "volumes" | "chapters";
+type SubTab = "book" | "stages" | "volumes" | "chapters";
 
 export function OutlineWorkspace({
   slug,
@@ -23,9 +26,13 @@ export function OutlineWorkspace({
   activeModelId,
   bookSynopsis,
   onOpenChapter,
-  onStatus
+  onStatus,
+  refreshToken = 0
 }: OutlineWorkspaceProps) {
-  const { outline, loading, saving, aiBusy, err, updateOutline, runAi, applyPreview, saveNow } = useOutline(slug);
+  const { outline, loading, saving, aiBusy, err, updateOutline, runAi, applyPreview, saveNow } = useOutline(
+    slug,
+    refreshToken
+  );
   const [subTab, setSubTab] = useState<SubTab>("book");
   const [selectedVolumeId, setSelectedVolumeId] = useState<string | null>(null);
   const [selectedChapterFilename, setSelectedChapterFilename] = useState<string | null>(null);
@@ -191,6 +198,14 @@ export function OutlineWorkspace({
         />
       ) : null}
 
+      {subTab === "stages" ? (
+        <OutlineMainlinePanel
+          book={outline.book}
+          disabled={disabled}
+          onBookChange={(book) => updateOutline((prev) => ({ ...prev, book }))}
+        />
+      ) : null}
+
       {subTab === "volumes" ? (
         <VolumesPanel
           outline={outline}
@@ -325,6 +340,7 @@ function OutlineInstruction({
 function OutlineSubTabs({ subTab, onChange }: { subTab: SubTab; onChange: (t: SubTab) => void }) {
   const tabs: { id: SubTab; label: string }[] = [
     { id: "book", label: "全书" },
+    { id: "stages", label: "阶段" },
     { id: "volumes", label: "分卷" },
     { id: "chapters", label: "章纲" }
   ];

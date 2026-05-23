@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { createNovel, novelSummaryFromMeta } from "../fsStore.js";
@@ -19,7 +20,8 @@ import {
   applyMainlineStagesFromSuggestion,
   draftToOutlineIndex,
   isValidStepId,
-  listMissingForReview
+  listMissingForReview,
+  syncDraftToBook
 } from "./draft.js";
 import { createSession, deleteSession, readSession, writeSession } from "./sessionStore.js";
 import type { BookSetupDraft, BookSetupStepId } from "./types.js";
@@ -49,6 +51,33 @@ async function syncPlanAfterEdit(
   const substantive = Boolean(body.draft) || Boolean(body.currentStep);
   if (!substantive) return;
   await registerPlan(dataDir, sessionId, draft);
+}
+
+async function trySyncLinkedBook(
+  dataDir: string,
+  draft: BookSetupDraft
+): Promise<string | undefined> {
+  const bookId = draft.linkedBookId?.trim();
+  if (!bookId) return undefined;
+  try {
+    await syncDraftToBook(dataDir, bookId, draft);
+    return undefined;
+  } catch (e: unknown) {
+    return e instanceof Error ? e.message : String(e);
+  }
+}
+
+async function afterSessionPersist(
+  dataDir: string,
+  sessionId: string,
+  draft: BookSetupDraft,
+  body?: { draft?: unknown; currentStep?: string }
+): Promise<{ syncWarning?: string }> {
+  const syncWarning = await trySyncLinkedBook(dataDir, draft);
+  if (!draft.linkedBookId?.trim() && body) {
+    await syncPlanAfterEdit(dataDir, sessionId, draft, body);
+  }
+  return syncWarning ? { syncWarning } : {};
 }
 
 export function registerBookSetupRoutes(app: FastifyInstance, deps: BookSetupRouteDeps) {
@@ -102,8 +131,8 @@ export function registerBookSetupRoutes(app: FastifyInstance, deps: BookSetupRou
     }
     const dataDir = deps.getDataDir();
     const saved = await writeSession(dataDir, params.id, withDedupedStepMessages(next));
-    await syncPlanAfterEdit(dataDir, params.id, saved, body);
-    return { draft: saved };
+    const extra = await afterSessionPersist(dataDir, params.id, saved, body);
+    return { draft: saved, ...extra };
   });
 
   app.post("/api/book-setup/sessions/:id/suggest-title", async (req, reply) => {
@@ -134,8 +163,8 @@ export function registerBookSetupRoutes(app: FastifyInstance, deps: BookSetupRou
     });
     const merged = applyDraftPatch(draft, { title });
     const saved = await writeSession(dataDir, params.id, merged);
-    await registerPlan(dataDir, params.id, saved);
-    return { title, draft: saved };
+    const extra = await afterSessionPersist(dataDir, params.id, saved, { draft: merged });
+    return { title, draft: saved, ...extra };
   });
 
   app.post("/api/book-setup/sessions/:id/chat", async (req, reply) => {
@@ -186,9 +215,9 @@ export function registerBookSetupRoutes(app: FastifyInstance, deps: BookSetupRou
     const dataDir = deps.getDataDir();
     const saved = withDedupedStepMessages(next);
     await writeSession(dataDir, params.id, saved);
-    await registerPlan(dataDir, params.id, saved);
+    const extra = await afterSessionPersist(dataDir, params.id, saved, { draft: saved });
 
-    return { ...chat, draft: saved };
+    return { ...chat, draft: saved, ...extra };
   });
 
   app.post("/api/book-setup/sessions/:id/apply-step", async (req, reply) => {
@@ -229,8 +258,10 @@ export function registerBookSetupRoutes(app: FastifyInstance, deps: BookSetupRou
     if (result.suggestion && Object.keys(result.suggestion).length > 0) {
       merged = applyBookSetupSuggestionToDraft(draft, body.stepId as BookSetupStepId, result.suggestion);
       merged = withDedupedStepMessages(merged);
-      await writeSession(deps.getDataDir(), params.id, merged);
-      result = { ...result, draft: merged };
+      const dataDir = deps.getDataDir();
+      await writeSession(dataDir, params.id, merged);
+      const extra = await afterSessionPersist(dataDir, params.id, merged, { draft: merged });
+      result = { ...result, draft: merged, ...extra };
     }
 
     return result;
@@ -279,8 +310,10 @@ export function registerBookSetupRoutes(app: FastifyInstance, deps: BookSetupRou
       stepMessages: { ...merged.stepMessages, mainline: stepHistory }
     });
     merged = withDedupedStepMessages(merged);
-    await writeSession(deps.getDataDir(), params.id, merged);
-    result = { ...result, draft: merged };
+    const dataDir = deps.getDataDir();
+    await writeSession(dataDir, params.id, merged);
+    const extra = await afterSessionPersist(dataDir, params.id, merged, { draft: merged });
+    result = { ...result, draft: merged, ...extra };
 
     return result;
   });
@@ -298,6 +331,10 @@ export function registerBookSetupRoutes(app: FastifyInstance, deps: BookSetupRou
     const draft = await readSession(deps.getDataDir(), params.id);
     if (!draft) return reply.code(404).send({ message: "Session not found or expired" });
 
+    if (draft.linkedBookId?.trim()) {
+      return reply.code(400).send({ message: "本书已创建，修改将自动同步" });
+    }
+
     const title = (body?.title ?? draft.title)?.trim();
     if (!title) return reply.code(400).send({ message: "书名不能为空" });
 
@@ -312,24 +349,27 @@ export function registerBookSetupRoutes(app: FastifyInstance, deps: BookSetupRou
       });
     }
 
-    const slug = safeSlug(merged.slug?.trim() || title);
-    if (!slug) return reply.code(400).send({ message: "无法从书名生成有效 slug" });
-
+    const displaySlug = safeSlug(merged.slug?.trim() || title) || undefined;
+    const bookId = crypto.randomUUID();
     const dataDir = deps.getDataDir();
     const metaSynopsis = merged.metaSynopsis?.trim() || merged.concept?.trim() || "";
 
     try {
-      const meta = await createNovel(dataDir, slug, title, metaSynopsis || undefined);
+      const meta = await createNovel(dataDir, bookId, title, metaSynopsis || undefined, {
+        slug: displaySlug,
+        setupSessionId: params.id
+      });
       const outline = draftToOutlineIndex(merged);
-      await writeOutlineIndex(dataDir, slug, outline);
+      await writeOutlineIndex(dataDir, bookId, outline);
+      const archived = applyDraftPatch(merged, { linkedBookId: bookId });
+      await writeSession(dataDir, params.id, archived);
       await removePlan(dataDir, params.id);
-      await deleteSession(dataDir, params.id);
       const book = novelSummaryFromMeta(meta, 0, []);
-      return { book, slug };
+      return { book, bookId };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       if (/already exists|Conflict/i.test(msg)) {
-        return reply.code(409).send({ message: `书籍已存在: ${slug}` });
+        return reply.code(409).send({ message: `书籍已存在: ${bookId}` });
       }
       return reply.code(500).send({ message: msg });
     }
