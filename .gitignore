@@ -42,6 +42,7 @@ Thumbs.db
 Desktop.ini
 
 # IDE / 编辑器（个人与本机配置）
+.cursor/
 .idea/
 *.iml
 .project
@@ -74,3 +75,4 @@ scripts/
 
 # novel-helper 历史/备用数据目录（若在仓库根）
 /.novel-helper/
+
