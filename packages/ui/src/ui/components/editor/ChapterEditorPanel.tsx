@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { appConfirm } from "../../dialog/dialog";
+import { applyLocalMobileLayout } from "../../utils/localMobileLayout";
 import { ChapterEditorContent, type ChapterEditorContentProps } from "./ChapterEditorContent";
 import { clampMobileFontPx, readStoredMobileFontPx, storeMobileFontPx } from "./mobileFontSize";
+import { useSyncScrollPair } from "../../hooks/useSyncScrollPair";
 import { MobileRawView } from "./MobileRawView";
 import { MobileTopToolbar } from "./MobileTopToolbar";
 
@@ -11,6 +13,8 @@ export type MobileLayoutControl = {
   original: string;
   onRun: () => void | Promise<void>;
 };
+
+type CompareRightSource = "local" | "ai" | null;
 
 export type ChapterEditorPanelProps = ChapterEditorContentProps & {
   mobileReading: boolean;
@@ -35,10 +39,29 @@ export function ChapterEditorPanel({
 }: ChapterEditorPanelProps) {
   const [mobileCompareOn, setMobileCompareOn] = useState(false);
   const [mobileFontPx, setMobileFontPx] = useState(readStoredMobileFontPx);
+  const [compareOriginal, setCompareOriginal] = useState("");
+  const [localCompareDraft, setLocalCompareDraft] = useState("");
+  const [compareRightSource, setCompareRightSource] = useState<CompareRightSource>(null);
 
   useEffect(() => {
-    if (!mobileReading) setMobileCompareOn(false);
+    if (!mobileReading) {
+      setMobileCompareOn(false);
+      setCompareOriginal("");
+      setLocalCompareDraft("");
+      setCompareRightSource(null);
+    }
   }, [mobileReading]);
+
+  useEffect(() => {
+    setCompareOriginal("");
+    setLocalCompareDraft("");
+    setCompareRightSource(null);
+    setMobileCompareOn(false);
+  }, [contentProps.selectedChapter?.filename]);
+
+  useEffect(() => {
+    if (mobileLayout?.original) setCompareOriginal(mobileLayout.original);
+  }, [mobileLayout?.original]);
 
   const changeFontSize = useCallback((delta: number) => {
     setMobileFontPx((prev) => {
@@ -58,26 +81,65 @@ export function ChapterEditorPanel({
     !contentProps.auditReadModeOn &&
     Boolean(mobileLayout);
 
+  const runLocalLayout = useCallback(() => {
+    const snap = compareOriginal || contentProps.chapterContent;
+    setCompareOriginal(snap);
+    setLocalCompareDraft(applyLocalMobileLayout(snap));
+    setCompareRightSource("local");
+    setMobileCompareOn(true);
+  }, [compareOriginal, contentProps.chapterContent]);
+
   const startAiLayout = useCallback(async () => {
     if (!mobileLayout || contentProps.busy || mobileLayout.busy) return;
     if (!okModelCount) return;
+    const snap = compareOriginal || contentProps.chapterContent;
+    setCompareOriginal(snap);
+    setCompareRightSource("ai");
     setMobileCompareOn(true);
     await mobileLayout.onRun();
-  }, [mobileLayout, contentProps.busy, okModelCount]);
+  }, [mobileLayout, contentProps.busy, contentProps.chapterContent, compareOriginal, okModelCount]);
 
   const handleApply = async () => {
-    const text = mobileLayout?.draft.trim() || "";
+    const text =
+      (compareRightSource === "ai" ? mobileLayout?.draft : localCompareDraft)?.trim() || "";
     if (!text || contentProps.busy || mobileLayout?.busy) return;
     const ok = await appConfirm({
       title: "应用排版",
-      message: "将把 AI 排版结果写入本章正文（覆盖当前编辑器内容），是否继续？",
+      message:
+        compareRightSource === "local"
+          ? "将把本地排版结果（段首两字空位）写入本章正文，是否继续？"
+          : "将把 AI 排版结果写入本章正文，是否继续？",
       confirmLabel: "应用",
       variant: "danger"
     });
     if (!ok) return;
     onApplyMobileLayout(text);
     setMobileCompareOn(false);
+    setLocalCompareDraft("");
+    setCompareRightSource(null);
   };
+
+  const canApply =
+    compareRightSource === "ai"
+      ? Boolean(mobileLayout?.draft.trim())
+      : compareRightSource === "local"
+        ? Boolean(localCompareDraft.trim())
+        : false;
+
+  const leftText = compareOriginal || mobileLayout?.original || contentProps.chapterContent;
+
+  const rightText = (() => {
+    if (compareRightSource === "ai" && mobileLayout?.busy && !mobileLayout.draft) return "AI 排版中…";
+    if (compareRightSource === "ai" && mobileLayout?.draft) return mobileLayout.draft;
+    if (compareRightSource === "local" && localCompareDraft) return localCompareDraft;
+    return "点击「本地排版」或「AI 排版」";
+  })();
+
+  const scrollSyncKey = `${contentProps.selectedChapter?.filename ?? ""}:${mobileCompareOn}:${compareRightSource}:${mobileFontPx}`;
+  const { leftRef, rightRef } = useSyncScrollPair(
+    Boolean(canCompare && mobileCompareOn && !showHistory),
+    scrollSyncKey
+  );
 
   if (showHistory && historyPane) {
     return <>{historyPane}</>;
@@ -97,47 +159,75 @@ export function ChapterEditorPanel({
     />
   );
 
-  const leftText = mobileLayout?.original || contentProps.chapterContent;
-  const rightText = mobileLayout?.busy && !mobileLayout.draft
-    ? "AI 排版中…"
-    : mobileLayout?.draft || "点击顶部「AI 排版」生成右侧预览";
+  const rightLabel =
+    compareRightSource === "ai"
+      ? "AI 排版后"
+      : compareRightSource === "local"
+        ? "本地排版后"
+        : "排版后";
 
-  const layoutActions = !canCompare ? null : !mobileCompareOn ? (
-    <button
-      type="button"
-      className="btnSort"
-      disabled={contentProps.busy || mobileLayout?.busy || !okModelCount}
-      onClick={() => void startAiLayout()}
-      title={okModelCount ? "AI 排版并左右对比" : "请先在设置中配置可用模型"}
-    >
-      AI 排版
-    </button>
-  ) : (
+  const layoutButtons = !canCompare ? null : (
     <>
       <button
         type="button"
         className="btnSort"
-        disabled={contentProps.busy || mobileLayout?.busy || !okModelCount}
-        onClick={() => void mobileLayout?.onRun()}
+        disabled={contentProps.busy || mobileLayout?.busy}
+        onClick={() => runLocalLayout()}
+        title="段首补两个全角空格，不调用 AI"
       >
-        {mobileLayout?.busy ? "排版中…" : "重新生成"}
-      </button>
-      <button
-        type="button"
-        className="btnSort mobileRelayoutApplyBtn"
-        disabled={contentProps.busy || mobileLayout?.busy || !mobileLayout?.draft.trim()}
-        onClick={() => void handleApply()}
-      >
-        一键应用
+        本地排版
       </button>
       <button
         type="button"
         className="btnSort"
-        disabled={contentProps.busy || mobileLayout?.busy}
-        onClick={() => setMobileCompareOn(false)}
+        disabled={contentProps.busy || mobileLayout?.busy || !okModelCount}
+        onClick={() => void startAiLayout()}
+        title={okModelCount ? "AI 优化分段与手机阅读版式" : "请先在设置中配置可用模型"}
       >
-        关闭对比
+        AI 排版
       </button>
+      {mobileCompareOn ? (
+        <>
+          {compareRightSource === "local" ? (
+            <button
+              type="button"
+              className="btnSort"
+              disabled={contentProps.busy || mobileLayout?.busy}
+              onClick={() => runLocalLayout()}
+            >
+              重做本地
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btnSort"
+              disabled={contentProps.busy || mobileLayout?.busy || !okModelCount}
+              onClick={() => void mobileLayout?.onRun()}
+            >
+              {mobileLayout?.busy ? "排版中…" : "重做 AI"}
+            </button>
+          )}
+          <button
+            type="button"
+            className="btnSort mobileRelayoutApplyBtn"
+            disabled={contentProps.busy || mobileLayout?.busy || !canApply}
+            onClick={() => void handleApply()}
+          >
+            一键应用
+          </button>
+          <button
+            type="button"
+            className="btnSort"
+            disabled={contentProps.busy || mobileLayout?.busy}
+            onClick={() => {
+              setMobileCompareOn(false);
+              setCompareRightSource(null);
+            }}
+          >
+            关闭对比
+          </button>
+        </>
+      ) : null}
     </>
   );
 
@@ -150,7 +240,7 @@ export function ChapterEditorPanel({
             onFontSizeChange={changeFontSize}
             disabled={contentProps.busy}
           >
-            {layoutActions}
+            {layoutButtons}
           </MobileTopToolbar>
 
           {canCompare && mobileCompareOn ? (
@@ -158,15 +248,23 @@ export function ChapterEditorPanel({
               <div className="mobileCompareCol">
                 <div className="mobileCompareLabel">原文</div>
                 <div className="mobilePhone" style={phoneStyle}>
-                  <MobileRawView content={leftText} className="mobileRawView" fontSizePx={mobileFontPx} />
+                  <MobileRawView
+                    ref={leftRef}
+                    content={leftText}
+                    className="mobileRawView"
+                    fontSizePx={mobileFontPx}
+                  />
                 </div>
               </div>
               <div className="mobileCompareCol">
-                <div className="mobileCompareLabel">AI 排版后</div>
+                <div className="mobileCompareLabel">{rightLabel}</div>
                 <div className="mobilePhone" style={phoneStyle}>
                   <MobileRawView
+                    ref={rightRef}
                     content={rightText}
-                    className={`mobileRawView ${mobileLayout?.busy ? "mobileRawViewPending" : ""}`}
+                    className={`mobileRawView ${
+                      compareRightSource === "ai" && mobileLayout?.busy ? "mobileRawViewPending" : ""
+                    }`}
                     fontSizePx={mobileFontPx}
                   />
                 </div>
@@ -182,11 +280,9 @@ export function ChapterEditorPanel({
 
           {canCompare ? (
             <p className="mobileStageFootnote muted">
-              {!okModelCount
-                ? "需先配置可用模型"
-                : mobileCompareOn
-                  ? "左右对比 · 段首缩进 2 字 · 字号两屏同步"
-                  : "点击「AI 排版」进入左右对比"}
+              {mobileCompareOn
+                ? "本地：段首「　　」· AI：智能分段 · 一键应用写入正文"
+                : "先「本地排版」或「AI 排版」进入左右对比"}
             </p>
           ) : null}
         </div>

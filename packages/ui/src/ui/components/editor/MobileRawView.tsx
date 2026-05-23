@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { forwardRef, useMemo } from "react";
 
 function paragraphsForDisplay(raw: string): string[] {
   const t = (raw || "").replace(/\r/g, "").trim();
@@ -24,19 +24,19 @@ function displayText(text: string, kind: ReturnType<typeof paraKind>) {
 }
 
 /** 移动预览阅读区：分段展示，正文段首缩进 2 字 */
-export function MobileRawView({
-  content,
-  className,
-  fontSizePx
-}: {
-  content: string;
-  className?: string;
-  fontSizePx?: number;
-}) {
+export const MobileRawView = forwardRef<
+  HTMLDivElement,
+  {
+    content: string;
+    className?: string;
+    fontSizePx?: number;
+  }
+>(function MobileRawView({ content, className, fontSizePx }, ref) {
   const paragraphs = useMemo(() => paragraphsForDisplay(content), [content]);
 
   return (
     <div
+      ref={ref}
       className={className}
       style={fontSizePx ? { fontSize: `${fontSizePx}px` } : undefined}
       aria-label="移动预览正文"
@@ -52,9 +52,13 @@ export function MobileRawView({
                 : kind === "heading"
                   ? "mobileRawPara mobileRawHeading"
                   : "mobileRawPara";
+          const text = displayText(p, kind);
+          const hasLeadingSpaces = /^[\u3000\u2003]{2}/.test(text);
+          const paraCls =
+            kind === "body" && hasLeadingSpaces ? `${cls} mobileRawParaHasLeadingSpaces` : cls;
           return (
-            <p key={i} className={cls}>
-              {displayText(p, kind)}
+            <p key={i} className={paraCls}>
+              {text}
             </p>
           );
         })
@@ -63,4 +67,4 @@ export function MobileRawView({
       )}
     </div>
   );
-}
+});

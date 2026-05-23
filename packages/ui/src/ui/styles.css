@@ -4345,6 +4345,10 @@ code {
   text-align: justify;
 }
 
+.mobileRawParaHasLeadingSpaces {
+  text-indent: 0;
+}
+
 .mobileRawHeading {
   text-indent: 0;
   text-align: center;
