@@ -66,6 +66,8 @@ coverage/
 .vercel/
 .netlify/
 
+scripts/
+
 # —— 本应用运行时写入的本地数据（默认数据目录见 packages/server paths）——
 # 仅忽略仓库根目录的 book/，勿用裸 book/，否则会误忽略 cli 模板下的 template/book/
 /book/

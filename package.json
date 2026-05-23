@@ -5,7 +5,8 @@
   "description": "Local web novel writing helper (pnpm workspace)",
   "scripts": {
     "dev": "pnpm -r --parallel dev",
-    "build": "pnpm -r build"
+    "build": "pnpm -r build",
+    "dev:restart": "bash scripts/restart-dev.sh"
   },
   "keywords": [],
   "author": "",

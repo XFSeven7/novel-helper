@@ -20,6 +20,19 @@ export type ChapterMeta = {
 
 const API_BASE = (import.meta as any).env?.VITE_API_BASE || "http://127.0.0.1:3177";
 
+function parseHttpError(text: string): string {
+  const t = text.trim();
+  if (!t) return "";
+  try {
+    const j = JSON.parse(t) as { message?: string; error?: string };
+    if (typeof j.message === "string" && j.message.trim()) return j.message.trim();
+    if (typeof j.error === "string" && j.error.trim()) return j.error.trim();
+  } catch {
+    /* not JSON */
+  }
+  return t;
+}
+
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers ?? undefined);
   const body = init?.body;
@@ -34,7 +47,7 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(text || `HTTP ${res.status}`);
+    throw new Error(parseHttpError(text) || `HTTP ${res.status}`);
   }
   return (await res.json()) as T;
 }
@@ -934,5 +947,153 @@ export async function applyOutlineAiPreview(
     `/api/books/${encodeURIComponent(slug)}/outline/ai/apply`,
     { method: "POST", body: JSON.stringify(body) }
   );
+}
+
+// --- 建书前大纲向导 ---
+
+export type BookSetupStepId =
+  | "intent"
+  | "scale"
+  | "logline"
+  | "synopsis"
+  | "mainline"
+  | "volumes"
+  | "chapterSkeleton"
+  | "meta"
+  | "review";
+
+export type BookSetupChatMessage = { role: "user" | "assistant"; content: string };
+
+export type BookSetupDraft = {
+  version: 1;
+  updatedAt: string;
+  currentStep: BookSetupStepId;
+  skippedSteps: BookSetupStepId[];
+  visitedSteps?: BookSetupStepId[];
+  title?: string;
+  slug?: string;
+  metaSynopsis?: string;
+  concept?: string;
+  genreNotes?: string;
+  targetWords?: number;
+  targetChapters?: number;
+  structureFramework?: string;
+  outline: OutlineIndex;
+  missingFields: string[];
+  nextQuestion?: string;
+  readyToCreate: boolean;
+  stepMessages: Partial<Record<BookSetupStepId, BookSetupChatMessage[]>>;
+};
+
+export type BookSetupChatSuggestion = {
+  concept?: string;
+  genreNotes?: string;
+  targetWords?: number;
+  targetChapters?: number;
+  structureFramework?: string;
+  title?: string;
+  metaSynopsis?: string;
+  logline?: string;
+  synopsis?: BookOutline["synopsis"];
+  mainlineStages?: BookOutline["mainlineStages"];
+  volumes?: Array<{ title: string; order: number; synopsis?: string }>;
+};
+
+export type BookSetupChatResponse = {
+  assistantMessage: string;
+  nextQuestion?: string;
+  missingFields?: string[];
+  suggestion?: BookSetupChatSuggestion;
+  draft?: BookSetupDraft;
+};
+
+const BOOK_SETUP_SESSION_KEY = "novel-helper-book-setup-session";
+
+export function getStoredBookSetupSessionId(): string | null {
+  try {
+    return localStorage.getItem(BOOK_SETUP_SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredBookSetupSessionId(id: string) {
+  try {
+    localStorage.setItem(BOOK_SETUP_SESSION_KEY, id);
+  } catch {
+    /* ignore */
+  }
+}
+
+export function clearStoredBookSetupSessionId() {
+  try {
+    localStorage.removeItem(BOOK_SETUP_SESSION_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+export async function createBookSetupSession() {
+  return await http<{ sessionId: string; draft: BookSetupDraft }>("/api/book-setup/sessions", {
+    method: "POST"
+  });
+}
+
+export async function getBookSetupSession(sessionId: string) {
+  return await http<{ draft: BookSetupDraft }>(`/api/book-setup/sessions/${encodeURIComponent(sessionId)}`);
+}
+
+export async function patchBookSetupSession(sessionId: string, body: { draft?: Partial<BookSetupDraft>; currentStep?: BookSetupStepId }) {
+  return await http<{ draft: BookSetupDraft }>(`/api/book-setup/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(body)
+  });
+}
+
+export async function chatBookSetupStep(
+  sessionId: string,
+  body: { stepId: BookSetupStepId; message: string; modelConfigId?: string | null }
+) {
+  return await http<BookSetupChatResponse>(`/api/book-setup/sessions/${encodeURIComponent(sessionId)}/chat`, {
+    method: "POST",
+    body: JSON.stringify(body)
+  });
+}
+
+export async function applyBookSetupStep(
+  sessionId: string,
+  body: { stepId: BookSetupStepId; modelConfigId?: string | null }
+) {
+  return await http<BookSetupChatResponse>(
+    `/api/book-setup/sessions/${encodeURIComponent(sessionId)}/apply-step`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
+export async function redesignBookSetupMainline(
+  sessionId: string,
+  body?: { modelConfigId?: string | null }
+) {
+  return await http<BookSetupChatResponse>(
+    `/api/book-setup/sessions/${encodeURIComponent(sessionId)}/redesign-mainline`,
+    { method: "POST", body: JSON.stringify(body ?? {}) }
+  );
+}
+
+export async function commitBookSetupSession(sessionId: string, body?: { title?: string; slug?: string }) {
+  return await http<{ book: BookMeta; slug: string }>(
+    `/api/book-setup/sessions/${encodeURIComponent(sessionId)}/commit`,
+    { method: "POST", body: JSON.stringify(body ?? {}) }
+  );
+}
+
+export async function deleteBookSetupSession(sessionId: string) {
+  const res = await fetch(`${API_BASE}/api/book-setup/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE"
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(parseHttpError(text) || `HTTP ${res.status}`);
+  }
 }
 

@@ -56,6 +56,7 @@ import { SettingsPage, type SettingsTabId } from "./components/settings/Settings
 import { SettingsModelsPanel } from "./components/settings/SettingsModelsPanel";
 import { SettingsDataDirPanel } from "./components/settings/SettingsDataDirPanel";
 import { BookShelfNav } from "./components/nav/BookShelfNav";
+import { BookSetupWizard } from "./components/bookSetup/BookSetupWizard";
 import { ChapterNav } from "./components/nav/ChapterNav";
 import { OutlineWorkspace } from "./components/outline/OutlineWorkspace";
 import { useLayout3Splitters } from "./hooks/useLayout3Splitters";
@@ -165,6 +166,7 @@ export function App() {
   const [selectedCard, setSelectedCard] = useState<SelectedCard>(null);
 
   const [createBookModalOpen, setCreateBookModalOpen] = useState(false);
+  const [bookSetupWizardOpen, setBookSetupWizardOpen] = useState(false);
   const [chapterGapModalOpen, setChapterGapModalOpen] = useState(false);
   const [chapterGapModalBookSlug, setChapterGapModalBookSlug] = useState("");
   const [chapterGapModalIndexes, setChapterGapModalIndexes] = useState<number[]>([]);
@@ -1466,6 +1468,26 @@ export function App() {
     setModalNewTitle("");
     setModalNewSynopsis("");
     setCreateBookModalOpen(true);
+  }
+
+  function openBookSetupWizard() {
+    const hasModel =
+      Boolean(activeModelId) && modelConfigs.some((c) => c.id === activeModelId);
+    if (!hasModel) {
+      setStatus("请先在设置中配置 AI 模型（设置 → 模型）");
+      return;
+    }
+    setBookSetupWizardOpen(true);
+  }
+
+  async function handleBookSetupCreated(book: BookMeta) {
+    await refreshBooks();
+    setActiveBook(book.slug);
+    setNavHome(false);
+    setNavCollapsed(false);
+    setRightCollapsed(false);
+    setStatus(`已创建书籍：${book.title}`);
+    void loadInspiration(book.slug);
   }
 
   async function submitCreateBookModal() {
@@ -2929,6 +2951,7 @@ export function App() {
                   busy={busy}
                   bookShelfSortDesc={bookShelfSortDesc}
                   onToggleSort={() => setBookShelfSortDesc((v) => !v)}
+                  onPlanBook={() => openBookSetupWizard()}
                   onCreateBook={() => openCreateBookModal()}
                   onOpenBook={(b) => void openBookFromShelf(b)}
                 />
@@ -3867,6 +3890,18 @@ export function App() {
         selectedChapterMeta={selectedChapterMeta}
       />
 
+
+      <BookSetupWizard
+        open={bookSetupWizardOpen}
+        onClose={() => {
+          if (!busy) setBookSetupWizardOpen(false);
+        }}
+        onCreated={(book) => void handleBookSetupCreated(book)}
+        busy={busy}
+        setBusy={setBusy}
+        activeModelId={activeModelId}
+        onStatus={setStatus}
+      />
 
       {/* 合并入口已迁移到"编辑角色"弹窗中 */}
     </div>

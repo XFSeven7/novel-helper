@@ -98,6 +98,7 @@ import {
   type OutlineIndex
 } from "./outlineStore.js";
 import { runOutlineAi, type OutlineAiMode } from "./outlineAi.js";
+import { registerBookSetupRoutes } from "./bookSetup/routes.js";
 import { mergeOccurredNotes } from "./characterOccurredNotes.js";
 import {
   truncateForPrompt,
@@ -4625,6 +4626,15 @@ app.delete("/api/novels/:slug/chapters/:filename", async (req, reply) => {
   } catch (e: any) {
     return reply.code(400).send({ message: e?.message || "Delete failed" });
   }
+});
+
+registerBookSetupRoutes(app, {
+  getDataDir,
+  readModelSettings: async () => {
+    const s = await readModelSettings();
+    return { configs: s.configs, activeId: s.activeId };
+  },
+  createAiSdkModel: (cfg) => createAiSdkModel(cfg as ModelConfig)
 });
 
 await app.listen({ port: PORT, host: "127.0.0.1" });

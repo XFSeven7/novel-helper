@@ -960,8 +960,459 @@ code {
   margin-bottom: 8px;
 }
 
+.navNewBookRowSplit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.btnNewBookPlan {
+  font-weight: 600;
+}
+
+.btnNewBookQuick {
+  opacity: 0.92;
+}
+
 .btnNewBookFull {
   width: 100%;
+}
+
+.modalPanel.bookSetupWizard {
+  width: min(1080px, 96vw);
+  height: min(90vh, 880px);
+  max-height: min(90vh, 880px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px;
+  box-sizing: border-box;
+}
+
+.bookSetupWizardIntro {
+  margin: 0;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.bookSetupSplit {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+  overflow: hidden;
+}
+
+.bookSetupSplit--reviewOnly .bookSetupFormPane {
+  flex: 1;
+  max-width: 100%;
+}
+
+.bookSetupFormPane {
+  flex: 0 0 58%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding-right: 14px;
+  border-right: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+}
+
+.bookSetupSplit--reviewOnly .bookSetupFormPane {
+  padding-right: 0;
+  border-right: none;
+}
+
+.bookSetupFormScroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.bookSetupStepTitle {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.bookSetupStepHint {
+  margin: 0 0 10px;
+  font-size: 13px;
+}
+
+.bookSetupTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+
+.bookSetupTab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  line-height: 1.3;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--panel2) 70%, transparent);
+  color: color-mix(in srgb, var(--text) 85%, var(--muted));
+  cursor: pointer;
+}
+
+.bookSetupTab:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.bookSetupTab:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.bookSetupTabActive {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel2));
+  color: var(--text);
+}
+
+.bookSetupTabNum {
+  opacity: 0.65;
+  font-size: 10px;
+}
+
+.bookSetupFields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.bookSetupMainlineStickyNav {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: -2px 0 8px;
+  padding: 8px 0 10px;
+  background: var(--panel);
+  box-shadow: 0 8px 12px -8px color-mix(in srgb, var(--panel) 40%, #000);
+}
+
+.bookSetupMainlineToolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel2));
+}
+
+.bookSetupMainlineToolbarTitle {
+  font-size: 12px;
+  font-weight: 650;
+  color: color-mix(in srgb, var(--text) 90%, transparent);
+}
+
+.bookSetupMainlineToolbarRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 8px 12px;
+}
+
+.bookSetupMainlineCount {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 88px;
+}
+
+.bookSetupMainlineCountInput {
+  width: 72px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+
+.bookSetupMainlineChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.bookSetupMainlineChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: var(--panel);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.bookSetupMainlineChip:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+
+.bookSetupMainlineChipActive {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.bookSetupStageRowActive {
+  border-bottom-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.bookSetupMainlineChipNum {
+  flex-shrink: 0;
+  font-weight: 650;
+  color: color-mix(in srgb, var(--accent) 75%, var(--text));
+}
+
+.bookSetupMainlineChipLabel {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0.88;
+}
+
+.bookSetupMainlineEmpty {
+  margin: 0;
+  font-size: 11px;
+}
+
+.bookSetupStageRow,
+.bookSetupVolumeRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.bookSetupStageHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.bookSetupStageTitle {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  color: color-mix(in srgb, var(--accent) 70%, var(--text));
+}
+
+.bookSetupStageActions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 4px;
+}
+
+.bookSetupStageActBtn {
+  min-width: 28px;
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+.bookSetupStageActBtnDanger:not(:disabled):hover {
+  border-color: color-mix(in srgb, #e55 45%, var(--border));
+  color: color-mix(in srgb, #f88 80%, var(--text));
+}
+
+.bookSetupReview {
+  margin-top: 0;
+}
+
+.bookSetupChatPane {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-left: 14px;
+}
+
+.bookSetupChatPaneTitle {
+  font-size: 12px;
+  font-weight: 650;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+  color: color-mix(in srgb, var(--text) 88%, transparent);
+}
+
+.bookSetupChatPanel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: hidden;
+}
+
+.bookSetupChatLog {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 10px;
+  border: 1px solid var(--input-border, var(--border));
+  border-radius: 6px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bookSetupChatEmpty {
+  margin: 0;
+  font-size: 12px;
+}
+
+.bookSetupChatBubble {
+  padding: 8px 10px;
+  border-radius: 8px;
+  max-width: 100%;
+}
+
+.bookSetupChatBubbleUser {
+  align-self: flex-end;
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel2));
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+}
+
+.bookSetupChatBubbleAi {
+  align-self: flex-start;
+  background: var(--panel2);
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+}
+
+.bookSetupChatBubbleRole {
+  font-size: 10px;
+  font-weight: 650;
+  margin-bottom: 4px;
+  opacity: 0.75;
+}
+
+.bookSetupChatBubbleBody {
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
+
+.bookSetupChatHint {
+  margin: 0;
+  font-size: 12px;
+  flex-shrink: 0;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+.bookSetupChatComposer {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+.bookSetupChatApplyRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.bookSetupApplyBtn,
+.bookSetupRedesignBtn {
+  align-self: flex-start;
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+.bookSetupRedesignBtn {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel2));
+}
+
+.bookSetupRedesignBtn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border));
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel2));
+}
+
+.bookSetupChatInputRow {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.bookSetupChatTextarea {
+  flex: 1;
+  min-width: 0;
+  min-height: 52px;
+  max-height: 120px;
+  resize: none;
+  box-sizing: border-box;
+}
+
+.bookSetupChatSendBtn {
+  flex-shrink: 0;
+  align-self: stretch;
+  min-height: 52px;
+  height: auto;
+  padding: 0 14px;
+  font-size: 12px;
+  line-height: 1.2;
+  white-space: nowrap;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bookSetupChatPending {
+  opacity: 0.85;
+}
+
+@media (max-width: 900px) {
+  .bookSetupSplit {
+    flex-direction: column;
+    overflow: auto;
+  }
+
+  .bookSetupFormPane {
+    flex: none;
+    padding-right: 0;
+    border-right: none;
+    border-bottom: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+    padding-bottom: 12px;
+    max-height: 50vh;
+  }
+
+  .bookSetupChatPane {
+    flex: none;
+    padding-left: 0;
+    padding-top: 12px;
+    min-height: 280px;
+  }
 }
 
 .tree.navListDense .bookShelfItem {
@@ -3520,6 +3971,14 @@ code {
   white-space: nowrap;
 }
 
+.bookSetupChatPane .bookSetupChatHint {
+  overflow: visible;
+  text-overflow: unset;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .cardEditor {
   margin-top: 8px;
   height: 200px;
@@ -3878,6 +4337,21 @@ code {
   max-height: none;
   overflow: visible;
   margin: auto;
+}
+
+.modalPanelEditChar input.modalInput,
+.modalPanelEditChar textarea.modalTextarea {
+  box-sizing: border-box;
+  border: 1px solid var(--input-border, var(--border)) !important;
+  background: var(--input-bg, var(--panel2, var(--panel))) !important;
+  outline: none;
+  pointer-events: auto;
+}
+
+.modalPanelEditChar input.modalInput:focus,
+.modalPanelEditChar textarea.modalTextarea:focus {
+  border-color: var(--input-border-focus, var(--accent)) !important;
+  box-shadow: 0 0 0 2px var(--input-focus-ring, color-mix(in srgb, var(--accent) 22%, transparent));
 }
 
 .modalPanelEditChar textarea.modalTextarea,
