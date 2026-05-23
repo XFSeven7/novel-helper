@@ -135,9 +135,28 @@ export type BookSetupWizardProps = {
   setBusy: (v: boolean) => void;
   activeModelId: string | null;
   onStatus?: (msg: string) => void;
+  /** 为 null 时打开向导会新建 session；为 id 时加载该规划 */
+  loadSessionId?: string | null;
+  onSessionIdChange?: (id: string | null) => void;
+  onPlanActivity?: () => void;
+  showDiscard?: boolean;
+  onDiscardPlan?: () => void | Promise<void>;
 };
 
-export function BookSetupWizard({ open, onClose, onCreated, busy, setBusy, activeModelId, onStatus }: BookSetupWizardProps) {
+export function BookSetupWizard({
+  open,
+  onClose,
+  onCreated,
+  busy,
+  setBusy,
+  activeModelId,
+  onStatus,
+  loadSessionId = null,
+  onSessionIdChange,
+  onPlanActivity,
+  showDiscard,
+  onDiscardPlan
+}: BookSetupWizardProps) {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [draft, setDraft] = useState<BookSetupDraft | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -167,12 +186,13 @@ export function BookSetupWizard({ open, onClose, onCreated, busy, setBusy, activ
     try {
       const { draft: saved } = await patchBookSetupSession(sid, { draft: next });
       setDraft(saved);
+      onPlanActivity?.();
       return saved;
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
       return next;
     }
-  }, [sessionId]);
+  }, [sessionId, onPlanActivity]);
 
   const schedulePersist = useCallback(
     (next: BookSetupDraft) => {
@@ -194,13 +214,14 @@ export function BookSetupWizard({ open, onClose, onCreated, busy, setBusy, activ
       try {
         const { draft: saved } = await patchBookSetupSession(sessionId, { draft: next });
         setDraft(saved);
+        onPlanActivity?.();
         return saved;
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : String(e));
         return next;
       }
     },
-    [sessionId, cancelPendingPersist]
+    [sessionId, cancelPendingPersist, onPlanActivity]
   );
 
   useEffect(() => {
@@ -219,25 +240,23 @@ export function BookSetupWizard({ open, onClose, onCreated, busy, setBusy, activ
     if (!open) return;
     let cancelled = false;
     setError(null);
+    setSessionId(null);
+    setDraft(null);
     void (async () => {
       try {
-        const stored = getStoredBookSetupSessionId();
-        if (stored) {
-          try {
-            const { draft: d } = await getBookSetupSession(stored);
-            if (!cancelled) {
-              setSessionId(stored);
-              setDraft(ensureVisitedSteps(d));
-              return;
-            }
-          } catch {
-            clearStoredBookSetupSessionId();
+        if (loadSessionId) {
+          const { draft: d } = await getBookSetupSession(loadSessionId);
+          if (!cancelled) {
+            setSessionId(loadSessionId);
+            setDraft(ensureVisitedSteps(d));
           }
+          return;
         }
         const { sessionId: id, draft: d } = await createBookSetupSession();
         if (!cancelled) {
           setSessionId(id);
           setStoredBookSetupSessionId(id);
+          onSessionIdChange?.(id);
           setDraft(ensureVisitedSteps(d));
         }
       } catch (e: unknown) {
@@ -247,7 +266,7 @@ export function BookSetupWizard({ open, onClose, onCreated, busy, setBusy, activ
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, loadSessionId, onSessionIdChange]);
 
   const stepId = draft?.currentStep ?? "intent";
   const isReview = stepId === "review";
@@ -338,6 +357,7 @@ export function BookSetupWizard({ open, onClose, onCreated, busy, setBusy, activ
       }
       cancelPendingPersist();
       setDraft(nextDraft);
+      onPlanActivity?.();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e));
       try {
@@ -471,8 +491,22 @@ export function BookSetupWizard({ open, onClose, onCreated, busy, setBusy, activ
               onSelect={(id) => void goStep(id)}
             />
             <div className="bookSetupFormScroll">
-              <h3 className="bookSetupStepTitle">{stepMeta.title}</h3>
-              <p className="muted bookSetupStepHint">{stepMeta.hint}</p>
+              <div className="bookSetupFormHead">
+                <div>
+                  <h3 className="bookSetupStepTitle">{stepMeta.title}</h3>
+                  <p className="muted bookSetupStepHint">{stepMeta.hint}</p>
+                </div>
+                {showDiscard && !isReview ? (
+                  <button
+                    type="button"
+                    className="btnSort bookSetupDiscardBtn"
+                    disabled={busy || chatBusy}
+                    onClick={() => void onDiscardPlan?.()}
+                  >
+                    废弃当前规划
+                  </button>
+                ) : null}
+              </div>
 
               {isReview ? (
                 <div className="bookSetupReview">

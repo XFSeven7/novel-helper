@@ -8,7 +8,6 @@ export type BookShelfNavProps = {
   busy: boolean;
   bookShelfSortDesc: boolean;
   onToggleSort: () => void;
-  onPlanBook: () => void;
   onCreateBook: () => void;
   onOpenBook: (book: BookMeta) => void;
 };
@@ -19,18 +18,14 @@ export function BookShelfNav({
   busy,
   bookShelfSortDesc,
   onToggleSort,
-  onPlanBook,
   onCreateBook,
   onOpenBook
 }: BookShelfNavProps) {
   return (
     <>
       <div className="navTitle">书架</div>
-      <div className="navShelfHint muted">点击书名进入全书；可用「规划新书」搭架子，或「快速创建」只填书名。</div>
-      <div className="navNewBookRow navNewBookRowSplit">
-        <button type="button" className="btnNewBookFull btnNewBookPlan" onClick={onPlanBook} disabled={busy}>
-          规划新书
-        </button>
+      <div className="navShelfHint muted">点击书名进入全书；分步规划请切换到「新书规划」页签。</div>
+      <div className="navNewBookRow">
         <button type="button" className="btnNewBookFull btnNewBookQuick" onClick={onCreateBook} disabled={busy}>
           快速创建
         </button>

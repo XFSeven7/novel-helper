@@ -56,6 +56,8 @@ import { SettingsPage, type SettingsTabId } from "./components/settings/Settings
 import { SettingsModelsPanel } from "./components/settings/SettingsModelsPanel";
 import { SettingsDataDirPanel } from "./components/settings/SettingsDataDirPanel";
 import { BookShelfNav } from "./components/nav/BookShelfNav";
+import { BookShelfTabs, type BookShelfTabId } from "./components/nav/BookShelfTabs";
+import { BookPlanningNav } from "./components/nav/BookPlanningNav";
 import { BookSetupWizard } from "./components/bookSetup/BookSetupWizard";
 import { ChapterNav } from "./components/nav/ChapterNav";
 import { OutlineWorkspace } from "./components/outline/OutlineWorkspace";
@@ -71,6 +73,10 @@ import {
   mergeCharacterCards,
   listChapters,
   listBooks,
+  listBookSetupPlans,
+  discardBookSetupPlan,
+  suggestBookSetupTitle,
+  type BookSetupPlanEntry,
   listStory,
   readChapter,
   readStoryFile,
@@ -167,6 +173,12 @@ export function App() {
 
   const [createBookModalOpen, setCreateBookModalOpen] = useState(false);
   const [bookSetupWizardOpen, setBookSetupWizardOpen] = useState(false);
+  const [shelfTab, setShelfTab] = useLocalStorageState<BookShelfTabId>({
+    key: "novel-helper-shelf-tab",
+    defaultValue: "books"
+  });
+  const [bookSetupPlans, setBookSetupPlans] = useState<BookSetupPlanEntry[]>([]);
+  const [bookSetupSessionId, setBookSetupSessionId] = useState<string | null>(null);
   const [chapterGapModalOpen, setChapterGapModalOpen] = useState(false);
   const [chapterGapModalBookSlug, setChapterGapModalBookSlug] = useState("");
   const [chapterGapModalIndexes, setChapterGapModalIndexes] = useState<number[]>([]);
@@ -1470,18 +1482,85 @@ export function App() {
     setCreateBookModalOpen(true);
   }
 
-  function openBookSetupWizard() {
-    const hasModel =
-      Boolean(activeModelId) && modelConfigs.some((c) => c.id === activeModelId);
-    if (!hasModel) {
+  const hasAiModel = Boolean(activeModelId) && modelConfigs.some((c) => c.id === activeModelId);
+
+  async function refreshBookSetupPlans() {
+    try {
+      const { plans } = await listBookSetupPlans();
+      setBookSetupPlans(plans);
+    } catch {
+      setBookSetupPlans([]);
+    }
+  }
+
+  useEffect(() => {
+    if (navHome) void refreshBookSetupPlans();
+  }, [navHome, bookSetupWizardOpen]);
+
+  function openNewBookPlan() {
+    if (!hasAiModel) {
       setStatus("请先在设置中配置 AI 模型（设置 → 模型）");
       return;
     }
+    setBookSetupSessionId(null);
     setBookSetupWizardOpen(true);
+  }
+
+  function continueBookPlan(sessionId: string) {
+    if (!hasAiModel) {
+      setStatus("请先在设置中配置 AI 模型（设置 → 模型）");
+      return;
+    }
+    setBookSetupSessionId(sessionId);
+    setBookSetupWizardOpen(true);
+  }
+
+  async function discardBookPlan(sessionId: string) {
+    const label = bookSetupPlans.find((p) => p.sessionId === sessionId)?.displayTitle ?? "该规划";
+    if (!confirm(`确定废弃「${label}」？本地草案将删除且无法恢复。`)) return;
+    setBusy(true);
+    try {
+      await discardBookSetupPlan(sessionId);
+      if (bookSetupSessionId === sessionId) {
+        setBookSetupSessionId(null);
+        setBookSetupWizardOpen(false);
+      }
+      await refreshBookSetupPlans();
+      setStatus("已废弃规划");
+    } catch (e: unknown) {
+      setStatus(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function suggestPlanTitle(sessionId: string) {
+    if (!hasAiModel) {
+      setStatus("请先在设置中配置 AI 模型（设置 → 模型）");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { title } = await suggestBookSetupTitle(sessionId, { modelConfigId: activeModelId });
+      await refreshBookSetupPlans();
+      setStatus(`已生成标题：${title}`);
+    } catch (e: unknown) {
+      setStatus(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openBookSetupWizard() {
+    setShelfTab("planning");
+    openNewBookPlan();
   }
 
   async function handleBookSetupCreated(book: BookMeta) {
     await refreshBooks();
+    await refreshBookSetupPlans();
+    setBookSetupSessionId(null);
+    setShelfTab("books");
     setActiveBook(book.slug);
     setNavHome(false);
     setNavCollapsed(false);
@@ -2945,16 +3024,31 @@ export function App() {
           {navCollapsed ? null : (
             <div className="navSection navSectionMain">
               {navHome ? (
-                <BookShelfNav
-                  books={books}
-                  displayedBooks={displayedBooks}
-                  busy={busy}
-                  bookShelfSortDesc={bookShelfSortDesc}
-                  onToggleSort={() => setBookShelfSortDesc((v) => !v)}
-                  onPlanBook={() => openBookSetupWizard()}
-                  onCreateBook={() => openCreateBookModal()}
-                  onOpenBook={(b) => void openBookFromShelf(b)}
-                />
+                <>
+                  <BookShelfTabs tab={shelfTab} onChange={setShelfTab} disabled={busy} />
+                  {shelfTab === "books" ? (
+                    <BookShelfNav
+                      books={books}
+                      displayedBooks={displayedBooks}
+                      busy={busy}
+                      bookShelfSortDesc={bookShelfSortDesc}
+                      onToggleSort={() => setBookShelfSortDesc((v) => !v)}
+                      onCreateBook={() => openCreateBookModal()}
+                      onOpenBook={(b) => void openBookFromShelf(b)}
+                    />
+                  ) : (
+                    <BookPlanningNav
+                      plans={bookSetupPlans}
+                      busy={busy}
+                      hasModel={hasAiModel}
+                      onRefresh={() => void refreshBookSetupPlans()}
+                      onNewPlan={openNewBookPlan}
+                      onContinue={continueBookPlan}
+                      onSuggestTitle={(id) => void suggestPlanTitle(id)}
+                      onDiscard={(id) => void discardBookPlan(id)}
+                    />
+                  )}
+                </>
               ) : (
                 <>
                   <div className="navChapterHeader">
@@ -3893,6 +3987,21 @@ export function App() {
 
       <BookSetupWizard
         open={bookSetupWizardOpen}
+        loadSessionId={bookSetupSessionId}
+        onSessionIdChange={setBookSetupSessionId}
+        onPlanActivity={() => void refreshBookSetupPlans()}
+        showDiscard={
+          Boolean(
+            bookSetupSessionId && bookSetupPlans.some((p) => p.sessionId === bookSetupSessionId)
+          )
+        }
+        onDiscardPlan={() => {
+          if (!bookSetupSessionId) {
+            setBookSetupWizardOpen(false);
+            return;
+          }
+          return discardBookPlan(bookSetupSessionId);
+        }}
         onClose={() => {
           if (!busy) setBookSetupWizardOpen(false);
         }}

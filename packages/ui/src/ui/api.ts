@@ -1033,6 +1033,36 @@ export function clearStoredBookSetupSessionId() {
   }
 }
 
+export type BookSetupPlanEntry = {
+  sessionId: string;
+  registeredAt: string;
+  updatedAt: string;
+  displayTitle: string;
+  currentStep: BookSetupStepId;
+  readyToCreate: boolean;
+};
+
+export async function listBookSetupPlans() {
+  return await http<{ plans: BookSetupPlanEntry[] }>("/api/book-setup/plans");
+}
+
+export async function discardBookSetupPlan(sessionId: string) {
+  const res = await fetch(`${API_BASE}/api/book-setup/plans/${encodeURIComponent(sessionId)}`, {
+    method: "DELETE"
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(parseHttpError(text) || `HTTP ${res.status}`);
+  }
+}
+
+export async function suggestBookSetupTitle(sessionId: string, body?: { modelConfigId?: string | null }) {
+  return await http<{ title: string; draft: BookSetupDraft }>(
+    `/api/book-setup/sessions/${encodeURIComponent(sessionId)}/suggest-title`,
+    { method: "POST", body: JSON.stringify(body ?? {}) }
+  );
+}
+
 export async function createBookSetupSession() {
   return await http<{ sessionId: string; draft: BookSetupDraft }>("/api/book-setup/sessions", {
     method: "POST"

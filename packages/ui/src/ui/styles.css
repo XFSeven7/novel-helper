@@ -1609,6 +1609,108 @@ code {
   background: rgba(139, 92, 246, 0.32);
 }
 
+.bookShelfTabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding: 3px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel2) 80%, transparent);
+}
+
+.bookShelfTab {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: color-mix(in srgb, var(--muted) 90%, var(--text));
+  cursor: pointer;
+}
+
+.bookShelfTab:hover:not(:disabled) {
+  color: var(--text);
+}
+
+.bookShelfTabActive {
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  color: var(--text);
+  font-weight: 650;
+}
+
+.bookPlanningList {
+  margin-top: 4px;
+}
+
+.bookPlanningItem {
+  margin-bottom: 6px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 45%, transparent);
+  padding-bottom: 6px;
+}
+
+.bookPlanningRow {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 6px 4px;
+}
+
+.bookPlanningTitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.bookPlanningBadge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel2));
+  color: color-mix(in srgb, var(--accent) 80%, var(--text));
+}
+
+.bookPlanningMeta {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.bookPlanningActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 4px 4px;
+}
+
+.bookPlanningActBtn {
+  font-size: 10px;
+  padding: 2px 8px;
+}
+
+.bookPlanningActBtnDanger:not(:disabled):hover {
+  border-color: color-mix(in srgb, #e55 45%, var(--border));
+  color: color-mix(in srgb, #f88 80%, var(--text));
+}
+
+.bookPlanningModelHint {
+  margin: 0 0 8px;
+  font-size: 11px;
+}
+
+.bookSetupFormHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.bookSetupDiscardBtn {
+  flex-shrink: 0;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
 .navSortBar {
   display: flex;
   justify-content: flex-end;

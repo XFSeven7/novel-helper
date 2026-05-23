@@ -607,3 +607,30 @@ export async function redesignMainlineFromChat(input: {
   }
   return parsed;
 }
+
+export async function suggestBookSetupTitle(input: {
+  draft: BookSetupDraft;
+  cfg: OutlineAiModelConfig;
+  createAiSdkModel: (cfg: OutlineAiModelConfig) => { model: unknown; providerOptions: unknown };
+}): Promise<{ title: string }> {
+  const { model, providerOptions } = input.createAiSdkModel(input.cfg);
+  const summary = draftContextSummary(input.draft);
+  const result = await generateText({
+    model: model as Parameters<typeof generateText>[0]["model"],
+    providerOptions: providerOptions as Parameters<typeof generateText>[0]["providerOptions"],
+    messages: [
+      {
+        role: "system",
+        content: [
+          "你是网文书名顾问。根据建书草案摘要，给出 1 个中文书名。",
+          "要求：简短、好记、符合题材；不要书名号《》；不要副标题；不要解释。",
+          "只输出书名本身，一行。"
+        ].join("\n")
+      },
+      { role: "user", content: `草案摘要：\n${summary}` }
+    ],
+    temperature: 0.5
+  });
+  const title = result.text.trim().replace(/^《|》$/g, "").split("\n")[0]?.trim() ?? "";
+  return { title: title || "未命名规划" };
+}

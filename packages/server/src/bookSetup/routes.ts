@@ -9,8 +9,10 @@ import {
   assistantMessageForStorage,
   chatBookSetupStep,
   dedupeChatHistory,
-  redesignMainlineFromChat
+  redesignMainlineFromChat,
+  suggestBookSetupTitle
 } from "./ai.js";
+import { discardPlan, listPlans, registerPlan, removePlan } from "./planIndex.js";
 import {
   applyBookSetupSuggestionToDraft,
   applyDraftPatch,
@@ -38,7 +40,34 @@ export type BookSetupRouteDeps = {
   createAiSdkModel: (cfg: OutlineAiModelConfig) => { model: unknown; providerOptions: unknown };
 };
 
+async function syncPlanAfterEdit(
+  dataDir: string,
+  sessionId: string,
+  draft: BookSetupDraft,
+  body: { draft?: unknown; currentStep?: string }
+) {
+  const substantive = Boolean(body.draft) || Boolean(body.currentStep);
+  if (!substantive) return;
+  await registerPlan(dataDir, sessionId, draft);
+}
+
 export function registerBookSetupRoutes(app: FastifyInstance, deps: BookSetupRouteDeps) {
+  app.get("/api/book-setup/plans", async () => {
+    const plans = await listPlans(deps.getDataDir());
+    return { plans };
+  });
+
+  app.delete("/api/book-setup/plans/:id", async (req, reply) => {
+    const params = z.object({ id: z.string().min(1) }).parse((req as { params: unknown }).params);
+    const draft = await readSession(deps.getDataDir(), params.id);
+    if (!draft) {
+      await removePlan(deps.getDataDir(), params.id);
+      return reply.code(204).send();
+    }
+    await discardPlan(deps.getDataDir(), params.id);
+    return reply.code(204).send();
+  });
+
   app.post("/api/book-setup/sessions", async () => {
     const dataDir = deps.getDataDir();
     const { sessionId, draft } = await createSession(dataDir);
@@ -71,8 +100,42 @@ export function registerBookSetupRoutes(app: FastifyInstance, deps: BookSetupRou
     if (body.currentStep && isValidStepId(body.currentStep)) {
       next = applyDraftPatch(next, { currentStep: body.currentStep });
     }
-    const saved = await writeSession(deps.getDataDir(), params.id, withDedupedStepMessages(next));
+    const dataDir = deps.getDataDir();
+    const saved = await writeSession(dataDir, params.id, withDedupedStepMessages(next));
+    await syncPlanAfterEdit(dataDir, params.id, saved, body);
     return { draft: saved };
+  });
+
+  app.post("/api/book-setup/sessions/:id/suggest-title", async (req, reply) => {
+    const params = z.object({ id: z.string().min(1) }).parse((req as { params: unknown }).params);
+    const body = z
+      .object({
+        modelConfigId: z.string().nullable().optional()
+      })
+      .optional()
+      .parse((req as { body: unknown }).body);
+
+    const dataDir = deps.getDataDir();
+    const draft = await readSession(dataDir, params.id);
+    if (!draft) return reply.code(404).send({ message: "Session not found or expired" });
+
+    const settings = await deps.readModelSettings();
+    const activeId = body?.modelConfigId ?? settings.activeId;
+    if (!activeId) {
+      return reply.code(400).send({ message: "请先在设置中配置并选择 AI 模型" });
+    }
+    const cfg = settings.configs.find((c) => c.id === activeId);
+    if (!cfg) return reply.code(400).send({ message: "模型配置不存在" });
+
+    const { title } = await suggestBookSetupTitle({
+      draft,
+      cfg,
+      createAiSdkModel: deps.createAiSdkModel
+    });
+    const merged = applyDraftPatch(draft, { title });
+    const saved = await writeSession(dataDir, params.id, merged);
+    await registerPlan(dataDir, params.id, saved);
+    return { title, draft: saved };
   });
 
   app.post("/api/book-setup/sessions/:id/chat", async (req, reply) => {
@@ -120,8 +183,10 @@ export function registerBookSetupRoutes(app: FastifyInstance, deps: BookSetupRou
     if (body.stepId === "mainline" && chat.suggestion?.mainlineStages !== undefined) {
       next = applyMainlineStagesFromSuggestion(next, chat.suggestion.mainlineStages);
     }
+    const dataDir = deps.getDataDir();
     const saved = withDedupedStepMessages(next);
-    await writeSession(deps.getDataDir(), params.id, saved);
+    await writeSession(dataDir, params.id, saved);
+    await registerPlan(dataDir, params.id, saved);
 
     return { ...chat, draft: saved };
   });
@@ -257,6 +322,7 @@ export function registerBookSetupRoutes(app: FastifyInstance, deps: BookSetupRou
       const meta = await createNovel(dataDir, slug, title, metaSynopsis || undefined);
       const outline = draftToOutlineIndex(merged);
       await writeOutlineIndex(dataDir, slug, outline);
+      await removePlan(dataDir, params.id);
       await deleteSession(dataDir, params.id);
       const book = novelSummaryFromMeta(meta, 0, []);
       return { book, slug };
@@ -271,7 +337,9 @@ export function registerBookSetupRoutes(app: FastifyInstance, deps: BookSetupRou
 
   app.delete("/api/book-setup/sessions/:id", async (req, reply) => {
     const params = z.object({ id: z.string().min(1) }).parse((req as { params: unknown }).params);
-    await deleteSession(deps.getDataDir(), params.id);
+    const dataDir = deps.getDataDir();
+    await removePlan(dataDir, params.id);
+    await deleteSession(dataDir, params.id);
     return reply.code(204).send();
   });
 }
