@@ -1302,6 +1302,9 @@ export async function createNovel(
     }
   }
 
+  const { initNotesIndexForNewBook } = await import("./bookNotes/store.js");
+  await initNotesIndexForNewBook(dataDir, bookId);
+
   return meta;
 }
 

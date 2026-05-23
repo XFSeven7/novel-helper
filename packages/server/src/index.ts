@@ -99,6 +99,7 @@ import {
 } from "./outlineStore.js";
 import { runOutlineAi, type OutlineAiMode } from "./outlineAi.js";
 import { registerBookSetupRoutes } from "./bookSetup/routes.js";
+import { registerBookNotesRoutes } from "./bookNotes/routes.js";
 import { migrateBookIds } from "./migrateBookIds.js";
 import { mergeOccurredNotes } from "./characterOccurredNotes.js";
 import {
@@ -4644,5 +4645,7 @@ registerBookSetupRoutes(app, {
   },
   createAiSdkModel: (cfg) => createAiSdkModel(cfg as ModelConfig)
 });
+
+registerBookNotesRoutes(app, { getDataDir });
 
 await app.listen({ port: PORT, host: "127.0.0.1" });

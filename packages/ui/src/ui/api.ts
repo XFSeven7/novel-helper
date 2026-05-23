@@ -1133,3 +1133,80 @@ export async function deleteBookSetupSession(sessionId: string) {
   }
 }
 
+export type BookNotebook = {
+  id: string;
+  name: string;
+  builtIn?: boolean;
+  order: number;
+};
+
+export type BookNoteEntry = {
+  id: string;
+  notebookId: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  pinned?: boolean;
+};
+
+export type BookNotesIndex = {
+  version: 1;
+  updatedAt: string;
+  notebooks: BookNotebook[];
+  entries: BookNoteEntry[];
+};
+
+export async function fetchBookNotes(bookId: string) {
+  return await http<{ index: BookNotesIndex }>(`/api/books/${encodeURIComponent(bookId)}/notes`);
+}
+
+export async function createBookNotesNotebook(bookId: string, name: string) {
+  return await http<{ index: BookNotesIndex }>(`/api/books/${encodeURIComponent(bookId)}/notes/notebooks`, {
+    method: "POST",
+    body: JSON.stringify({ name })
+  });
+}
+
+export async function patchBookNotesNotebook(
+  bookId: string,
+  notebookId: string,
+  body: { name?: string; order?: number }
+) {
+  return await http<{ index: BookNotesIndex }>(
+    `/api/books/${encodeURIComponent(bookId)}/notes/notebooks/${encodeURIComponent(notebookId)}`,
+    { method: "PATCH", body: JSON.stringify(body) }
+  );
+}
+
+export async function deleteBookNotesNotebook(bookId: string, notebookId: string) {
+  return await http<{ index: BookNotesIndex }>(
+    `/api/books/${encodeURIComponent(bookId)}/notes/notebooks/${encodeURIComponent(notebookId)}`,
+    { method: "DELETE" }
+  );
+}
+
+export async function createBookNoteEntry(bookId: string, notebookId: string, content: string) {
+  return await http<{ index: BookNotesIndex }>(`/api/books/${encodeURIComponent(bookId)}/notes/entries`, {
+    method: "POST",
+    body: JSON.stringify({ notebookId, content })
+  });
+}
+
+export async function patchBookNoteEntry(
+  bookId: string,
+  entryId: string,
+  body: { content?: string; pinned?: boolean; notebookId?: string }
+) {
+  return await http<{ index: BookNotesIndex }>(
+    `/api/books/${encodeURIComponent(bookId)}/notes/entries/${encodeURIComponent(entryId)}`,
+    { method: "PATCH", body: JSON.stringify(body) }
+  );
+}
+
+export async function deleteBookNoteEntry(bookId: string, entryId: string) {
+  return await http<{ index: BookNotesIndex }>(
+    `/api/books/${encodeURIComponent(bookId)}/notes/entries/${encodeURIComponent(entryId)}`,
+    { method: "DELETE" }
+  );
+}
+

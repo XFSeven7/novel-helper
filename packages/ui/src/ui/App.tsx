@@ -61,6 +61,7 @@ import { BookPlanningNav } from "./components/nav/BookPlanningNav";
 import { BookSetupWizard } from "./components/bookSetup/BookSetupWizard";
 import { ChapterNav } from "./components/nav/ChapterNav";
 import { OutlineWorkspace } from "./components/outline/OutlineWorkspace";
+import { BookNotesPanel } from "./components/notes/BookNotesPanel";
 import { useLayout3Splitters } from "./hooks/useLayout3Splitters";
 import { useLocalStorageState } from "./hooks/useLocalStorageState";
 import {
@@ -153,7 +154,10 @@ const CHARACTER_TAG_OPTIONS = ["盟友", "敌对", "家人", "同事", "组织",
 
 
 export function App() {
-  const [leftTab, setLeftTab] = useState<"chapters" | "outline" | "global" | "progress" | "inspiration">("chapters");
+  const [leftTab, setLeftTab] = useState<
+    "chapters" | "outline" | "global" | "progress" | "inspiration" | "notes"
+  >("chapters");
+  const [notesFocusRequest, setNotesFocusRequest] = useState(0);
   const [globalTab, setGlobalTab] = useState<GlobalTabId>("auditCharacters");
 
   useEffect(() => {
@@ -3152,6 +3156,22 @@ export function App() {
                     >
                       灵感库
                     </button>
+                    {activeBook ? (
+                      <button
+                        type="button"
+                        role="tab"
+                        className={`browserTab ${leftTab === "notes" ? "active" : ""}`}
+                        aria-selected={leftTab === "notes"}
+                        onClick={() => {
+                          setLeftTab("notes");
+                          setNotesFocusRequest((n) => n + 1);
+                        }}
+                        disabled={busy}
+                        title="作者随记备注"
+                      >
+                        备注
+                      </button>
+                    ) : null}
                     </div>
                   </div>
 
@@ -3181,6 +3201,13 @@ export function App() {
                       refreshToken={outlineRefreshKey}
                       onOpenChapter={(c) => void onOpenChapter(c)}
                       onStatus={setStatus}
+                    />
+                  ) : leftTab === "notes" && activeBook ? (
+                    <BookNotesPanel
+                      bookId={activeBook}
+                      busy={busy}
+                      onStatus={setStatus}
+                      focusRequest={notesFocusRequest}
                     />
                   ) : leftTab === "inspiration" ? (
                     <InspirationTab
