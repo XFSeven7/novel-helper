@@ -3430,6 +3430,11 @@ export function App() {
                           busy={busy}
                           activeBook={activeBook}
                           chapters={chapters}
+                          currentChapterNo={
+                            selectedChapterMeta && Number.isFinite(Number(selectedChapterMeta.id))
+                              ? Number(selectedChapterMeta.id)
+                              : null
+                          }
                           globalTab={globalTab}
                           setGlobalTab={setGlobalTab}
                           auditCharactersIndex={auditCharactersIndex}

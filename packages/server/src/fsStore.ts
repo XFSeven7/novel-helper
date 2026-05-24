@@ -174,6 +174,8 @@ export type ForeshadowItem = {
   chapters?: number[];
   lastProgress?: string;
   note?: string;
+  /** 章号 → 本章对该伏笔的一句话记录 */
+  chapterActivity?: Record<string, string>;
   updatedAt: string;
 };
 
@@ -228,7 +230,7 @@ export type WritingPack = {
   summary5: string[];
   lists: {
     progress: Array<{ id: string; title: string; basis?: string }>;
-    foreshadows: Array<{ id: string; title: string; basis?: string }>;
+    foreshadows: Array<{ id: string; title: string; basis?: string; seedExcerpt?: string }>;
     risks: Array<{ issue: string; severity?: string; basis?: string }>;
   };
   /** 固定免责声明：写作包仅供参考 */

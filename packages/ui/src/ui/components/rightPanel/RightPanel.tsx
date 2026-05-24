@@ -358,19 +358,22 @@ export function RightPanel({
                           )}
                         </div>
 
-                        <div className="writingPackListBlock">
-                          <div className="writingPackListTitle">可能触及的伏笔</div>
+                        <div className="writingPackListBlock writingPackForeshadowBlock">
+                          <div className="writingPackListTitle">本章伏笔建议</div>
                           {(writingPack.lists?.foreshadows || []).length ? (
                             <div className="writingPackList">
-                              {(writingPack.lists.foreshadows || []).slice(0, 2).map((it) => (
-                                <div key={it.id} className="writingPackItem">
+                              {(writingPack.lists.foreshadows || []).slice(0, 5).map((it) => (
+                                <div key={it.id} className="writingPackItem writingPackForeshadowItem">
                                   <div className="writingPackItemMain">{it.title}</div>
                                   {it.basis ? <div className="muted writingPackItemBasis">{it.basis}</div> : null}
+                                  {it.seedExcerpt ? (
+                                    <div className="writingPackSeedExcerpt muted">「{it.seedExcerpt}」</div>
+                                  ) : null}
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <div className="muted">(暂无)</div>
+                            <div className="muted">(暂无未收伏笔建议)</div>
                           )}
                         </div>
 

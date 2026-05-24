@@ -11,9 +11,12 @@ export type ForeshadowItem = {
   lastChapter?: number | null;
   lastProgress?: string;
   note?: string;
+  chapterActivity?: Record<string, string>;
 };
 
-type StatusFilter = "all" | "open" | "progress" | "closed";
+type StatusFilter = "actionable" | "all" | "open" | "progress" | "closed";
+
+const STALE_GAP = 3;
 
 function statusLabel(s: string) {
   if (s === "closed") return "已回收";
@@ -27,15 +30,48 @@ function badgeClass(s: string) {
   return "foreshadowBadge foreshadowBadgeOpen";
 }
 
-function previewText(lastProgress: string, note: string) {
-  if (lastProgress && note) return `${lastProgress} · ${note}`;
-  return lastProgress || note;
+function isForeshadowActionable(f: ForeshadowItem, currentChapterNo: number | null): boolean {
+  const st = String(f.status || "open");
+  if (st === "closed") return false;
+  if (!Number.isFinite(currentChapterNo)) return st === "open" || st === "progress";
+  const cur = Number(currentChapterNo);
+  const last = Number(f.lastChapter);
+  if (!Number.isFinite(last)) return true;
+  return cur - last >= STALE_GAP;
+}
+
+function latestChapterActivity(f: ForeshadowItem): string {
+  const act = f.chapterActivity;
+  if (!act || typeof act !== "object") return "";
+  const keys = Object.keys(act)
+    .map((k) => Number(k))
+    .filter((n) => Number.isFinite(n))
+    .sort((a, b) => b - a);
+  if (!keys.length) return "";
+  return String(act[String(keys[0]!)] || "").trim();
+}
+
+function foreshadowStaleGap(f: ForeshadowItem, currentChapterNo: number | null, staleGap = STALE_GAP): number | null {
+  const st = String(f.status || "open");
+  if (st === "closed") return null;
+  if (!Number.isFinite(currentChapterNo)) return null;
+  const cur = Number(currentChapterNo);
+  const last = Number(f.lastChapter);
+  if (!Number.isFinite(last)) return null;
+  const gap = cur - last;
+  return gap >= staleGap ? gap : null;
+}
+
+function previewText(lastProgress: string, activity: string, note: string) {
+  const parts = [lastProgress, activity, note].filter(Boolean);
+  return parts.join(" · ");
 }
 
 export function ForeshadowPanel({
   busy,
   activeBook,
   chapters,
+  currentChapterNo,
   auditForeshadowsIndex,
   setAuditForeshadowsIndex,
   foreshadowExpanded,
@@ -49,6 +85,7 @@ export function ForeshadowPanel({
   busy: boolean;
   activeBook: string;
   chapters: ChapterMeta[];
+  currentChapterNo: number | null;
   auditForeshadowsIndex: any;
   setAuditForeshadowsIndex: (index: any) => void;
   foreshadowExpanded: Record<string, boolean>;
@@ -59,7 +96,7 @@ export function ForeshadowPanel({
   openEditForeshadow: (f: unknown) => void;
   onOpenChapter: (chapter: ChapterMeta) => void;
 }) {
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("actionable");
   const [sortDesc, setSortDesc] = useState(true);
   const [menuId, setMenuId] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
@@ -74,7 +111,9 @@ export function ForeshadowPanel({
             title: String(f?.title || "").trim(),
             status: String(f?.status || "open"),
             lastProgress: String(f?.lastProgress || "").trim(),
-            note: String(f?.note || "").trim()
+            note: String(f?.note || "").trim(),
+            chapterActivity:
+              f?.chapterActivity && typeof f.chapterActivity === "object" ? f.chapterActivity : undefined
           }))
           .filter((f) => f.id && f.title)
       : [];
@@ -91,19 +130,22 @@ export function ForeshadowPanel({
   }, [auditForeshadowsIndex]);
 
   const counts = useMemo(() => {
-    const c = { all: visible.length, open: 0, progress: 0, closed: 0 };
+    const c = { all: visible.length, actionable: 0, open: 0, progress: 0, closed: 0 };
     for (const f of visible) {
       const st = String(f.status || "open");
       if (st === "closed") c.closed++;
       else if (st === "progress") c.progress++;
       else c.open++;
+      if (isForeshadowActionable(f, currentChapterNo)) c.actionable++;
     }
     return c;
-  }, [visible]);
+  }, [visible, currentChapterNo]);
 
   const filtered = useMemo(() => {
     let list = visible;
-    if (statusFilter !== "all") {
+    if (statusFilter === "actionable") {
+      list = list.filter((f) => isForeshadowActionable(f, currentChapterNo));
+    } else if (statusFilter !== "all") {
       list = list.filter((f) => {
         const st = String(f.status || "open");
         if (statusFilter === "closed") return st === "closed";
@@ -117,7 +159,20 @@ export function ForeshadowPanel({
       if (lb !== la) return sortDesc ? lb - la : la - lb;
       return sortDesc ? b.title.localeCompare(a.title, "zh") : a.title.localeCompare(b.title, "zh");
     });
-  }, [visible, statusFilter, sortDesc]);
+  }, [visible, statusFilter, sortDesc, currentChapterNo]);
+
+  const healthSummary = useMemo(() => {
+    const staleItems = visible
+      .map((f) => ({ f, gap: foreshadowStaleGap(f, currentChapterNo) }))
+      .filter((x) => x.gap !== null)
+      .sort((a, b) => (b.gap ?? 0) - (a.gap ?? 0));
+    const unclosed = visible.filter((f) => String(f.status || "open") !== "closed");
+    return {
+      unclosed: unclosed.length,
+      stale: staleItems.length,
+      topStale: staleItems.slice(0, 3)
+    };
+  }, [visible, currentChapterNo]);
 
   const menuItem = menuId ? visible.find((f) => f.id === menuId) : null;
 
@@ -161,6 +216,7 @@ export function ForeshadowPanel({
   };
 
   const filterChips: { id: StatusFilter; label: string; count: number }[] = [
+    { id: "actionable", label: "待处理", count: counts.actionable },
     { id: "all", label: "全部", count: counts.all },
     { id: "open", label: "未收", count: counts.open },
     { id: "progress", label: "推进中", count: counts.progress },
@@ -210,8 +266,28 @@ export function ForeshadowPanel({
           ))}
         </div>
         <p className="foreshadowHint muted">
-          审计本章后会从 openLoops / closedLoops 自动写入；也可手动新增与编辑。
+          章节审计后通过 hookOps 自动更新；「待处理」= 未收且久未推进（≥{STALE_GAP} 章）。写作时请看右栏写作包。
         </p>
+        {visible.length ? (
+          <div className="foreshadowHealthSummary muted">
+            <span>
+              未收 {healthSummary.unclosed} 条
+              {healthSummary.stale ? ` · 久未推进 ${healthSummary.stale} 条` : ""}
+            </span>
+            {healthSummary.topStale.length ? (
+              <span className="foreshadowHealthTips">
+                优先关注：
+                {healthSummary.topStale.map(({ f, gap }, i) => (
+                  <span key={f.id}>
+                    {i > 0 ? "、" : ""}
+                    {f.title}
+                    {gap !== null ? `（${gap} 章未动）` : ""}
+                  </span>
+                ))}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
 
       {filtered.length ? (
@@ -223,7 +299,9 @@ export function ForeshadowPanel({
             const expanded = Boolean(foreshadowExpanded[f.id]);
             const lastProgressText = String(f.lastProgress || "").trim();
             const noteText = String(f.note || "").trim();
-            const preview = previewText(lastProgressText, noteText);
+            const activityText = latestChapterActivity(f);
+            const preview = previewText(lastProgressText, activityText, noteText);
+            const staleGap = foreshadowStaleGap(f, currentChapterNo);
 
             return (
               <article
@@ -247,22 +325,29 @@ export function ForeshadowPanel({
                     <div className="foreshadowCardTitleLine">
                       <h3 className="foreshadowTitle">{f.title}</h3>
                       <span className={badgeClass(st)}>{statusLabel(st)}</span>
+                      {staleGap !== null ? (
+                        <span className="foreshadowBadge foreshadowBadgeStale" title={`已 ${staleGap} 章未推进`}>
+                          久未推进
+                        </span>
+                      ) : null}
                     </div>
                     <div className="foreshadowCardMetaRow">
                       <div className="foreshadowMeta muted">
                         {first ? (
-                          <button
-                            type="button"
-                            className="btnLinkMuted"
-                            disabled={busy || !activeBook}
-                            onClick={() => openChapterByNo(first)}
-                          >
-                            首次 第{first}章
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              className="btnLinkMuted"
+                              disabled={busy || !activeBook}
+                              onClick={() => openChapterByNo(first)}
+                            >
+                              第{first}章埋下
+                            </button>
+                            <span className="mutedDot">·</span>
+                          </>
                         ) : (
-                          <span>首次 —</span>
+                          <span>埋下 —</span>
                         )}
-                        <span className="mutedDot">·</span>
                         {last ? (
                           <button
                             type="button"
@@ -270,7 +355,7 @@ export function ForeshadowPanel({
                             disabled={busy || !activeBook}
                             onClick={() => openChapterByNo(last)}
                           >
-                            最近 第{last}章
+                            最近第{last}章
                           </button>
                         ) : (
                           <span>最近 —</span>
@@ -298,12 +383,18 @@ export function ForeshadowPanel({
 
                 {!expanded && preview ? <div className="foreshadowPreview muted">{preview}</div> : null}
 
-                {expanded && (lastProgressText || noteText) ? (
+                {expanded && (lastProgressText || activityText || noteText) ? (
                   <div className="foreshadowDetails">
                     {lastProgressText ? (
                       <div className="foreshadowRow">
                         <div className="foreshadowLabel">最近推进</div>
                         <div className="foreshadowValue">{lastProgressText}</div>
+                      </div>
+                    ) : null}
+                    {activityText ? (
+                      <div className="foreshadowRow">
+                        <div className="foreshadowLabel">最近章记录</div>
+                        <div className="foreshadowValue">{activityText}</div>
                       </div>
                     ) : null}
                     {noteText ? (

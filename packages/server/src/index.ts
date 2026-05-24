@@ -104,6 +104,13 @@ import { registerBookNotesRoutes } from "./bookNotes/routes.js";
 import { migrateBookIds } from "./migrateBookIds.js";
 import { mergeOccurredNotes } from "./characterOccurredNotes.js";
 import {
+  applyHookOpsToForeshadowsIndex,
+  enrichForeshadowCandidatesWithSeedExcerpts,
+  buildForeshadowHealthReport,
+  listOpenForeshadowsForAudit,
+  parseHookOpsFromRun
+} from "./foreshadowSettlement.js";
+import {
   truncateForPrompt,
   buildInspirationPrompt,
   buildInspirationVariantsPrompt,
@@ -1486,91 +1493,12 @@ async function finalizeAuditFromJsonText(slug: string, filename: string, jsonTex
   if (run.ledgerUpdates?.closedLoops?.length) ledger.closedLoops.push(...run.ledgerUpdates.closedLoops);
   await writeAuditLedger(getDataDir(), slug, ledger);
 
-  // 自动沉淀伏笔：全书共享 foreshadowsIndex.json（来源 ledgerUpdates）
+  // 自动沉淀伏笔：全书共享 foreshadowsIndex.json（来源 hookOps / ledgerUpdates）
   const foIdx = await readAuditForeshadowsIndex(getDataDir(), slug);
-  const byId = new Map<string, any>(
-    (foIdx.foreshadows || [])
-      .map((f: any) => ({ ...f, id: String(f?.id || "").trim() }))
-      .filter((f: any) => f.id)
-      .map((f: any) => [f.id, f])
-  );
   const now = run.chapter.auditedAt;
   const chap = parseChapterNumberFromFilename(filename);
-
-  const normTitle = (x: any) =>
-    String(
-      x?.title ||
-        x?.item ||
-        x?.name ||
-        x?.description ||
-        x?.question ||
-        x?.hook ||
-        x?.setup ||
-        x?.payoff ||
-        ""
-    ).trim();
-  const normProgress = (x: any) =>
-    String(
-      x?.progress ||
-        x?.update ||
-        x?.推进 ||
-        x?.note ||
-        x?.why ||
-        x?.summary ||
-        x?.expectedResolution ||
-        x?.resolution ||
-        ""
-    ).trim();
-  const makeId = (title: string) => title.replace(/\s+/g, " ").slice(0, 160);
-
-  const pushChapter = (f: any) => {
-    if (Number.isFinite(chap)) {
-      f.firstChapter = Number.isFinite(f.firstChapter) ? Math.min(f.firstChapter, chap) : chap;
-      f.lastChapter = Number.isFinite(f.lastChapter) ? Math.max(f.lastChapter, chap) : chap;
-      const arr = Array.isArray(f.chapters) ? f.chapters.map((n: any) => Math.floor(Number(n))).filter((n: any) => Number.isFinite(n)) : [];
-      if (!arr.includes(chap)) arr.push(chap);
-      arr.sort((a: number, b: number) => a - b);
-      f.chapters = arr;
-    }
-  };
-
-  for (const raw of run?.ledgerUpdates?.openLoops || []) {
-    const title = normTitle(raw);
-    if (!title || title === "[object Object]") continue;
-    const id = makeId(title);
-    const prev = byId.get(id) || { id, title, status: "open" };
-    if (prev.status === "closed") {
-      // 已回收的不自动打开；保留人工状态
-    } else if (prev.status !== "progress") {
-      prev.status = "open";
-    }
-    const p = normProgress(raw);
-    if (p) prev.lastProgress = p;
-    pushChapter(prev);
-    prev.updatedAt = now;
-    byId.set(id, prev);
-  }
-  for (const raw of run?.ledgerUpdates?.closedLoops || []) {
-    const title = normTitle(raw);
-    if (!title || title === "[object Object]") continue;
-    const id = makeId(title);
-    const prev = byId.get(id) || { id, title, status: "closed" };
-    prev.status = "closed";
-    const p = normProgress(raw);
-    if (p) prev.lastProgress = p;
-    pushChapter(prev);
-    prev.updatedAt = now;
-    byId.set(id, prev);
-  }
-
-  foIdx.foreshadows = [...byId.values()]
-    .filter((f: any) => {
-      const t = String(f?.title || "").trim();
-      return t && t !== "[object Object]";
-    })
-    .sort((a: any, b: any) => String(a.title || "").localeCompare(String(b.title || ""), "zh-Hans-CN"));
-  if (!Array.isArray(foIdx.hiddenIds)) foIdx.hiddenIds = [];
-  foIdx.updatedAt = now;
+  const hookOps = parseHookOpsFromRun(run);
+  applyHookOpsToForeshadowsIndex(foIdx, hookOps, Number.isFinite(chap) ? chap : null, now);
   await writeAuditForeshadowsIndex(getDataDir(), slug, foIdx);
 
   return run;
@@ -1603,13 +1531,21 @@ async function performAuditWithAiSdk(input: {
   const memoryContext = buildMemoryContextFromTimelineBeforeChapter(tl, Number.isFinite(chapNo) ? chapNo : null);
   const knownCharacters = await listKnownCharacterNames(getDataDir(), slug);
   const knownPlaces = await listKnownPlaceNames(getDataDir(), slug);
+  const foIdxForAudit = await readAuditForeshadowsIndex(getDataDir(), slug).catch(() => ({
+    version: 1 as const,
+    updatedAt: "",
+    foreshadows: [],
+    hiddenIds: []
+  }));
+  const openForeshadows = listOpenForeshadowsForAudit(foIdxForAudit);
 
   const unifiedPrompt = buildUnifiedAuditPrompt({
     chapterTitle: filename.replace(/\.md$/, ""),
     chapterFilename: filename,
     content: chapter,
     memoryContext,
-    existingEntities: { characters: knownCharacters, places: knownPlaces }
+    existingEntities: { characters: knownCharacters, places: knownPlaces },
+    openForeshadows
   });
 
   try {
@@ -3542,6 +3478,16 @@ app.get("/api/books/:bookId/audit/foreshadows", async (req) => {
   return { index: idx };
 });
 
+app.get("/api/books/:bookId/audit/foreshadows/health", async (req) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
+  const querySchema = z.object({ chapterNo: z.coerce.number().optional() });
+  const params = paramsSchema.parse((req as any).params);
+  const query = querySchema.parse((req as any).query ?? {});
+  const idx = await readAuditForeshadowsIndex(getDataDir(), params.bookId);
+  const chapterNo = Number.isFinite(query.chapterNo) ? Number(query.chapterNo) : null;
+  return { health: buildForeshadowHealthReport(idx, chapterNo) };
+});
+
 app.get("/api/books/:bookId/audit/progress", async (req) => {
   const paramsSchema = z.object({ bookId: z.string().min(1) });
   const params = paramsSchema.parse((req as any).params);
@@ -3752,13 +3698,25 @@ app.post("/api/books/:bookId/writing-pack/generate", async (req, reply) => {
       }))
       .filter((x: any) => x.id && x.title);
 
+    const foreshadowCandidatesEnriched = await enrichForeshadowCandidatesWithSeedExcerpts(
+      getDataDir(),
+      params.bookId,
+      foreshadowCandidates
+    );
+
     const risks = recentRisks
       .filter((r) => r.issue)
       .slice(0, 20);
 
     const prompt = buildWritingPackPrompt({
       chapterTarget: { filename: chapterFilename, title: chapterTitle, chapterNo },
-      evidence: { recentChapters, compressedRanges, progressCandidates, foreshadowCandidates, risks }
+      evidence: {
+        recentChapters,
+        compressedRanges,
+        progressCandidates,
+        foreshadowCandidates: foreshadowCandidatesEnriched,
+        risks
+      }
     });
 
     const { model, providerOptions } = createAiSdkModel(cfg);
@@ -3782,9 +3740,26 @@ app.post("/api/books/:bookId/writing-pack/generate", async (req, reply) => {
         progress: clampList(Array.isArray((parsed as any)?.lists?.progress) ? (parsed as any).lists.progress : [], 4)
           .map((x: any) => ({ id: String(x?.id || "").trim(), title: String(x?.title || "").trim(), basis: typeof x?.basis === "string" ? x.basis : undefined }))
           .filter((x: any) => x.id && x.title),
-        foreshadows: clampList(Array.isArray((parsed as any)?.lists?.foreshadows) ? (parsed as any).lists.foreshadows : [], 2)
-          .map((x: any) => ({ id: String(x?.id || "").trim(), title: String(x?.title || "").trim(), basis: typeof x?.basis === "string" ? x.basis : undefined }))
-          .filter((x: any) => x.id && x.title),
+        foreshadows: (() => {
+          const candById = new Map(
+            foreshadowCandidatesEnriched.map((c: any) => [String(c?.id || "").trim(), c])
+          );
+          return clampList(Array.isArray((parsed as any)?.lists?.foreshadows) ? (parsed as any).lists.foreshadows : [], 5)
+            .map((x: any) => {
+              const id = String(x?.id || "").trim();
+              const cand = candById.get(id);
+              const seedFromCand =
+                cand && typeof (cand as any).seedExcerpt === "string" ? String((cand as any).seedExcerpt).trim() : "";
+              const seedFromAi = typeof x?.seedExcerpt === "string" ? String(x.seedExcerpt).trim() : "";
+              return {
+                id,
+                title: String(x?.title || "").trim(),
+                basis: typeof x?.basis === "string" ? x.basis : undefined,
+                seedExcerpt: seedFromAi || seedFromCand || undefined
+              };
+            })
+            .filter((x: any) => x.id && x.title);
+        })(),
         risks: clampList(Array.isArray((parsed as any)?.lists?.risks) ? (parsed as any).lists.risks : [], 3)
           .map((x: any) => ({
             issue: String(x?.issue || "").trim(),
@@ -3797,7 +3772,7 @@ app.post("/api/books/:bookId/writing-pack/generate", async (req, reply) => {
         "写作包仅供参考：用于帮助你快速进入状态与回忆当前悬念/欠账；你完全可以不采纳，按自己的创作思路推进。"
     };
 
-    // 最终条数保护（progress<=4, foreshadows<=2, risks<=3 已限制）
+    // 最终条数保护（progress<=4, foreshadows<=5, risks<=3 已限制）
     await writeWritingPack(getDataDir(), params.bookId, chapterId, pack);
     return { ok: true, pack };
   } catch (e: any) {

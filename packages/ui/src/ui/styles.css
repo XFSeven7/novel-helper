@@ -4006,6 +4006,26 @@ code {
   background: color-mix(in srgb, var(--success) 14%, transparent);
 }
 
+.foreshadowBadgeStale {
+  border-color: color-mix(in srgb, #c87820 45%, var(--border));
+  background: color-mix(in srgb, #c87820 16%, transparent);
+  color: #c87820;
+}
+
+.foreshadowHealthSummary {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0 0 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.foreshadowHealthTips {
+  display: block;
+  opacity: 0.92;
+}
+
 .foreshadowBody {
   margin-top: 8px;
   display: flex;
@@ -5275,6 +5295,14 @@ code {
   font-size: 12px;
   line-height: 1.4;
   margin-top: 2px;
+}
+
+.writingPackSeedExcerpt {
+  font-size: 12px;
+  line-height: 1.45;
+  margin-top: 4px;
+  font-style: italic;
+  opacity: 0.9;
 }
 
 .auditCharCard {

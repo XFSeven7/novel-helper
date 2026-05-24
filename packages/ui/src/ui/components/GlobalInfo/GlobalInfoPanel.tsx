@@ -18,6 +18,7 @@ export type GlobalInfoPanelProps = {
   busy: boolean;
   activeBook: string;
   chapters: ChapterMeta[];
+  currentChapterNo: number | null;
   globalTab: GlobalTabId;
   setGlobalTab: React.Dispatch<React.SetStateAction<GlobalTabId>>;
   auditCharactersIndex: any;
@@ -78,6 +79,7 @@ export function GlobalInfoPanel({
   busy,
   activeBook,
   chapters,
+  currentChapterNo,
   globalTab,
   setGlobalTab,
   auditCharactersIndex,
@@ -653,6 +655,7 @@ export function GlobalInfoPanel({
       busy={busy}
       activeBook={activeBook}
       chapters={chapters}
+      currentChapterNo={currentChapterNo}
       auditForeshadowsIndex={auditForeshadowsIndex}
       setAuditForeshadowsIndex={setAuditForeshadowsIndex}
       foreshadowExpanded={foreshadowExpanded}

@@ -475,7 +475,14 @@ export function buildWritingPackPrompt(input: {
     ],
     lists: {
       progress: [{ id: "progressId", title: "进行中标题", basis: "依据：来自progress/近章/压缩块" }],
-      foreshadows: [{ id: "foreshadowId", title: "伏笔标题", basis: "依据：来自foreshadow/近章/压缩块" }],
+      foreshadows: [
+        {
+          id: "foreshadowId",
+          title: "伏笔标题",
+          basis: "依据：来自foreshadow/近章/压缩块",
+          seedExcerpt: "可选：埋设章原文摘录（若证据中有）"
+        }
+      ],
       risks: [{ issue: "一致性风险描述", severity: "low|medium|high", basis: "依据：来自近章一致性/设定" }]
     },
     disclaimer: "写作包仅供参考：用于帮助你快速进入状态与回忆当前悬念/欠账；你完全可以不采纳，按自己的创作思路推进。"
@@ -487,7 +494,7 @@ export function buildWritingPackPrompt(input: {
     "硬性要求：",
     "- 严格输出 JSON（不要解释、不要 markdown、不要代码块）。",
     "- summary5 必须恰好 5 句，每句尽量短。",
-    "- 清单总计不超过 9 条：progress<=4、foreshadows<=2、risks<=3。",
+    "- 清单总计不超过 12 条：progress<=4、foreshadows<=5、risks<=3。",
     "- 口吻必须是“参考/可能/可关注”，禁止使用“必须/应该”。",
     "- 不要新增新角色/新设定/新关键道具；只能基于给定证据做概括与推测（推测必须标注为参考）。",
     "",
@@ -610,6 +617,13 @@ export function buildUnifiedAuditPrompt(input: {
   content: string;
   memoryContext: string;
   existingEntities: { characters: string[]; places: string[] };
+  openForeshadows?: Array<{
+    id: string;
+    title: string;
+    status?: string;
+    lastChapter?: number;
+    lastProgress?: string;
+  }>;
 }) {
   const chapterId = input.chapterFilename.replace(/\.md$/, "");
   const schema = {
@@ -656,6 +670,14 @@ export function buildUnifiedAuditPrompt(input: {
     causalAnchors: { setups: [], payoffs: [] },
     impactAnalysis: [{ item: "", impactScore: 0, why: "", futureImplications: ["对后续剧情的影响与建议"] }],
     compression: { l2Pruning: null, mergeCandidates: null },
+    hookOps: [
+      {
+        hookId: "已有伏笔时必填，与下方清单 id 一致",
+        title: "新埋时必填；已有伏笔勿改标题措辞",
+        action: "plant | advance | mention | resolve",
+        progress: "可选：advance/resolve/plant 时写一句本章进展"
+      }
+    ],
     ledgerUpdates: { openLoops: [], closedLoops: [] },
     uiInjection: { spotlightCharacters: [], spotlightTags: [] }
   };
@@ -682,7 +704,12 @@ export function buildUnifiedAuditPrompt(input: {
     charNames.length ? `- 角色：${charNames.join("、")}` : "- 角色：（空）",
     placeNames.length ? `- 地点：${placeNames.join("、")}` : "- 地点：（空）",
     "",
-    "3) 【当前章节正文】：",
+    "3) 【当前未收伏笔清单】（写 hookOps 时必须复用 hookId，禁止同义改写标题）：",
+    (input.openForeshadows || []).length
+      ? JSON.stringify(input.openForeshadows, null, 2)
+      : "（暂无未收伏笔）",
+    "",
+    "4) 【当前章节正文】：",
     truncateForPrompt(input.content, 35_000),
     "",
     "## Audit Logic & Continuity Rules (审计逻辑)",
@@ -708,7 +735,9 @@ export function buildUnifiedAuditPrompt(input: {
     "- scores 的 5 个 score 必须是 1-10 的整数；comment 简短但有信息量。",
     "- gistL1 必须是 300 字内的逻辑链条摘要（尽量可复用到时间线）。",
     "- consistencyChecks 只列真实问题，控制在 0-12 条。",
-    "- ledgerUpdates: openLoops/closedLoops 用于“伏笔/欠账”跟踪；标题要稳定、可复用（避免同一件事每次换说法）。",
+    "- hookOps（优先）：对每条伏笔输出 plant/advance/mention/resolve；已有伏笔必须带 hookId；标题稳定可复用。",
+    "- plant=新悬念；advance=实质推进；mention=仅提及无新进展；resolve=本章回收。",
+    "- ledgerUpdates.openLoops/closedLoops 可留空或作兼容补充；最终以 hookOps 为准。",
     "",
     "现在输出 JSON："
   ].join("\n");

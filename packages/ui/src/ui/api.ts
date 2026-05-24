@@ -503,6 +503,7 @@ export type ForeshadowItem = {
   chapters?: number[];
   lastProgress?: string;
   note?: string;
+  chapterActivity?: Record<string, string>;
   updatedAt: string;
 };
 export type ForeshadowsIndex = {
@@ -547,7 +548,7 @@ export type WritingPack = {
   summary5: string[];
   lists: {
     progress: Array<{ id: string; title: string; basis?: string }>;
-    foreshadows: Array<{ id: string; title: string; basis?: string }>;
+    foreshadows: Array<{ id: string; title: string; basis?: string; seedExcerpt?: string }>;
     risks: Array<{ issue: string; severity?: string; basis?: string }>;
   };
   disclaimer: string;
