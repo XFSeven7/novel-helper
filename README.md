@@ -56,18 +56,37 @@ novelHelper 的定位是：
 
 ## 快速开始
 
-**环境**：Node.js 18+，推荐 [pnpm](https://pnpm.io)。
+### 环境要求
 
-```bash
-git clone https://github.com/XFSeven7/novel-helper.git
-cd novel-helper
-pnpm install
-pnpm dev
-```
+- Node.js **18+**
+- [pnpm](https://pnpm.io)（推荐）
 
-浏览器打开：**http://127.0.0.1:5177**（前端）。本机 API 默认 **http://127.0.0.1:3177**，一般无需单独配置。
+### 安装与运行
 
-改完代码若页面未热更新，可在项目根目录执行：
+1. 克隆仓库并进入目录：
+
+   ```bash
+   git clone https://github.com/XFSeven7/novel-helper.git
+   cd novel-helper
+   ```
+
+2. 安装依赖并启动：
+
+   ```bash
+   pnpm install
+   pnpm dev
+   ```
+
+### 访问地址
+
+| 服务 | 地址 | 说明 |
+| --- | --- | --- |
+| 前端 | http://127.0.0.1:5177 | 浏览器打开，进入写作界面 |
+| API | http://127.0.0.1:3177 | 由 `pnpm dev` 自动拉起，一般无需单独访问 |
+
+### 开发时重启
+
+改完代码若页面未热更新，在项目根目录执行：
 
 ```bash
 pnpm dev:restart
@@ -144,13 +163,3 @@ pnpm dev:restart
 | 包管理 | pnpm workspace（`packages/ui`、`packages/server`、`packages/cli`） |
 
 ---
-
-
-
-
-
----
-
-
-
-
