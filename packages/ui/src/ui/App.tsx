@@ -1372,6 +1372,11 @@ export function App() {
   }, [activeBook, books]);
 
   useEffect(() => {
+    if (!activeBook) return;
+    setLeftTab("chapters");
+  }, [activeBook]);
+
+  useEffect(() => {
     setChapterRenameDraft(selectedChapterMeta?.title ?? "");
   }, [selectedChapter?.filename, selectedChapterMeta?.title]);
 
