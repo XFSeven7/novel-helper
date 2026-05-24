@@ -18,7 +18,8 @@ export function RelationsCenter({
   focusChar,
   setFocusChar,
   onStatus,
-  addRequestKey
+  addRequestKey,
+  onAddRequestConsumed
 }: {
   busy: boolean;
   activeBook: string;
@@ -28,6 +29,7 @@ export function RelationsCenter({
   setFocusChar: (name: string | null) => void;
   onStatus: (msg: string) => void;
   addRequestKey?: number;
+  onAddRequestConsumed?: () => void;
 }) {
   const characters = useMemo(() => parseAuditCharacters(auditCharactersIndex), [auditCharactersIndex]);
   const characterNames = useMemo(() => characters.map((c) => c.name), [characters]);
@@ -40,7 +42,13 @@ export function RelationsCenter({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [editing, setEditing] = useState<FocusRelation | null>(null);
   const [saving, setSaving] = useState(false);
-  const lastAddRequestKeyRef = useRef(0);
+  const lastAddRequestKeyRef = useRef(addRequestKey ?? 0);
+
+  function closeDrawer() {
+    setDrawerOpen(false);
+    setEditing(null);
+    onAddRequestConsumed?.();
+  }
 
   useEffect(() => {
     if (addRequestKey === undefined || addRequestKey === 0) {
@@ -103,8 +111,7 @@ export function RelationsCenter({
         else rels.push(next);
       }
       await persistOwnerRelations(ownerName, rels);
-      setDrawerOpen(false);
-      setEditing(null);
+      closeDrawer();
     } catch (e: unknown) {
       onStatus(e instanceof Error ? e.message : String(e));
     } finally {
@@ -121,8 +128,7 @@ export function RelationsCenter({
         rels.splice(rel.ownerIndex, 1);
         await persistOwnerRelations(rel.ownerName, rels);
       }
-      setDrawerOpen(false);
-      setEditing(null);
+      closeDrawer();
     } catch (e: unknown) {
       onStatus(e instanceof Error ? e.message : String(e));
     } finally {
@@ -221,10 +227,7 @@ export function RelationsCenter({
         focusChar={focusChar}
         editing={editing}
         characterNames={characterNames}
-        onClose={() => {
-          setDrawerOpen(false);
-          setEditing(null);
-        }}
+        onClose={closeDrawer}
         onSave={handleSave}
         onDelete={editing ? () => void handleDelete(editing) : undefined}
       />

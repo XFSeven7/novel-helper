@@ -1093,6 +1093,11 @@ export function App() {
   const [relationsTypeFilter, setRelationsTypeFilter] = useState<string | null>(null);
   const [relationsOnlyWithRelations, setRelationsOnlyWithRelations] = useState(false);
   const [relationsAddRequestKey, setRelationsAddRequestKey] = useState(0);
+
+  useEffect(() => {
+    if (globalTab !== "relations") setRelationsAddRequestKey(0);
+  }, [globalTab]);
+
   const [auditCharactersSearch, setAuditCharactersSearch] = useState("");
   const [timelineIndex, setTimelineIndex] = useState<TimelineIndex | null>(null);
   const [timelineBusy, setTimelineBusy] = useState(false);
@@ -3725,6 +3730,7 @@ export function App() {
               setFocusChar={setRelationsFocusChar}
               onStatus={setStatus}
               addRequestKey={relationsAddRequestKey}
+              onAddRequestConsumed={() => setRelationsAddRequestKey(0)}
             />
           ) : showBookOverview ? (
             <div className="centerBookStats">
