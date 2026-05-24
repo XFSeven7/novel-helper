@@ -48,6 +48,10 @@ novelHelper 的定位是：
 
 ![纠错对照](docs/assets/polish.png)
 
+### 写作统计 · 热力图
+
+![写作热力图](docs/assets/activity.png)
+
 ---
 
 ## 快速开始
