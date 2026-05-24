@@ -696,6 +696,8 @@ export function buildUnifiedAuditPrompt(input: {
     "## Role",
     "你是一位拥有“全知视角”的叙事导演与首席审计官。你负责结合【历史剧情背景】对【当前章节】进行深度逻辑审计、质量评分及元数据提取。",
     "",
+    "**重要：你只输出本章事实提取（ChapterExtract），不要输出全书索引 merge 结果；人物/伏笔/时间线索引由服务端确定性结算。**",
+    "",
     "## Input Context",
     "1) 【历史概要 (Memory Context)】：此处包含前序章节的压缩摘要/关键事件，用于维持因果一致性。",
     memory,

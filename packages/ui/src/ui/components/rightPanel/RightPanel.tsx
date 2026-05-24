@@ -458,6 +458,44 @@ export function RightPanel({
                     ) : null}
 
                     {(() => {
+                      const settlement = (auditRun as { settlement?: any })?.settlement;
+                      if (!settlement || typeof settlement !== "object") return null;
+                      const fs = settlement.foreshadows || {};
+                      const rejected = Array.isArray(fs.decisions)
+                        ? (fs.decisions as any[]).filter((d) => d?.action === "rejected").slice(0, 3)
+                        : [];
+                      return (
+                        <details className="auditSettlementSummary">
+                          <summary className="auditPanelTitle">落盘摘要</summary>
+                          <div className="auditSettlementBody muted">
+                            <div>
+                              伏笔：写入 {Number(fs.applied) || 0} · 拒收 {Number(fs.rejected) || 0}
+                            </div>
+                            <div>
+                              人物：新增 {Number(settlement.characters?.created) || 0} · 合并{" "}
+                              {Number(settlement.characters?.merged) || 0}
+                            </div>
+                            <div>
+                              地点：新增 {Number(settlement.places?.created) || 0} · 时间线事件{" "}
+                              {Number(settlement.timeline?.eventsUpserted) || 0}
+                            </div>
+                            {rejected.length ? (
+                              <div className="auditSettlementRejected">
+                                拒收示例：
+                                {rejected.map((d, i) => (
+                                  <span key={i}>
+                                    {i > 0 ? "；" : ""}
+                                    {String(d?.reason || "unknown")}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : null}
+                          </div>
+                        </details>
+                      );
+                    })()}
+
+                    {(() => {
                       const s: any = (auditRun as any)?.scores;
                       const rows: Array<{ k: string; label: string; score: any; comment: any }> = [
                         { k: "literary_style", label: "文笔表现", score: s?.literary_style?.score, comment: s?.literary_style?.comment },

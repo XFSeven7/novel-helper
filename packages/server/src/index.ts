@@ -103,12 +103,13 @@ import { registerBookSetupRoutes } from "./bookSetup/routes.js";
 import { registerBookNotesRoutes } from "./bookNotes/routes.js";
 import { migrateBookIds } from "./migrateBookIds.js";
 import { mergeOccurredNotes } from "./characterOccurredNotes.js";
+import { parseChapterExtract } from "./audit/auditExtractSchema.js";
+import { persistChapterAuditFromExtract } from "./audit/persistChapterAudit.js";
+import { parseChapterExtractWithRepair } from "./audit/repairChapterExtract.js";
 import {
-  applyHookOpsToForeshadowsIndex,
   enrichForeshadowCandidatesWithSeedExcerpts,
   buildForeshadowHealthReport,
-  listOpenForeshadowsForAudit,
-  parseHookOpsFromRun
+  listOpenForeshadowsForAudit
 } from "./foreshadowSettlement.js";
 import {
   truncateForPrompt,
@@ -1158,350 +1159,8 @@ function sseWrite(res: any, payload: any) {
 }
 
 async function finalizeAuditFromJsonText(slug: string, filename: string, jsonText: string) {
-  const run = JSON.parse(jsonText);
-
-  run.chapter = run.chapter || {};
-  run.chapter.filename = filename;
-  run.chapter.auditedAt = run.chapter.auditedAt || new Date().toISOString();
-  run.gistL1 = run.gistL1 || "";
-  run.entities = run.entities || { characters: [], events: [] };
-  run.consistencyChecks = run.consistencyChecks || [];
-  run.causalAnchors = run.causalAnchors || { setups: [], payoffs: [] };
-  run.impactAnalysis = run.impactAnalysis || [];
-  run.compression = run.compression || { l2Pruning: null, mergeCandidates: null };
-  run.ledgerUpdates = run.ledgerUpdates || { openLoops: [], closedLoops: [] };
-  run.uiInjection = run.uiInjection || { spotlightCharacters: [], spotlightTags: [] };
-
-  // 绑定分析到“正文快照”（用于前端 dirty 判断）
-  try {
-    const raw = await readChapter(getDataDir(), slug, filename);
-    const normalized = String(raw || "").replace(/\r/g, "");
-    const hash = crypto.createHash("sha1").update(normalized, "utf8").digest("hex");
-    run.source = { contentHash: hash, contentLength: normalized.length };
-    // 若模型输出的 wordCount 不可靠，至少确保存在
-    if (!Number.isFinite(Number(run?.chapter?.wordCount))) run.chapter.wordCount = normalized.length;
-  } catch {
-    // ignore: 不阻断审计落盘
-  }
-
-  await writeAuditRun(getDataDir(), slug, filename, run);
-
-  const idx = await readAuditCharactersIndex(getDataDir(), slug);
-  const auditedAtIso = String(run?.chapter?.auditedAt || new Date().toISOString());
-  const normStr = (v: any) => (typeof v === "string" ? v.trim() : "");
-  const uniqStrs = (arr: any) =>
-    [...new Set((Array.isArray(arr) ? arr : []).map((x) => String(x).trim()).filter(Boolean))];
-  const mergeStrArr = (a: any, b: any) => uniqStrs([...(Array.isArray(a) ? a : []), ...(Array.isArray(b) ? b : [])]);
-  const hasVal = (v: any) => {
-    if (v === null || v === undefined) return false;
-    if (typeof v === "string") return v.trim().length > 0;
-    if (typeof v === "number") return Number.isFinite(v);
-    if (typeof v === "boolean") return true;
-    if (Array.isArray(v)) return v.length > 0;
-    if (typeof v === "object") return Object.keys(v).length > 0;
-    return false;
-  };
-  const mergeObjNonEmpty = (prev: any, next: any) => {
-    const out: any = { ...(prev && typeof prev === "object" ? prev : {}) };
-    if (!next || typeof next !== "object") return out;
-    for (const [k, v] of Object.entries(next)) {
-      if (!hasVal(v)) continue;
-      out[k] = v;
-    }
-    return out;
-  };
-  const mergeMask = (a: any, b: any) => {
-    const arrA = Array.isArray(a) ? a : [];
-    const arrB = Array.isArray(b) ? b : [];
-    const out: any[] = [];
-    const seen = new Set<string>();
-    for (const it of [...arrA, ...arrB]) {
-      const ctx = normStr((it as any)?.context);
-      const persona = normStr((it as any)?.persona);
-      if (!ctx && !persona) continue;
-      const key = `${ctx}@@${persona}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push({ context: ctx, persona });
-    }
-    return out;
-  };
-  const mergeRelations = (a: any, b: any) => {
-    const arrA = Array.isArray(a) ? a : [];
-    const arrB = Array.isArray(b) ? b : [];
-    const byTarget = new Map<string, any>();
-    for (const r of [...arrA, ...arrB]) {
-      const targetName = normStr((r as any)?.targetName);
-      if (!targetName) continue;
-      const prev = byTarget.get(targetName) || { targetName };
-      const merged = {
-        ...prev,
-        targetName,
-        types: mergeStrArr(prev.types, (r as any)?.types),
-        emotionalPolarity: hasVal((r as any)?.emotionalPolarity) ? normStr((r as any)?.emotionalPolarity) : prev.emotionalPolarity,
-        conflictIndex: hasVal((r as any)?.conflictIndex) ? normStr((r as any)?.conflictIndex) : prev.conflictIndex,
-        sharedSecrets: mergeStrArr(prev.sharedSecrets, (r as any)?.sharedSecrets)
-      };
-      byTarget.set(targetName, merged);
-    }
-    return [...byTarget.values()].sort((x, y) => String(x.targetName).localeCompare(String(y.targetName), "zh-Hans-CN"));
-  };
-  const mergeFreeText = (a: any, b: any) => {
-    const ta = normStr(a);
-    const tb = normStr(b);
-    if (!tb) return ta;
-    if (!ta) return tb;
-    if (ta.includes(tb)) return ta;
-    return `${ta}\n${tb}`;
-  };
-
-  const byName = new Map<string, any>(
-    (idx.characters || [])
-      .map((c: any) => ({ ...(c && typeof c === "object" ? c : {}), name: normStr(c?.name) }))
-      .filter((c: any) => c.name)
-      .map((c: any) => [c.name, c])
-  );
-
-  for (const raw of run?.entities?.characters || []) {
-    const name = normStr(raw?.name);
-    if (!name) continue;
-    const prev = byName.get(name);
-    const next = raw && typeof raw === "object" ? raw : {};
-
-    const merged: any = prev ? { ...prev } : { name, updatedAt: auditedAtIso };
-    const locks = prev?.locks && typeof prev.locks === "object" ? prev.locks : {};
-
-    // 基础字段
-    if (hasVal(next.role)) merged.role = normStr(next.role);
-    if (!locks.tags && Array.isArray(next.tags)) merged.tags = mergeStrArr(prev?.tags, next.tags);
-
-    // 状态 / 业力账本
-    // state 不做锁定：始终以“最新状态”增量覆盖非空字段
-    if (next.state && typeof next.state === "object") merged.state = mergeObjNonEmpty(prev?.state, next.state);
-
-    // 社会身份标签
-    if (!locks.socialTags && next.socialTags && typeof next.socialTags === "object") {
-      const stPrev = prev?.socialTags && typeof prev.socialTags === "object" ? prev.socialTags : {};
-      const stNext = next.socialTags as any;
-      merged.socialTags = {
-        ...stPrev,
-        ...(hasVal(stNext.profession) ? { profession: normStr(stNext.profession) } : null),
-        ...(hasVal(stNext.class) ? { class: normStr(stNext.class) } : null),
-        ...(Array.isArray(stNext.titles) ? { titles: mergeStrArr(stPrev.titles, stNext.titles) } : null),
-        ...(Array.isArray(stNext.other) ? { other: mergeStrArr(stPrev.other, stNext.other) } : null)
-      };
-    }
-
-    // 历史债（列表）
-    if (!locks.historicalDebts && Array.isArray(next.historicalDebts))
-      merged.historicalDebts = mergeStrArr(prev?.historicalDebts, next.historicalDebts);
-
-    // 发生过的事情：从本章事件按 participants 命中自动抽取（增量 + 去重）
-    if (!locks.occurredNotes) {
-      const extracted: string[] = [];
-      for (const ev of run?.entities?.events || []) {
-        if (!ev || typeof ev !== "object") continue;
-        const ps = Array.isArray((ev as any).participants) ? (ev as any).participants : [];
-        const hit = ps.some((p: any) => String(p || "").trim() === name);
-        if (!hit) continue;
-        const txt =
-          String((ev as any).summary || (ev as any).what || (ev as any).event || (ev as any).item || "").trim() ||
-          "";
-        if (txt) extracted.push(txt);
-      }
-      if (extracted.length) merged.occurredNotes = mergeOccurredNotes(prev?.occurredNotes, extracted);
-    }
-
-    // 叙事驱动力
-    if (!locks.narrativeDrives && next.narrativeDrives && typeof next.narrativeDrives === "object") {
-      const ndPrev = prev?.narrativeDrives && typeof prev.narrativeDrives === "object" ? prev.narrativeDrives : {};
-      const ndNext = next.narrativeDrives as any;
-      merged.narrativeDrives = {
-        ...ndPrev,
-        ...(hasVal(ndNext.want) ? { want: normStr(ndNext.want) } : null),
-        ...(hasVal(ndNext.need) ? { need: normStr(ndNext.need) } : null),
-        ...(hasVal(ndNext.moralCompass) ? { moralCompass: normStr(ndNext.moralCompass) } : null),
-        ...(Array.isArray(ndNext.flaws) ? { flaws: mergeStrArr(ndPrev.flaws, ndNext.flaws) } : null),
-        ...(Array.isArray(ndNext.blindSpots) ? { blindSpots: mergeStrArr(ndPrev.blindSpots, ndNext.blindSpots) } : null)
-      };
-    }
-
-    // 表现力指纹
-    if (!locks.fingerprints && next.fingerprints && typeof next.fingerprints === "object") {
-      const fpPrev = prev?.fingerprints && typeof prev.fingerprints === "object" ? prev.fingerprints : {};
-      const fpNext = next.fingerprints as any;
-      merged.fingerprints = {
-        ...fpPrev,
-        ...(Array.isArray(fpNext.linguisticStyle) ? { linguisticStyle: mergeStrArr(fpPrev.linguisticStyle, fpNext.linguisticStyle) } : null),
-        ...(Array.isArray(fpNext.catchphrases) ? { catchphrases: mergeStrArr(fpPrev.catchphrases, fpNext.catchphrases) } : null),
-        ...(Array.isArray(fpNext.mannerisms) ? { mannerisms: mergeStrArr(fpPrev.mannerisms, fpNext.mannerisms) } : null),
-        ...(Array.isArray(fpNext.mask) ? { mask: mergeMask(fpPrev.mask, fpNext.mask) } : null)
-      };
-    }
-
-    // 关系钩子（结构化 + 兜底自由文本）
-    if (!locks.relationalHooks && next.relationalHooks && typeof next.relationalHooks === "object") {
-      const rhPrev = prev?.relationalHooks && typeof prev.relationalHooks === "object" ? prev.relationalHooks : {};
-      const rhNext = next.relationalHooks as any;
-      merged.relationalHooks = {
-        ...rhPrev,
-        ...(Array.isArray(rhNext.relations) ? { relations: mergeRelations(rhPrev.relations, rhNext.relations) } : null),
-        ...(hasVal(rhNext.freeText) ? { freeText: mergeFreeText(rhPrev.freeText, rhNext.freeText) } : null)
-      };
-    }
-
-    // 兼容旧字段：性格分析
-    if (hasVal(next.personalityAnalysis)) merged.personalityAnalysis = normStr(next.personalityAnalysis);
-
-    merged.name = name;
-    merged.updatedAt = auditedAtIso;
-    byName.set(name, merged);
-  }
-
-  idx.characters = [...byName.values()].sort((a: any, b: any) =>
-    String(a?.name || "").localeCompare(String(b?.name || ""), "zh-Hans-CN")
-  );
-  idx.updatedAt = auditedAtIso;
-  (idx as any).version = 2;
-  await writeAuditCharactersIndex(getDataDir(), slug, idx);
-
-  // 自动抽取地点：全书共享 placesIndex.json
-  const placesIdx = await readAuditPlacesIndex(getDataDir(), slug);
-  const placeExisting = new Map<string, any>(
-    (placesIdx.places || [])
-      .map((p: any) => ({
-        ...p,
-        name: String(p?.name || "").trim()
-      }))
-      .filter((p: any) => p.name)
-      .map((p: any) => [p.name, p])
-  );
-  const chapterNum = parseChapterNumberFromFilename(filename);
-  const occurrences: Array<{ name: string; note: string }> = [];
-  // 1) 从事件里找常见地点字段
-  for (const ev of run?.entities?.events || []) {
-    if (!ev || typeof ev !== "object") continue;
-    const cand =
-      (ev as any).place ??
-      (ev as any).location ??
-      (ev as any).where ??
-      (ev as any)["地点"] ??
-      (ev as any)["发生地点"];
-    const name = String(cand || "").trim();
-    if (!name) continue;
-    const note =
-      String((ev as any).summary || (ev as any).what || (ev as any).event || "").trim() ||
-      String(run.gistL1 || "").trim();
-    occurrences.push({ name, note });
-  }
-  // 2) 兜底：从本章出现的角色 state.location 里补
-  for (const c of run?.entities?.characters || []) {
-    const loc = String(c?.state?.location || "").trim();
-    if (!loc) continue;
-    const note = String(run.gistL1 || "").trim();
-    occurrences.push({ name: loc, note });
-  }
-  const uniq = new Map<string, string>();
-  for (const o of occurrences) {
-    if (!uniq.has(o.name)) uniq.set(o.name, o.note);
-  }
-  for (const [name, note] of uniq) {
-    const prev = placeExisting.get(name);
-    if (prev) {
-      prev.lastSeenAt = run.chapter.auditedAt;
-      prev.lastChapter = Number.isFinite(chapterNum) ? chapterNum : prev.lastChapter;
-      prev.lastNote = note || prev.lastNote || "";
-      prev.updatedAt = run.chapter.auditedAt;
-      placeExisting.set(name, prev);
-    } else {
-      placeExisting.set(name, {
-        name,
-        description: "",
-        lastNote: note || "",
-        firstSeenAt: run.chapter.auditedAt,
-        lastSeenAt: run.chapter.auditedAt,
-        firstChapter: Number.isFinite(chapterNum) ? chapterNum : 0,
-        lastChapter: Number.isFinite(chapterNum) ? chapterNum : 0,
-        updatedAt: run.chapter.auditedAt
-      });
-    }
-  }
-  placesIdx.places = [...placeExisting.values()].sort((a: any, b: any) => String(a.name).localeCompare(String(b.name), "zh-Hans-CN"));
-  if (!Array.isArray(placesIdx.hiddenNames)) placesIdx.hiddenNames = [];
-  placesIdx.updatedAt = run.chapter.auditedAt;
-  await writeAuditPlacesIndex(getDataDir(), slug, placesIdx);
-
-  // 自动抽取组织：全书共享 orgsIndex.json
-  const orgsIdx = await readAuditOrgsIndex(getDataDir(), slug);
-  const orgExisting = new Map<string, any>(
-    (orgsIdx.orgs || [])
-      .map((o: any) => ({ ...o, name: String(o?.name || "").trim() }))
-      .filter((o: any) => o.name)
-      .map((o: any) => [o.name, o])
-  );
-  const orgOccurrences: Array<{ name: string; note: string }> = [];
-  for (const ev of run?.entities?.events || []) {
-    if (!ev || typeof ev !== "object") continue;
-    const cand =
-      (ev as any).org ??
-      (ev as any).organization ??
-      (ev as any).faction ??
-      (ev as any)["组织"] ??
-      (ev as any)["势力"];
-    const name = String(cand || "").trim();
-    if (!name) continue;
-    const note =
-      String((ev as any).summary || (ev as any).what || (ev as any).event || "").trim() ||
-      String(run.gistL1 || "").trim();
-    orgOccurrences.push({ name, note });
-  }
-  const orgUniq = new Map<string, string>();
-  for (const o of orgOccurrences) if (!orgUniq.has(o.name)) orgUniq.set(o.name, o.note);
-  for (const [name, note] of orgUniq) {
-    const prev = orgExisting.get(name);
-    if (prev) {
-      prev.lastSeenAt = run.chapter.auditedAt;
-      prev.lastChapter = Number.isFinite(chapterNum) ? chapterNum : prev.lastChapter;
-      prev.lastNote = note || prev.lastNote || "";
-      prev.updatedAt = run.chapter.auditedAt;
-      orgExisting.set(name, prev);
-    } else {
-      orgExisting.set(name, {
-        name,
-        description: "",
-        lastNote: note || "",
-        firstSeenAt: run.chapter.auditedAt,
-        lastSeenAt: run.chapter.auditedAt,
-        firstChapter: Number.isFinite(chapterNum) ? chapterNum : 0,
-        lastChapter: Number.isFinite(chapterNum) ? chapterNum : 0,
-        updatedAt: run.chapter.auditedAt
-      });
-    }
-  }
-  orgsIdx.orgs = [...orgExisting.values()].sort((a: any, b: any) =>
-    String(a.name).localeCompare(String(b.name), "zh-Hans-CN")
-  );
-  if (!Array.isArray(orgsIdx.hiddenNames)) orgsIdx.hiddenNames = [];
-  orgsIdx.updatedAt = run.chapter.auditedAt;
-  await writeAuditOrgsIndex(getDataDir(), slug, orgsIdx);
-
-  const ledger = await readAuditLedger(getDataDir(), slug);
-  ledger.updatedAt = run.chapter.auditedAt;
-  ledger.openLoops = ledger.openLoops || [];
-  ledger.closedLoops = ledger.closedLoops || [];
-  if (run.ledgerUpdates?.openLoops?.length) ledger.openLoops.push(...run.ledgerUpdates.openLoops);
-  if (run.ledgerUpdates?.closedLoops?.length) ledger.closedLoops.push(...run.ledgerUpdates.closedLoops);
-  await writeAuditLedger(getDataDir(), slug, ledger);
-
-  // 自动沉淀伏笔：全书共享 foreshadowsIndex.json（来源 hookOps / ledgerUpdates）
-  const foIdx = await readAuditForeshadowsIndex(getDataDir(), slug);
-  const now = run.chapter.auditedAt;
-  const chap = parseChapterNumberFromFilename(filename);
-  const hookOps = parseHookOpsFromRun(run);
-  applyHookOpsToForeshadowsIndex(foIdx, hookOps, Number.isFinite(chap) ? chap : null, now);
-  await writeAuditForeshadowsIndex(getDataDir(), slug, foIdx);
-
-  return run;
+  const extract = parseChapterExtract(jsonText);
+  return await persistChapterAuditFromExtract(getDataDir(), slug, filename, extract);
 }
 
 async function performAuditWithAiSdk(input: {
@@ -1554,16 +1213,26 @@ async function performAuditWithAiSdk(input: {
     // ignore
   }
 
-  emitPhase(2, "生成最终审计结果（JSON）");
+  emitPhase(2, "提取本章事实（JSON）");
   const rawJson = await generateAuditJsonWithAiSdk({ cfg, prompt: unifiedPrompt, onEvent: onEvent ?? (() => {}) });
   const jsonText = stripJsonFence(rawJson);
-  emitPhase(3, "解析并保存审计结果");
-  const run = await finalizeAuditFromJsonText(slug, filename, jsonText);
-  const ledger = await readAuditLedger(getDataDir(), slug);
-  // 每次分析后自动更新时间线索引与推荐压缩区间
-  emitPhase(4, "更新全书记忆（时间线/推荐压缩）");
-  await updateTimelineIndexAfterAudit({ cfg, slug, filename, run, ledger }).catch(() => {});
-  await updateProgressIndexAfterAudit({ cfg, slug, filename, run }).catch(() => {});
+
+  emitPhase(3, "校验提取结果");
+  const extract = await parseChapterExtractWithRepair(
+    jsonText,
+    async (repairPrompt) =>
+      await generateAuditJsonWithAiSdk({ cfg, prompt: repairPrompt, onEvent: onEvent ?? (() => {}) }),
+    stripJsonFence
+  );
+  extract.chapter = {
+    ...(extract.chapter || {}),
+    title: String(extract.chapter?.title || filename.replace(/\.md$/, "")),
+    auditedAt: new Date().toISOString()
+  };
+
+  emitPhase(4, "结算并落盘");
+  const run = await persistChapterAuditFromExtract(getDataDir(), slug, filename, extract);
+
   emitPhase(5, "完成");
   return run;
 }
