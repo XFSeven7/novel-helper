@@ -541,7 +541,6 @@ export function App() {
     const content = chapterContentRef.current;
     const baseline = chapterBaselineRef.current;
     if (!sel || content === baseline) return true;
-    setChapterAutosaveHint("保存中");
     try {
       await updateChapter(sel.bookSlug, sel.filename, content);
       chapterBaselineRef.current = content;
@@ -570,14 +569,10 @@ export function App() {
     const content = cardContentRef.current;
     const baseline = cardBaselineRef.current;
     if (!sel || content === baseline) return true;
-    setCardAutosaveHint("保存中");
     try {
       await updateStoryFile(sel.bookSlug, sel.path, content);
       cardBaselineRef.current = content;
-      setCardAutosaveHint("已保存");
-      window.setTimeout(() => {
-        setCardAutosaveHint((s) => (s === "已保存" ? "" : s));
-      }, 2000);
+      setCardAutosaveHint("");
       return true;
     } catch (e: any) {
       const msg = e?.message || String(e);
@@ -598,15 +593,11 @@ export function App() {
     const baseline = synopsisBaselineRef.current;
     if (!slug || selectedChapterRef.current !== null) return;
     if (draft === baseline) return;
-    setBookOverviewAutosaveHint("保存中");
     try {
       const { book } = await patchBookSynopsis(slug, draft);
       synopsisBaselineRef.current = draft;
       setBooks((prev) => prev.map((b) => (b.bookId === slug ? book : b)));
-      setBookOverviewAutosaveHint("已保存");
-      window.setTimeout(() => {
-        setBookOverviewAutosaveHint((s) => (s === "已保存" ? "" : s));
-      }, 2000);
+      setBookOverviewAutosaveHint("");
     } catch (e: any) {
       setBookOverviewAutosaveHint("保存失败");
       setStatus(e?.message || String(e));
@@ -3508,14 +3499,15 @@ export function App() {
                         setChapterTitleEditing(false);
                       }}
                     />
-                    <span
-                      className={`titleAutosave autosaveHint ${
-                        chapterAutosaveHint === "保存失败" ? "autosaveErr" : ""
-                      }`}
-                      title="编辑停顿约 1 秒后写入磁盘"
-                    >
-                      {chapterAutosaveHint}
-                    </span>
+                    {chapterAutosaveHint ? (
+                      <span
+                        className={`titleAutosave autosaveHint ${
+                          chapterAutosaveHint === "保存失败" ? "autosaveErr" : ""
+                        }`}
+                      >
+                        {chapterAutosaveHint}
+                      </span>
+                    ) : null}
                   </>
                 ) : (
                   <>
@@ -3546,14 +3538,15 @@ export function App() {
                         {chapterTitleSuggestBusy ? "生成中..." : "生成标题"}
                       </button>
                     ) : null}
-                    <span
-                      className={`titleAutosave autosaveHint ${
-                        chapterAutosaveHint === "保存失败" ? "autosaveErr" : ""
-                      }`}
-                      title="编辑停顿约 1 秒后写入磁盘"
-                    >
-                      {chapterAutosaveHint}
-                    </span>
+                    {chapterAutosaveHint ? (
+                      <span
+                        className={`titleAutosave autosaveHint ${
+                          chapterAutosaveHint === "保存失败" ? "autosaveErr" : ""
+                        }`}
+                      >
+                        {chapterAutosaveHint}
+                      </span>
+                    ) : null}
                   </>
                 )}
               </div>

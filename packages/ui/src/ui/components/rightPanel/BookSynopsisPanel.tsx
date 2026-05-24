@@ -63,14 +63,15 @@ export function BookSynopsisPanel({
           aria-label="书籍简介"
           rows={4}
         />
-        <div
-          className={`titleAutosave autosaveHint ${
-            bookOverviewAutosaveHint === "保存失败" ? "autosaveErr" : ""
-          }`}
-          title="简介停顿约 1 秒后写入 meta.json"
-        >
-          {bookOverviewAutosaveHint}
-        </div>
+        {bookOverviewAutosaveHint ? (
+          <div
+            className={`titleAutosave autosaveHint ${
+              bookOverviewAutosaveHint === "保存失败" ? "autosaveErr" : ""
+            }`}
+          >
+            {bookOverviewAutosaveHint}
+          </div>
+        ) : null}
         {activeBookMeta?.setupSessionId ? (
           <button
             type="button"
