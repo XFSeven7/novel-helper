@@ -545,12 +545,9 @@ export function App() {
       const w = approximateWordCount(content);
       setChapters((prev) => prev.map((c) => (c.filename === sel.filename ? { ...c, wordCount: w } : c)));
       setStatsRefreshKey((k) => k + 1);
-      setChapterAutosaveHint("已保存");
+      setChapterAutosaveHint("");
       void refreshAuditChapterStale(sel.bookSlug);
       void refreshChapterDraftStatus(sel.bookSlug);
-      window.setTimeout(() => {
-        setChapterAutosaveHint((s) => (s === "已保存" ? "" : s));
-      }, 2000);
       return true;
     } catch (e: any) {
       const msg = e?.message || String(e);
