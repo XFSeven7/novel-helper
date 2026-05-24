@@ -1,8 +1,21 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { appConfirm } from "../../dialog/dialog";
+import {
+  findAllLiteralMatches,
+  findNextMatch,
+  matchIndexInList,
+  replaceAllLiteral,
+  replaceRange,
+  stepMatchNext,
+  stepMatchPrev,
+  type TextRange
+} from "../../utils/chapterFindReplace";
+import { scrollTextareaToSelection } from "../../utils/textareaEdit";
 import { applyLocalMobileLayout } from "../../utils/localMobileLayout";
 import { ChapterEditorContent, type ChapterEditorContentProps } from "./ChapterEditorContent";
+import { ChapterFindReplaceBar } from "./ChapterFindReplaceBar";
 import { clampMobileFontPx, readStoredMobileFontPx, storeMobileFontPx } from "./mobileFontSize";
+import { useChapterEditorShortcuts } from "../../hooks/useChapterEditorShortcuts";
 import { useSyncScrollPair } from "../../hooks/useSyncScrollPair";
 import { MobileRawView } from "./MobileRawView";
 import { MobileTopToolbar } from "./MobileTopToolbar";
@@ -42,6 +55,131 @@ export function ChapterEditorPanel({
   const [compareOriginal, setCompareOriginal] = useState("");
   const [localCompareDraft, setLocalCompareDraft] = useState("");
   const [compareRightSource, setCompareRightSource] = useState<CompareRightSource>(null);
+  const [findReplaceOpen, setFindReplaceOpen] = useState(false);
+  const [findQuery, setFindQuery] = useState("");
+  const [replaceQuery, setReplaceQuery] = useState("");
+  const [activeMatch, setActiveMatch] = useState<TextRange | null>(null);
+
+  const refocusFindInput = useCallback(() => {
+    queueMicrotask(() => {
+      document.querySelector<HTMLInputElement>(".chapterFindReplaceInput")?.focus();
+    });
+  }, []);
+
+  const applyTextareaSelection = useCallback(
+    (range: TextRange, keepFindFocus = false) => {
+      const el = contentProps.chapterTextareaRef.current;
+      if (!el) return;
+      el.setSelectionRange(range.start, range.end);
+      scrollTextareaToSelection(el);
+      if (keepFindFocus && findReplaceOpen) {
+        refocusFindInput();
+      } else {
+        el.focus();
+      }
+    },
+    [contentProps.chapterTextareaRef, findReplaceOpen, refocusFindInput]
+  );
+
+  const findMatches = useMemo(
+    () => findAllLiteralMatches(contentProps.chapterContent, findQuery.trim()),
+    [contentProps.chapterContent, findQuery]
+  );
+
+  const matchCountLabel = useMemo(() => {
+    const total = findMatches.length;
+    if (!findQuery.trim()) return null;
+    if (!total) return null;
+    const current = matchIndexInList(findMatches, activeMatch);
+    return current > 0 ? `${current}/${total}` : `—/${total}`;
+  }, [findQuery, findMatches, activeMatch]);
+
+  const closeFindReplace = useCallback(() => {
+    setFindReplaceOpen(false);
+    setActiveMatch(null);
+    queueMicrotask(() => contentProps.chapterTextareaRef.current?.focus());
+  }, [contentProps.chapterTextareaRef]);
+
+  const syncFindNext = useCallback(() => {
+    const q = findQuery.trim();
+    if (!q) {
+      setActiveMatch(null);
+      return;
+    }
+    const matches = findAllLiteralMatches(contentProps.chapterContent, q);
+    const match = stepMatchNext(matches, activeMatch);
+    setActiveMatch(match);
+    if (match) applyTextareaSelection(match, true);
+  }, [contentProps.chapterContent, findQuery, activeMatch, applyTextareaSelection]);
+
+  const syncFindPrev = useCallback(() => {
+    const q = findQuery.trim();
+    if (!q) {
+      setActiveMatch(null);
+      return;
+    }
+    const matches = findAllLiteralMatches(contentProps.chapterContent, q);
+    const match = stepMatchPrev(matches, activeMatch);
+    setActiveMatch(match);
+    if (match) applyTextareaSelection(match, true);
+  }, [contentProps.chapterContent, findQuery, activeMatch, applyTextareaSelection]);
+
+  const handleReplaceOne = useCallback(() => {
+    if (!activeMatch || !findQuery.trim()) return;
+    const q = findQuery;
+    const nextText = replaceRange(contentProps.chapterContent, activeMatch, replaceQuery);
+    contentProps.setChapterContent(nextText);
+    const cursor = activeMatch.start + replaceQuery.length;
+    const matches = findAllLiteralMatches(nextText, q);
+    const match = matches.find((m) => m.start >= cursor) ?? matches[0] ?? null;
+    setActiveMatch(match);
+    queueMicrotask(() => {
+      if (match) {
+        applyTextareaSelection(match, true);
+      } else {
+        const el = contentProps.chapterTextareaRef.current;
+        if (!el) return;
+        el.setSelectionRange(cursor, cursor);
+        scrollTextareaToSelection(el);
+        refocusFindInput();
+      }
+    });
+  }, [activeMatch, findQuery, replaceQuery, contentProps, applyTextareaSelection, refocusFindInput]);
+
+  const handleReplaceAll = useCallback(async () => {
+    const q = findQuery.trim();
+    if (!q) return;
+    const ok = await appConfirm({
+      title: "全部替换",
+      message: `将本章正文中所有「${q}」替换为「${replaceQuery}」，是否继续？`,
+      confirmLabel: "替换",
+      variant: "danger"
+    });
+    if (!ok) return;
+    const next = replaceAllLiteral(contentProps.chapterContent, q, replaceQuery);
+    contentProps.setChapterContent(next);
+    setActiveMatch(null);
+  }, [findQuery, replaceQuery, contentProps]);
+
+  const openFindReplace = useCallback(() => {
+    const el = contentProps.chapterTextareaRef.current;
+    const selected =
+      el && el.selectionStart !== el.selectionEnd
+        ? contentProps.chapterContent.slice(el.selectionStart, el.selectionEnd)
+        : "";
+    setFindReplaceOpen(true);
+    if (selected && el) {
+      setFindQuery(selected);
+      const match = findNextMatch(contentProps.chapterContent, selected, el.selectionStart);
+      setActiveMatch(match);
+      queueMicrotask(() => {
+        if (match) applyTextareaSelection(match);
+      });
+    }
+    queueMicrotask(() => {
+      document.querySelector<HTMLInputElement>(".chapterFindReplaceInput")?.focus();
+    });
+  }, [contentProps, applyTextareaSelection]);
 
   useEffect(() => {
     if (!mobileReading) {
@@ -57,7 +195,46 @@ export function ChapterEditorPanel({
     setLocalCompareDraft("");
     setCompareRightSource(null);
     setMobileCompareOn(false);
+    setFindReplaceOpen(false);
+    setFindQuery("");
+    setReplaceQuery("");
+    setActiveMatch(null);
   }, [contentProps.selectedChapter?.filename]);
+
+  useEffect(() => {
+    if (contentProps.polishModeOn || contentProps.expandModeOn || contentProps.auditReadModeOn) {
+      setFindReplaceOpen(false);
+      setActiveMatch(null);
+    }
+  }, [contentProps.polishModeOn, contentProps.expandModeOn, contentProps.auditReadModeOn]);
+
+  useEffect(() => {
+    if (!findReplaceOpen) return;
+    const q = findQuery.trim();
+    if (!q) {
+      setActiveMatch(null);
+      return;
+    }
+    const matches = findAllLiteralMatches(contentProps.chapterContent, q);
+    if (!matches.length) {
+      setActiveMatch(null);
+      return;
+    }
+    setActiveMatch((prev) => {
+      if (prev && matches.some((m) => m.start === prev.start && m.end === prev.end)) {
+        return prev;
+      }
+      return matches[0]!;
+    });
+  }, [findQuery, findReplaceOpen, contentProps.chapterContent]);
+
+  useEffect(() => {
+    if (!findReplaceOpen || !activeMatch) return;
+    const el = contentProps.chapterTextareaRef.current;
+    if (!el) return;
+    el.setSelectionRange(activeMatch.start, activeMatch.end);
+    scrollTextareaToSelection(el);
+  }, [activeMatch, findReplaceOpen, contentProps.chapterTextareaRef]);
 
   useEffect(() => {
     if (mobileLayout?.original) setCompareOriginal(mobileLayout.original);
@@ -73,6 +250,23 @@ export function ChapterEditorPanel({
 
   const showHistory =
     historyPaneOpen && !mobileReading && !contentProps.polishModeOn && !contentProps.expandModeOn;
+
+  const chapterWritingShortcutsEnabled = Boolean(
+    contentProps.selectedChapter &&
+      !contentProps.busy &&
+      !contentProps.polishModeOn &&
+      !contentProps.expandModeOn &&
+      !contentProps.auditReadModeOn &&
+      !showHistory
+  );
+
+  useChapterEditorShortcuts({
+    enabled: chapterWritingShortcutsEnabled,
+    chapterContent: contentProps.chapterContent,
+    setChapterContent: contentProps.setChapterContent,
+    textareaRef: contentProps.chapterTextareaRef,
+    onOpenFindReplace: openFindReplace
+  });
 
   const canCompare =
     mobileReading &&
@@ -156,6 +350,34 @@ export function ChapterEditorPanel({
       okModelCount={okModelCount}
       textareaClassName={mobileReading ? "mobileTextarea" : textareaClassName}
       mobileFontPx={mobileReading ? mobileFontPx : undefined}
+      findHighlight={
+        findReplaceOpen
+          ? {
+              open: true,
+              query: findQuery,
+              matches: findMatches,
+              activeMatch
+            }
+          : null
+      }
+    />
+  );
+
+  const findReplaceBar = (
+    <ChapterFindReplaceBar
+      open={findReplaceOpen}
+      busy={contentProps.busy}
+      findQuery={findQuery}
+      replaceQuery={replaceQuery}
+      hasMatch={Boolean(activeMatch)}
+      matchCountLabel={matchCountLabel}
+      onFindQueryChange={setFindQuery}
+      onReplaceQueryChange={setReplaceQuery}
+      onFindNext={syncFindNext}
+      onFindPrev={syncFindPrev}
+      onReplaceOne={handleReplaceOne}
+      onReplaceAll={() => void handleReplaceAll()}
+      onClose={closeFindReplace}
     />
   );
 
@@ -272,8 +494,9 @@ export function ChapterEditorPanel({
             </div>
           ) : (
             <div className="mobileSingleWrap">
-              <div className="mobilePhone" style={phoneStyle}>
-                {editorContent}
+              <div className="mobilePhone mobilePhoneEditor" style={phoneStyle}>
+                {findReplaceBar}
+                <div className="chapterSplitEditor">{editorContent}</div>
               </div>
             </div>
           )}
@@ -292,7 +515,10 @@ export function ChapterEditorPanel({
 
   return (
     <div className="chapterSplit">
-      <div className="chapterSplitLeft">{editorContent}</div>
+      <div className="chapterSplitLeft">
+        {findReplaceBar}
+        <div className="chapterSplitEditor">{editorContent}</div>
+      </div>
     </div>
   );
 }

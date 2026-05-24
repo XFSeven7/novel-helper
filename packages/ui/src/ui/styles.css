@@ -2836,12 +2836,85 @@ code {
   flex: 1;
   min-width: 0;
   display: flex;
+  flex-direction: column;
   min-height: 0;
 }
 
-.chapterSplitLeft > textarea {
+.chapterSplitEditor {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+}
+
+.chapterSplitEditor .chapterTextareaWrap {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.chapterSplitEditor > textarea,
+.chapterSplitEditor .chapterTextareaWrap > textarea {
   width: 100%;
   height: 100%;
+}
+
+.chapterTextareaWrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+}
+
+.chapterTextareaHighlight {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  box-sizing: border-box;
+  overflow: auto;
+  pointer-events: none;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  border: none;
+  background: transparent;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+  font-size: 14px;
+  line-height: 1.6;
+  padding: 14px;
+  color: var(--text);
+}
+
+.chapterTextareaHighlight.mobileTextarea {
+  padding: 12px;
+  font-family: ui-serif, "PingFang SC", "Noto Serif SC", "Songti SC", "Source Han Serif SC", serif;
+}
+
+.chapterTextareaHighlight mark.findHighlight {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  color: inherit;
+  border-radius: 2px;
+}
+
+.chapterTextareaHighlight mark.findHighlightActive {
+  background: color-mix(in srgb, var(--accent) 42%, #facc15 30%);
+  color: inherit;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.chapterTextareaWithHighlight {
+  position: relative;
+  z-index: 1;
+  color: transparent !important;
+  caret-color: var(--text);
+  background: transparent !important;
+}
+
+.chapterTextareaWithHighlight::selection {
+  background: color-mix(in srgb, var(--accent) 42%, #facc15 30%);
+  color: transparent;
 }
 
 .chapterSplitRight {
@@ -4484,6 +4557,17 @@ code {
   background: rgba(0, 0, 0, 0.35);
   padding: 14px;
   overflow: hidden;
+}
+
+.mobilePhoneEditor {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.mobilePhoneEditor .chapterSplitEditor {
+  flex: 1;
+  min-height: 0;
 }
 
 .mobileTextarea {
@@ -7115,5 +7199,43 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
   background: color-mix(in srgb, var(--accent) 14%, var(--panel));
   color: var(--text);
+}
+
+.chapterFindReplaceBar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 8px 10px;
+  flex-shrink: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--panel2) 70%, var(--panel));
+}
+
+.chapterFindReplaceInput {
+  min-width: 120px;
+  flex: 1 1 140px;
+  padding: 4px 8px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  background: var(--input-bg, var(--panel));
+  color: var(--text);
+}
+
+.chapterFindReplaceInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.chapterFindReplaceHint {
+  font-size: 11px;
+  width: 100%;
+}
+
+.chapterFindReplaceCount {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  min-width: 3.5em;
+  text-align: center;
 }
 

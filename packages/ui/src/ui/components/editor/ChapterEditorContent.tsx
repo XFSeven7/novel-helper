@@ -6,6 +6,10 @@ import {
   type AuditLinkTarget
 } from "../../utils/auditDiff";
 import { approximateWordCount } from "../../utils/chapterFormat";
+import {
+  ChapterTextareaWithFindHighlight,
+  type ChapterFindHighlightState
+} from "./ChapterTextareaWithFindHighlight";
 
 export type AuditHoverState = {
   target: AuditLinkTarget;
@@ -51,6 +55,7 @@ export type ChapterEditorContentProps = {
     tab: "chapterAnalysis" | "chapterEntities" | "auditCharacters" | "places" | "timeline" | "foreshadows" | "story" | "orgs",
     key: string
   ) => void;
+  findHighlight?: ChapterFindHighlightState | null;
 };
 
 export function ChapterEditorContent({
@@ -86,7 +91,8 @@ export function ChapterEditorContent({
   auditOrgsIndex,
   timelineIndex,
   storyFiles,
-  onJumpToOrganize
+  onJumpToOrganize,
+  findHighlight
 }: ChapterEditorContentProps) {
   return (
     <>
@@ -321,16 +327,15 @@ export function ChapterEditorContent({
       ) : null}
     </div>
 ) : (
-    <textarea
-      className={textareaClassName}
-      style={
-        mobileFontPx ? { fontSize: `${mobileFontPx}px`, lineHeight: 1.85 } : undefined
-      }
-      ref={chapterTextareaRef}
-      value={chapterContent}
-      onChange={(e) => setChapterContent(e.target.value)}
-      disabled={busy || !selectedChapter}
-      placeholder="在左侧选择章节或新建章节后开始写作..."
+    <ChapterTextareaWithFindHighlight
+      highlight={findHighlight ?? null}
+      chapterContent={chapterContent}
+      chapterTextareaRef={chapterTextareaRef}
+      textareaClassName={textareaClassName}
+      mobileFontPx={mobileFontPx}
+      busy={busy}
+      selectedChapter={selectedChapter}
+      onChange={setChapterContent}
     />
 )}
 
