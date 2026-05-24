@@ -7424,3 +7424,177 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   text-align: center;
 }
 
+/* 大纲阶段树 */
+.outlineStageTree {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  gap: 6px;
+}
+
+.outlineStageTreeToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.outlineStageTreeToolbarTitle {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.outlineStageTreeScroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.outlineStageTreeNode {
+  display: block;
+}
+
+.outlineStageTreeRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 28px;
+  border-radius: 6px;
+}
+
+.outlineStageTreeRow--selected {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.outlineStageTreeToggle {
+  flex-shrink: 0;
+  width: 18px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.outlineStageTreeToggle--spacer {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.outlineStageTreeLabelBtn {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  padding: 2px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: 12px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.outlineStageTreeRenameInput {
+  flex: 1;
+  min-width: 0;
+  padding: 1px 6px;
+  font-size: 12px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--input-bg, var(--panel));
+  color: var(--text);
+}
+
+.outlineStageTreeRenameInput:focus {
+  outline: none;
+}
+
+.outlineStageTreeActions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.outlineStageTreeRow:hover .outlineStageTreeActions,
+.outlineStageTreeRow--selected .outlineStageTreeActions {
+  opacity: 1;
+}
+
+.outlineStageTreeAct {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.outlineStageTreeAct:hover {
+  background: color-mix(in srgb, var(--border) 60%, transparent);
+  color: var(--text);
+}
+
+.outlineStageTreeAct--danger:hover {
+  color: var(--danger, #c44);
+}
+
+.outlineStageTreeEmpty {
+  font-size: 12px;
+  padding: 8px 4px;
+}
+
+.outlineStageEditorCenter {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  padding: 12px 16px 16px;
+  gap: 8px;
+}
+
+.outlineStageEditorCenter--empty {
+  align-items: center;
+  justify-content: center;
+}
+
+.outlineStageEditorNote {
+  flex: 1;
+  min-height: 280px;
+  width: 100%;
+  resize: none;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: var(--input-bg, var(--panel));
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.85;
+  font-family: inherit;
+}
+
+.outlineStageEditorNote:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.centerStageBreadcrumb {
+  font-size: 12px;
+  max-width: 40vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+

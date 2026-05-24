@@ -1,6 +1,15 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import crypto from "node:crypto";
 import type { ChapterMeta } from "./fsStore.js";
+
+export type OutlineStageNode = {
+  id: string;
+  label: string;
+  note?: string;
+  children?: OutlineStageNode[];
+  chapterRange?: string;
+};
 
 export type BookOutline = {
   logline?: string;
@@ -14,12 +23,7 @@ export type BookOutline = {
   targetWords?: number;
   targetChapters?: number;
   structureFramework?: string;
-  mainlineStages?: Array<{
-    id: string;
-    label: string;
-    chapterRange?: string;
-    note?: string;
-  }>;
+  mainlineStages?: OutlineStageNode[];
 };
 
 export type VolumeOutline = {
@@ -153,19 +157,30 @@ function normalizeVolume(raw: any, fallbackOrder: number): VolumeOutline | null 
   };
 }
 
+function normalizeStageNode(raw: any, fallbackIndex: number): OutlineStageNode | null {
+  const id = String(raw?.id || "").trim() || `stage-${crypto.randomUUID()}`;
+  const label = typeof raw?.label === "string" ? raw.label : "";
+  const note = typeof raw?.note === "string" ? raw.note : undefined;
+  const chapterRange = typeof raw?.chapterRange === "string" ? raw.chapterRange : undefined;
+  const childrenRaw = Array.isArray(raw?.children) ? raw.children : [];
+  const children = childrenRaw
+    .map((c: any, i: number) => normalizeStageNode(c, i))
+    .filter((c: OutlineStageNode | null): c is OutlineStageNode => c !== null);
+  return { id, label, note, chapterRange, children };
+}
+
+function normalizeMainlineStages(raw: unknown): OutlineStageNode[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const stages = raw
+    .map((s: any, i: number) => normalizeStageNode(s, i))
+    .filter((s: OutlineStageNode | null): s is OutlineStageNode => s !== null);
+  return stages.length ? stages : undefined;
+}
+
 export function normalizeOutlineIndex(parsed: any): OutlineIndex {
   const bookRaw = parsed?.book && typeof parsed.book === "object" ? parsed.book : {};
   const synopsisRaw = bookRaw?.synopsis && typeof bookRaw.synopsis === "object" ? bookRaw.synopsis : {};
-  const mainlineStages = Array.isArray(bookRaw?.mainlineStages)
-    ? bookRaw.mainlineStages
-        .map((s: any, i: number) => ({
-          id: String(s?.id || `stage-${i + 1}`).trim(),
-          label: String(s?.label || "").trim() || `阶段${i + 1}`,
-          chapterRange: typeof s?.chapterRange === "string" ? s.chapterRange : undefined,
-          note: typeof s?.note === "string" ? s.note : undefined
-        }))
-        .filter((s: { id: string }) => s.id)
-    : undefined;
+  const mainlineStages = normalizeMainlineStages(bookRaw?.mainlineStages);
 
   const volumes: VolumeOutline[] = [];
   if (Array.isArray(parsed?.volumes)) {

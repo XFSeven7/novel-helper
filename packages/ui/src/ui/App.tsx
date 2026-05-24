@@ -69,7 +69,12 @@ import { BookShelfTabs, type BookShelfTabId } from "./components/nav/BookShelfTa
 import { BookPlanningNav } from "./components/nav/BookPlanningNav";
 import { BookSetupWizard } from "./components/bookSetup/BookSetupWizard";
 import { ChapterNav } from "./components/nav/ChapterNav";
-import { OutlineWorkspace } from "./components/outline/OutlineWorkspace";
+import { OutlineWorkspace, type OutlineSubTab } from "./components/outline/OutlineWorkspace";
+import { OutlineBookProvider } from "./context/OutlineBookContext";
+import {
+  StageOutlineCenterBody,
+  StageOutlineCenterTop
+} from "./components/outline/StageOutlineCenter";
 import { BookNotesPanel } from "./components/notes/BookNotesPanel";
 import { appConfirm } from "./dialog/dialog";
 import { useLayout3Splitters } from "./hooks/useLayout3Splitters";
@@ -195,6 +200,8 @@ export function App() {
   const [bookSetupPlans, setBookSetupPlans] = useState<BookSetupPlanEntry[]>([]);
   const [bookSetupSessionId, setBookSetupSessionId] = useState<string | null>(null);
   const [outlineRefreshKey, setOutlineRefreshKey] = useState(0);
+  const [outlineSubTab, setOutlineSubTab] = useState<OutlineSubTab>("book");
+  const [selectedStageNodeId, setSelectedStageNodeId] = useState<string | null>(null);
   const [chapterGapModalOpen, setChapterGapModalOpen] = useState(false);
   const [chapterGapModalBookSlug, setChapterGapModalBookSlug] = useState("");
   const [chapterGapModalIndexes, setChapterGapModalIndexes] = useState<number[]>([]);
@@ -519,6 +526,7 @@ export function App() {
 
   const showBookOverview = Boolean(activeBook && !selectedChapter);
   const showRelationsCenter = Boolean(activeBook && leftTab === "global" && globalTab === "relations");
+  const showStageOutlineCenter = Boolean(activeBook && leftTab === "outline" && outlineSubTab === "stages");
 
   function clearChapterTimer() {
     if (chapterTimerRef.current !== null) {
@@ -1371,8 +1379,9 @@ export function App() {
   }, [activeBook, books]);
 
   useEffect(() => {
-    if (!activeBook) return;
-    setLeftTab("chapters");
+    setOutlineSubTab("book");
+    setSelectedStageNodeId(null);
+    if (activeBook) setLeftTab("chapters");
   }, [activeBook]);
 
   useEffect(() => {
@@ -3177,6 +3186,7 @@ export function App() {
         onToggleRight={() => setRightCollapsed((v) => !v)}
       />
 
+      <OutlineBookProvider bookId={activeBook || null} refreshToken={outlineRefreshKey}>
       <div
         className={`layout3 ${navCollapsed ? "layout3NavCollapsed" : ""} ${rightCollapsed ? "layout3RightCollapsed" : ""}`}
         style={
@@ -3339,6 +3349,10 @@ export function App() {
                       activeModelId={activeModelId}
                       bookSynopsis={activeBookMeta?.synopsis}
                       refreshToken={outlineRefreshKey}
+                      outlineSubTab={outlineSubTab}
+                      onOutlineSubTabChange={setOutlineSubTab}
+                      selectedStageNodeId={selectedStageNodeId}
+                      onSelectedStageNodeIdChange={setSelectedStageNodeId}
                       onOpenChapter={(c) => void onOpenChapter(c)}
                       onStatus={setStatus}
                     />
@@ -3533,6 +3547,14 @@ export function App() {
                       《{activeBookMeta?.title ?? activeBook}》· 人物关系
                     </div>
                     <span className="titleAutosave autosaveHint" />
+                  </>
+                ) : showStageOutlineCenter ? (
+                  <>
+                    <StageOutlineCenterTop
+                      selectedId={selectedStageNodeId}
+                      busy={busy}
+                      bookTitle={activeBookMeta?.title ?? activeBook}
+                    />
                   </>
                 ) : showBookOverview ? (
                   <>
@@ -3799,6 +3821,12 @@ export function App() {
               addRequestKey={relationsAddRequestKey}
               onAddRequestConsumed={() => setRelationsAddRequestKey(0)}
             />
+          ) : showStageOutlineCenter ? (
+            <StageOutlineCenterBody
+              selectedId={selectedStageNodeId}
+              busy={busy}
+              onClearSelection={() => setSelectedStageNodeId(null)}
+            />
           ) : showBookOverview ? (
             <div className="centerBookStats">
               <StatsPanel
@@ -3957,6 +3985,7 @@ export function App() {
         />
         ) : null}
       </div>
+      </OutlineBookProvider>
 
       <ClearBookAuditModal
         open={clearBookAuditModalOpen}

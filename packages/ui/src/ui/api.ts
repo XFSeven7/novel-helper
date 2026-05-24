@@ -855,6 +855,15 @@ export async function getBookStats(bookId: string) {
   return await http<{ stats: BookStats }>(`/api/books/${encodeURIComponent(bookId)}/stats`);
 }
 
+export type OutlineStageNode = {
+  id: string;
+  label: string;
+  note?: string;
+  children?: OutlineStageNode[];
+  /** @deprecated v1 UI 不编辑，normalize 时保留 */
+  chapterRange?: string;
+};
+
 export type BookOutline = {
   logline?: string;
   synopsis?: {
@@ -867,12 +876,7 @@ export type BookOutline = {
   targetWords?: number;
   targetChapters?: number;
   structureFramework?: string;
-  mainlineStages?: Array<{
-    id: string;
-    label: string;
-    chapterRange?: string;
-    note?: string;
-  }>;
+  mainlineStages?: OutlineStageNode[];
 };
 
 export type VolumeOutline = {

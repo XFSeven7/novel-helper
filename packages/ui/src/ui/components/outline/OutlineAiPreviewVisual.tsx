@@ -1,5 +1,19 @@
 import React from "react";
-import type { ChapterMeta, OutlineIndex } from "../../api";
+import type { ChapterMeta, OutlineIndex, OutlineStageNode } from "../../api";
+
+function StagePreviewList({ stages, depth = 0 }: { stages: OutlineStageNode[]; depth?: number }) {
+  return (
+    <ol className="outlineAiMainlineList" style={depth > 0 ? { marginLeft: 14 } : undefined}>
+      {stages.map((st, i) => (
+        <li key={st.id || `${depth}-${i}`}>
+          <strong>{st.label || `阶段${i + 1}`}</strong>
+          {st.note?.trim() ? <p className="outlineAiPreviewText">{st.note}</p> : null}
+          {st.children?.length ? <StagePreviewList stages={st.children} depth={depth + 1} /> : null}
+        </li>
+      ))}
+    </ol>
+  );
+}
 
 const SYNOPSIS_LABELS: { key: keyof NonNullable<OutlineIndex["book"]["synopsis"]>; label: string }[] = [
   { key: "setup", label: "起因" },
@@ -79,18 +93,8 @@ function BookPreviewSection({ book }: { book: OutlineIndex["book"] }) {
       ) : null}
       {book.mainlineStages?.length ? (
         <div className="outlineAiPreviewBlock">
-          <div className="outlineAiPreviewLabel">主线阶段（{book.mainlineStages.length}）</div>
-          <ol className="outlineAiMainlineList">
-            {book.mainlineStages.map((st, i) => (
-              <li key={st.id || i}>
-                <strong>{st.label || `阶段${i + 1}`}</strong>
-                {st.chapterRange?.trim() ? (
-                  <span className="muted"> · {st.chapterRange}</span>
-                ) : null}
-                {st.note?.trim() ? <p className="outlineAiPreviewText">{st.note}</p> : null}
-              </li>
-            ))}
-          </ol>
+          <div className="outlineAiPreviewLabel">主线阶段</div>
+          <StagePreviewList stages={book.mainlineStages} />
         </div>
       ) : null}
     </section>

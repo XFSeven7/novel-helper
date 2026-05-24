@@ -1,10 +1,13 @@
 import React, { useMemo, useState } from "react";
-import type { ChapterMeta, OutlineAiMode, OutlineIndex, VolumeOutline } from "../../api";
+import type { ChapterMeta, OutlineAiMode, OutlineIndex, OutlineStageNode, VolumeOutline } from "../../api";
+import { useOptionalOutlineBook } from "../../context/OutlineBookContext";
 import { useOutline } from "../../hooks/useOutline";
 import { OutlineAiPreviewModal } from "./OutlineAiPreviewModal";
-import { OutlineMainlinePanel } from "./OutlineMainlinePanel";
+import { OutlineStageTree } from "./OutlineStageTree";
 import { OutlineTextarea } from "./OutlineTextarea";
 import { appConfirm } from "../../dialog/dialog";
+
+export type OutlineSubTab = "book" | "stages" | "volumes" | "chapters";
 
 export type OutlineWorkspaceProps = {
   slug: string;
@@ -14,11 +17,14 @@ export type OutlineWorkspaceProps = {
   bookSynopsis?: string;
   onOpenChapter: (chapter: ChapterMeta) => void;
   onStatus?: (msg: string) => void;
-  /** 变更时强制重新拉取 outline（如规划同步到本书后） */
   refreshToken?: number;
+  outlineSubTab?: OutlineSubTab;
+  onOutlineSubTabChange?: (tab: OutlineSubTab) => void;
+  selectedStageNodeId?: string | null;
+  onSelectedStageNodeIdChange?: (id: string | null) => void;
 };
 
-type SubTab = "book" | "stages" | "volumes" | "chapters";
+type SubTab = OutlineSubTab;
 
 export function OutlineWorkspace({
   slug,
@@ -28,13 +34,30 @@ export function OutlineWorkspace({
   bookSynopsis,
   onOpenChapter,
   onStatus,
-  refreshToken = 0
+  refreshToken = 0,
+  outlineSubTab: outlineSubTabProp,
+  onOutlineSubTabChange,
+  selectedStageNodeId = null,
+  onSelectedStageNodeIdChange
 }: OutlineWorkspaceProps) {
-  const { outline, loading, saving, aiBusy, err, updateOutline, runAi, applyPreview, saveNow } = useOutline(
-    slug,
-    refreshToken
-  );
-  const [subTab, setSubTab] = useState<SubTab>("book");
+  const outlineCtx = useOptionalOutlineBook();
+  const internalOutline = useOutline(outlineCtx ? null : slug, refreshToken);
+  const outline = outlineCtx?.outline ?? internalOutline.outline;
+  const loading = outlineCtx?.loading ?? internalOutline.loading;
+  const saving = outlineCtx?.saving ?? internalOutline.saving;
+  const aiBusy = outlineCtx?.aiBusy ?? internalOutline.aiBusy;
+  const err = outlineCtx?.err ?? internalOutline.err;
+  const updateOutline = outlineCtx?.updateOutline ?? internalOutline.updateOutline;
+  const runAi = outlineCtx?.runAi ?? internalOutline.runAi;
+  const applyPreview = outlineCtx?.applyPreview ?? internalOutline.applyPreview;
+  const saveNow = outlineCtx?.saveNow ?? internalOutline.saveNow;
+
+  const [subTabInternal, setSubTabInternal] = useState<SubTab>("book");
+  const subTab = outlineSubTabProp ?? subTabInternal;
+  const setSubTab = (t: SubTab) => {
+    onOutlineSubTabChange?.(t);
+    if (outlineSubTabProp === undefined) setSubTabInternal(t);
+  };
   const [selectedVolumeId, setSelectedVolumeId] = useState<string | null>(null);
   const [selectedChapterFilename, setSelectedChapterFilename] = useState<string | null>(null);
   const [aiPreview, setAiPreview] = useState<Partial<OutlineIndex> | { report: string } | null>(null);
@@ -200,10 +223,19 @@ export function OutlineWorkspace({
       ) : null}
 
       {subTab === "stages" ? (
-        <OutlineMainlinePanel
-          book={outline.book}
+        <OutlineStageTree
+          bookId={slug}
+          stages={outline.book.mainlineStages}
           disabled={disabled}
-          onBookChange={(book) => updateOutline((prev) => ({ ...prev, book }))}
+          selectedId={selectedStageNodeId}
+          onSelect={(id) => onSelectedStageNodeIdChange?.(id)}
+          onStagesChange={(stages: OutlineStageNode[]) =>
+            updateOutline((prev) => ({
+              ...prev,
+              book: { ...prev.book, mainlineStages: stages.length ? stages : undefined }
+            }))
+          }
+          onSelectionAfterDelete={(id) => onSelectedStageNodeIdChange?.(id)}
         />
       ) : null}
 
