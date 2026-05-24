@@ -223,7 +223,6 @@ code {
   flex-wrap: wrap;
 }
 
-.btnFullscreenToggle,
 .themePickerRoot {
   position: relative;
 }
@@ -313,7 +312,8 @@ code {
 
 .btnThemeToggle,
 .btnGithubLink,
-.btnSettingsToggle {
+.btnSettingsToggle,
+.btnFullscreenToggle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
