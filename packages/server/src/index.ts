@@ -47,6 +47,7 @@ import {
   writeTimelineIndex,
   writeAuditAnalysisText,
   writeStoryTimelineMarkdownFromIndex,
+  clearAuditDir,
   TimelineIndex,
   WritingPack,
   readInspirationIndex,
@@ -2647,6 +2648,17 @@ app.get("/api/books/:bookId/audit/stale-chapters", async (req) => {
   const params = paramsSchema.parse((req as any).params);
   const chapters = await listAuditChapterStale(getDataDir(), params.bookId);
   return { chapters };
+});
+
+app.delete("/api/books/:bookId/audit", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
+  const params = paramsSchema.parse((req as any).params);
+  try {
+    await clearAuditDir(getDataDir(), params.bookId);
+    return { ok: true as const };
+  } catch (e: any) {
+    return reply.code(400).send({ message: e?.message || String(e) });
+  }
 });
 
 app.get("/api/books/:bookId/chapters/draft-status", async (req) => {

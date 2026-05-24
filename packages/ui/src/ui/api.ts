@@ -319,6 +319,10 @@ export async function getAuditChapterStale(bookId: string) {
   );
 }
 
+export async function clearBookAudit(bookId: string) {
+  return await http<{ ok: true }>(`/api/books/${encodeURIComponent(bookId)}/audit`, { method: "DELETE" });
+}
+
 export async function getAuditAnalysis(bookId: string, chapterFilename: string) {
   return await http<{ text: string }>(
     `/api/books/${encodeURIComponent(bookId)}/audit/analysis?chapter=${encodeURIComponent(chapterFilename)}`

@@ -222,6 +222,17 @@ code {
   line-height: 1.5;
 }
 
+.clearBookAuditPhraseHint {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  border-radius: 6px;
+  border: 1px dashed color-mix(in srgb, var(--border) 78%, transparent);
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  color: color-mix(in srgb, var(--text) 88%, transparent);
+}
+
 .settingsDataDirRow {
   display: flex;
   flex-wrap: wrap;
@@ -2398,10 +2409,14 @@ code {
 .bookOverviewActions {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 0;
+  gap: 6px;
+  margin: 0 0 8px;
   flex-wrap: nowrap;
   white-space: nowrap;
+}
+
+.bookOverviewActions .btnSort {
+  flex-shrink: 0;
 }
 
 .chapterQuickRow {

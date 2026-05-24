@@ -45,6 +45,7 @@ import {
 import { ChapterSaveDraftModal } from "./components/modals/ChapterSaveDraftModal";
 import { ChapterEditorPanel } from "./components/editor/ChapterEditorPanel";
 import { BookSynopsisPanel } from "./components/rightPanel/BookSynopsisPanel";
+import { ClearBookAuditModal } from "./components/modals/ClearBookAuditModal";
 import { RightPanel, type RightTabId } from "./components/rightPanel/RightPanel";
 import { StatsPanel } from "./components/StatsPanel";
 import { AppModals } from "./components/modals/AppModals";
@@ -96,6 +97,7 @@ import {
   patchBookSynopsis,
   patchBookCompleted,
   deleteBook,
+  clearBookAudit,
   restoreBook,
   putModelConfigs,
   auditChapter,
@@ -201,6 +203,8 @@ export function App() {
   const [modalNewSynopsis, setModalNewSynopsis] = useState("");
   const [deleteBookModalOpen, setDeleteBookModalOpen] = useState(false);
   const [deleteBookTarget, setDeleteBookTarget] = useState<BookMeta | null>(null);
+  const [clearBookAuditModalOpen, setClearBookAuditModalOpen] = useState(false);
+  const [clearBookAuditConfirmDraft, setClearBookAuditConfirmDraft] = useState("");
   // 书架不再"展开简介",点击直接进入书籍概览
 
   const [chapterTitle, setChapterTitle] = useState("");
@@ -1634,6 +1638,55 @@ export function App() {
         setCardContent("");
       }
       setStatus(`已废弃书籍:《${b.title}》`);
+    } catch (e: any) {
+      setStatus(e?.message || String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function openClearBookAuditModal() {
+    if (!activeBook || !activeBookMeta) return;
+    if (
+      auditStreamPhaseRef.current === "running" &&
+      auditRunningChapterRef.current?.bookSlug === activeBook
+    ) {
+      setStatus("当前有章节分析进行中，请等待结束后再清空。");
+      return;
+    }
+    setClearBookAuditConfirmDraft("");
+    setClearBookAuditModalOpen(true);
+  }
+
+  function closeClearBookAuditModal() {
+    setClearBookAuditModalOpen(false);
+    setClearBookAuditConfirmDraft("");
+  }
+
+  async function confirmClearBookAudit() {
+    const slug = activeBook;
+    if (!slug) return;
+    setBusy(true);
+    setStatus("");
+    try {
+      await clearBookAudit(slug);
+      closeClearBookAuditModal();
+      resetAuditThinkingReveal();
+      auditThinkingBufferRef.current = "";
+      auditDisplayedLenRef.current = 0;
+      setAuditStreamText("");
+      setAuditStreamPhase("idle");
+      setAuditRun(null);
+      setAuditLedger(null);
+      setWritingPack(null);
+      setWritingPackErr("");
+      setWritingPackListsOpen(false);
+      await loadGlobalArtifacts(slug);
+      const sel = selectedChapterRef.current;
+      if (sel?.bookSlug === slug) {
+        await loadAuditArtifacts(slug, sel.filename);
+      }
+      setStatus("已清空本书全部分析数据。");
     } catch (e: any) {
       setStatus(e?.message || String(e));
     } finally {
@@ -3849,6 +3902,7 @@ export function App() {
               }
             }}
             onDeleteBook={() => activeBookMeta && openDeleteBookModal(activeBookMeta)}
+            onClearAudit={openClearBookAuditModal}
             onOpenPlanning={openPlanningFromBook}
           />
         ) : !rightCollapsed ? (
@@ -3898,6 +3952,16 @@ export function App() {
         />
         ) : null}
       </div>
+
+      <ClearBookAuditModal
+        open={clearBookAuditModalOpen}
+        busy={busy}
+        bookTitle={activeBookMeta?.title ?? activeBook}
+        confirmDraft={clearBookAuditConfirmDraft}
+        onConfirmDraftChange={setClearBookAuditConfirmDraft}
+        onClose={closeClearBookAuditModal}
+        onConfirm={() => void confirmClearBookAudit()}
+      />
 
       <ChapterSaveDraftModal
         open={chapterSaveDraftModalOpen}

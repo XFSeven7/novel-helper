@@ -9,6 +9,7 @@ export type BookSynopsisPanelProps = {
   setSynopsisDraft: (v: string) => void;
   bookOverviewAutosaveHint: string;
   onToggleCompleted: () => void | Promise<void>;
+  onClearAudit: () => void;
   onDeleteBook: () => void;
   onOpenPlanning?: () => void;
 };
@@ -21,6 +22,7 @@ export function BookSynopsisPanel({
   setSynopsisDraft,
   bookOverviewAutosaveHint,
   onToggleCompleted,
+  onClearAudit,
   onDeleteBook,
   onOpenPlanning
 }: BookSynopsisPanelProps) {
@@ -32,28 +34,37 @@ export function BookSynopsisPanel({
         </div>
         <div className="bookOverviewTopRow">
           <div className="bookOverviewSynopsisLabel">简介</div>
-          {activeBookMeta ? (
-            <div className="row bookOverviewActions">
-              <button
-                type="button"
-                className="btnSort btnSuccess"
-                disabled={busy || !activeBook}
-                onClick={() => void onToggleCompleted()}
-              >
-                {activeBookMeta.completed ? "取消完结" : "完结书籍"}
-              </button>
-              <button
-                type="button"
-                className="btnSort btnDanger"
-                disabled={busy || !activeBook}
-                onClick={onDeleteBook}
-                title="软删除:书籍目录仍保留在本地"
-              >
-                废弃书籍
-              </button>
-            </div>
-          ) : null}
         </div>
+        {activeBookMeta ? (
+          <div className="bookOverviewActions">
+            <button
+              type="button"
+              className="btnSort btnSuccess"
+              disabled={busy || !activeBook}
+              onClick={() => void onToggleCompleted()}
+            >
+              {activeBookMeta.completed ? "取消完结" : "完结书籍"}
+            </button>
+            <button
+              type="button"
+              className="btnSort btnDanger"
+              disabled={busy || !activeBook}
+              onClick={onClearAudit}
+              title="删除 AI 分析与内容整理数据；不删章节、大纲、设定与备注"
+            >
+              清空分析
+            </button>
+            <button
+              type="button"
+              className="btnSort btnDanger"
+              disabled={busy || !activeBook}
+              onClick={onDeleteBook}
+              title="软删除:书籍目录仍保留在本地"
+            >
+              废弃书籍
+            </button>
+          </div>
+        ) : null}
         <textarea
           className="bookOverviewSynopsis"
           value={synopsisDraft}

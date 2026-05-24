@@ -413,6 +413,11 @@ function auditDir(dataDir: string, novelSlug: string) {
   return path.join(dataDir, novelSlug, "meta", "audit");
 }
 
+/** 递归删除全书 audit 目录（幂等；目录不存在时不报错） */
+export async function clearAuditDir(dataDir: string, novelSlug: string): Promise<void> {
+  await fs.rm(auditDir(dataDir, novelSlug), { recursive: true, force: true });
+}
+
 function metaDir(dataDir: string, novelSlug: string) {
   return path.join(dataDir, novelSlug, "meta");
 }
