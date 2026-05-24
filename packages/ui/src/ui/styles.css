@@ -721,6 +721,20 @@ code {
   overflow-wrap: anywhere;
 }
 
+.chapterEntityNameLine {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.chapterEntityCount {
+  font-size: 11px;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
 .chapterEntityMeta {
   font-size: 12px;
   min-width: 0;

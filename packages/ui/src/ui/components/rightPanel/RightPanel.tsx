@@ -4,6 +4,7 @@ import remarkGfm from "remark-gfm";
 import type { ChapterVersionMeta, WritingPack } from "../../api";
 import type { ChapterSelected } from "../editor/ChapterEditorContent";
 import { ChapterHistoryVersionList } from "./ChapterHistoryVersionList";
+import { countNameOccurrencesInText } from "../../utils/countNameOccurrencesInText";
 
 export type RightTabId = "chapterAnalysis" | "chapterEntities" | "writingPack";
 
@@ -684,7 +685,9 @@ export function RightPanel({
                               }))
                               .filter((c) => c.name)
                               .slice(0, 80)
-                              .map((c) => (
+                              .map((c) => {
+                                const count = countNameOccurrencesInText(currentChapterContent, c.name);
+                                return (
                                 <button
                                   key={c.name}
                                   type="button"
@@ -693,10 +696,14 @@ export function RightPanel({
                                   onClick={() => onJumpToOrganize("auditCharacters", c.name)}
                                   title="去左侧全局角色库查看"
                                 >
-                                  <span className="chapterEntityName">{c.name}</span>
+                                  <span className="chapterEntityNameLine">
+                                    <span className="chapterEntityName">{c.name}</span>
+                                    <span className="muted chapterEntityCount">{count} 次</span>
+                                  </span>
                                   {c.role ? <span className="muted chapterEntityMeta">{c.role}</span> : null}
                                 </button>
-                              ))}
+                              );
+                              })}
                           </div>
                         ) : (
                           <div className="muted auditPanelEmpty">本章未抽取到角色。</div>
