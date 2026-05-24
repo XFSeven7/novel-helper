@@ -1,12 +1,13 @@
 import React from "react";
 
-export type SettingsTabId = "models" | "data";
+export type SettingsTabId = "models" | "data" | "shortcuts";
 
 export function SettingsPage(props: {
   tab: SettingsTabId;
   onTabChange: (t: SettingsTabId) => void;
   modelsPanel: React.ReactNode;
   dataDirPanel: React.ReactNode;
+  shortcutsPanel: React.ReactNode;
 }) {
   return (
     <div className="settingsPage">
@@ -30,9 +31,24 @@ export function SettingsPage(props: {
           >
             数据目录
           </button>
+          <button
+            type="button"
+            role="tab"
+            className={`browserTab ${props.tab === "shortcuts" ? "active" : ""}`}
+            aria-selected={props.tab === "shortcuts"}
+            onClick={() => props.onTabChange("shortcuts")}
+          >
+            快捷键
+          </button>
         </div>
       </div>
-      {props.tab === "models" ? props.modelsPanel : props.dataDirPanel}
+      <div className="settingsPageBody">
+        {props.tab === "models"
+          ? props.modelsPanel
+          : props.tab === "data"
+            ? props.dataDirPanel
+            : props.shortcutsPanel}
+      </div>
     </div>
   );
 }

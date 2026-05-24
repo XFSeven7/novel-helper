@@ -103,10 +103,18 @@ code {
 }
 
 .settingsPage {
+  flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  overflow: hidden;
+}
+
+.settingsPageBody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .settingsDataDirPanel {
@@ -114,6 +122,98 @@ code {
   flex-direction: column;
   gap: 12px;
   max-width: 720px;
+}
+
+.settingsShortcutsPanel {
+  padding: 14px;
+  max-width: 820px;
+}
+
+.settingsShortcutsIntro {
+  margin: 0 0 16px;
+  line-height: 1.55;
+  font-size: 13px;
+}
+
+.settingsShortcutsSection + .settingsShortcutsSection {
+  margin-top: 20px;
+}
+
+.settingsShortcutsSectionTitle {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--text) 88%, transparent);
+}
+
+.settingsShortcutsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+}
+
+.settingsShortcutsTable th,
+.settingsShortcutsTable td {
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.settingsShortcutsTable th {
+  font-weight: 600;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--muted) 92%, transparent);
+  background: color-mix(in srgb, var(--panel) 92%, var(--border));
+}
+
+.settingsShortcutsTable tr:last-child td {
+  border-bottom: none;
+}
+
+.settingsShortcutAction {
+  min-width: 180px;
+}
+
+.settingsShortcutNote {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.45;
+}
+
+.settingsShortcutKeyCell {
+  min-width: 160px;
+}
+
+.settingsShortcutKeys {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.settingsShortcutPlus {
+  display: inline-block;
+  margin: 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1;
+  color: color-mix(in srgb, var(--text) 82%, var(--muted));
+  user-select: none;
+}
+
+.settingsShortcutKbd {
+  display: inline-block;
+  padding: 2px 7px;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  border-radius: 5px;
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--panel) 88%, var(--text));
+  color: color-mix(in srgb, var(--text) 90%, transparent);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--border) 55%, transparent);
 }
 
 .settingsDataDirHint {

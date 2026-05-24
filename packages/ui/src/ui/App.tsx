@@ -60,6 +60,7 @@ import { InspirationTab } from "./components/inspiration/InspirationTab";
 import { getFullscreenElement, isAltEnter, toggleDocumentFullscreen } from "./components/layout/fullscreen";
 import { TopBar } from "./components/layout/TopBar";
 import { SettingsPage, type SettingsTabId } from "./components/settings/SettingsPage";
+import { SettingsShortcutsPanel } from "./components/settings/SettingsShortcutsPanel";
 import { SettingsModelsPanel } from "./components/settings/SettingsModelsPanel";
 import { SettingsDataDirPanel } from "./components/settings/SettingsDataDirPanel";
 import { BookShelfNav } from "./components/nav/BookShelfNav";
@@ -3721,6 +3722,7 @@ export function App() {
                     }}
                   />
                 }
+                shortcutsPanel={<SettingsShortcutsPanel />}
               />
             ) : (
               <div className="empty centerBodyHint">从左侧书架选择一本书开始。</div>
