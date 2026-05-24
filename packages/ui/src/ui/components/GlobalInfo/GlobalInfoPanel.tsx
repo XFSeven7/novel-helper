@@ -10,6 +10,7 @@ import { auditCharStateExtraRows, auditCharTopExtraRows } from "../../utils/audi
 import { ForeshadowPanel } from "./ForeshadowPanel";
 import { MemoryPanel } from "./MemoryPanel";
 import { PlacePanel } from "./PlacePanel";
+import { RelationsNav } from "./RelationsNav";
 
 export type GlobalTabId = "auditCharacters" | "relations" | "places" | "timeline" | "foreshadows";
 
@@ -31,8 +32,13 @@ export type GlobalInfoPanelProps = {
   setTimelineBusy: (busy: boolean) => void;
   relationsSearch: string;
   setRelationsSearch: React.Dispatch<React.SetStateAction<string>>;
-  relationsOnlyTyped: boolean;
-  setRelationsOnlyTyped: React.Dispatch<React.SetStateAction<boolean>>;
+  relationsFocusChar: string | null;
+  setRelationsFocusChar: React.Dispatch<React.SetStateAction<string | null>>;
+  relationsTypeFilter: string | null;
+  setRelationsTypeFilter: React.Dispatch<React.SetStateAction<string | null>>;
+  relationsOnlyWithRelations: boolean;
+  setRelationsOnlyWithRelations: React.Dispatch<React.SetStateAction<boolean>>;
+  onRelationsAddRequest: () => void;
   auditCharactersSearch: string;
   setAuditCharactersSearch: React.Dispatch<React.SetStateAction<string>>;
   expandedAuditCharIds: Record<string, boolean>;
@@ -86,8 +92,13 @@ export function GlobalInfoPanel({
   setTimelineBusy,
   relationsSearch,
   setRelationsSearch,
-  relationsOnlyTyped,
-  setRelationsOnlyTyped,
+  relationsFocusChar,
+  setRelationsFocusChar,
+  relationsTypeFilter,
+  setRelationsTypeFilter,
+  relationsOnlyWithRelations,
+  setRelationsOnlyWithRelations,
+  onRelationsAddRequest,
   auditCharactersSearch,
   setAuditCharactersSearch,
   expandedAuditCharIds,
@@ -144,7 +155,7 @@ export function GlobalInfoPanel({
           onClick={() => setGlobalTab("relations")}
           disabled={busy}
         >
-          关系图
+          人物关系
         </button>
         <button
           type="button"
@@ -563,116 +574,19 @@ export function GlobalInfoPanel({
       </div>
     </>
     ) : globalTab === "relations" ? (
-    <>
-      <div className="row" style={{ padding: "10px" }}>
-        <input
-          value={relationsSearch}
-          onChange={(e) => setRelationsSearch(e.target.value)}
-          placeholder="搜索关系:角色名 / types / 情感 / 冲突..."
-          disabled={busy}
-        />
-        <label className="toggle">
-          <input
-            type="checkbox"
-            checked={relationsOnlyTyped}
-            onChange={(e) => setRelationsOnlyTyped(e.target.checked)}
-            disabled={busy}
-          />
-          仅显示有 types
-        </label>
-      </div>
-      <div className="tree relationsTree">
-        {(() => {
-          const typeLabels: Record<string, string> = {
-            "narrative.Ally": "盟友",
-            "narrative.Mentor": "导师",
-            "narrative.Antagonist": "反派",
-            "narrative.Rival": "竞争对手",
-            "narrative.Support": "后勤/NPC",
-            "narrative.Harbinger": "先驱",
-            "tie.KindredSpirit": "至交",
-            "tie.LoveInterest": "恋人",
-            "tie.Kinship": "血亲",
-            "tie.ArchNemesis": "宿敌",
-            "tie.MutualDisdain": "嫌恶",
-            "tie.Admiration": "崇拜",
-            "tie.Indebtedness": "亏欠",
-            "hidden.Judas": "背叛者",
-            "hidden.Guardian": "保护者",
-            "hidden.Foil": "镜像/对照组",
-            "karma.Contractual": "契约关系",
-            "karma.Symbiotic": "共生关系",
-            "karma.InformationGap": "信息差"
-          };
-          const chars: any[] = Array.isArray(auditCharactersIndex?.characters)
-            ? (auditCharactersIndex.characters as any[])
-                .map((c) => ({ ...c, name: String(c?.name || "").trim() }))
-                .filter((c) => c.name)
-            : [];
-          const edges: any[] = [];
-          for (const c of chars) {
-            const src = String(c?.name || "").trim();
-            const rels = Array.isArray(c?.relationalHooks?.relations) ? c.relationalHooks.relations : [];
-            for (const r of rels) {
-              const targetName = String(r?.targetName || "").trim();
-              if (!targetName) continue;
-              const types = Array.isArray(r?.types) ? r.types.map((x: any) => String(x).trim()).filter(Boolean) : [];
-              edges.push({
-                source: src,
-                target: targetName,
-                types,
-                emotionalPolarity: String(r?.emotionalPolarity || "").trim(),
-                conflictIndex: String(r?.conflictIndex || "").trim(),
-                sharedSecrets: Array.isArray(r?.sharedSecrets)
-                  ? r.sharedSecrets.map((x: any) => String(x).trim()).filter(Boolean)
-                  : []
-              });
-            }
-          }
-          const q = relationsSearch.trim().toLowerCase();
-          const filtered = edges.filter((e) => {
-            if (relationsOnlyTyped && !e.types.length) return false;
-            if (!q) return true;
-            const typesZh = e.types.map((t: string) => typeLabels[t] || t).join(",");
-            const hay = `${e.source} ${e.target} ${typesZh} ${e.emotionalPolarity} ${e.conflictIndex} ${e.sharedSecrets.join(" ")}`
-              .toLowerCase()
-              .trim();
-            return hay.includes(q);
-          });
-          if (!filtered.length) return <div className="muted auditPanelEmpty">暂无关系数据(或被筛选条件隐藏)。</div>;
-          return filtered.map((e, idx) => {
-            const typesZh = e.types.map((t: string) => typeLabels[t] || t).filter(Boolean);
-            return (
-              <div key={`${e.source}__${e.target}__${idx}`} className="treeChild">
-                <div className="row">
-                  <div className="muted">{e.source}</div>
-                  <div className="muted">→</div>
-                  <div>{e.target}</div>
-                  <button
-                    type="button"
-                    className="btnMini"
-                    disabled={busy}
-                    onClick={() => {
-                      const src = chars.find((c) => String(c?.name || "").trim() === e.source);
-                      if (src) openEditCharacter(src);
-                    }}
-                    title="编辑源角色(关系从源角色上维护)"
-                  >
-                    编辑
-                  </button>
-                </div>
-                {typesZh.length ? <div className="muted">types:{typesZh.join("、")}</div> : null}
-                {e.emotionalPolarity ? <div className="muted">情感:{e.emotionalPolarity}</div> : null}
-                {e.conflictIndex ? <div className="muted">冲突:{e.conflictIndex}</div> : null}
-                {Array.isArray(e.sharedSecrets) && e.sharedSecrets.length ? (
-                  <div className="muted">秘密:{e.sharedSecrets.join("、")}</div>
-                ) : null}
-              </div>
-            );
-          });
-        })()}
-      </div>
-    </>
+      <RelationsNav
+        busy={busy}
+        auditCharactersIndex={auditCharactersIndex}
+        focusChar={relationsFocusChar}
+        onFocusChar={setRelationsFocusChar}
+        search={relationsSearch}
+        onSearch={setRelationsSearch}
+        typeFilter={relationsTypeFilter}
+        onTypeFilter={setRelationsTypeFilter}
+        onlyWithRelations={relationsOnlyWithRelations}
+        onOnlyWithRelations={setRelationsOnlyWithRelations}
+        onAddRelation={onRelationsAddRequest}
+      />
     ) : globalTab === "places" ? (
     <PlacePanel
       busy={busy}

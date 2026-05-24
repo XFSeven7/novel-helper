@@ -6938,3 +6938,182 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
 }
 
+.relationsNav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  flex: 1;
+}
+
+.relationsNavToolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 4px;
+}
+
+.relationsNavSearch {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  font-size: 12px;
+  border: 1px solid var(--border);
+  background: var(--input-bg, var(--panel));
+  color: var(--text);
+}
+
+.relationsNavToggle {
+  font-size: 11px;
+}
+
+.relationsNavChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 4px;
+}
+
+.relationsNavChip {
+  padding: 2px 8px;
+  font-size: 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border) 75%, transparent);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.relationsNavChipActive {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+  color: var(--text);
+}
+
+.relationsNavList {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.relationsNavAdd {
+  margin: 0 4px 4px;
+  width: calc(100% - 8px);
+}
+
+.relationsCenter {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px 20px 24px;
+}
+
+.relationsCenterEmpty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.relationsOverviewTitle,
+.relationsCenterTitle {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.relationsOverviewMeta {
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+
+.relationsCenterHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.relationsDetailList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.relationsCard {
+  padding: 12px 14px;
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  background: color-mix(in srgb, var(--panel2) 50%, transparent);
+}
+
+.relationsCardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.relationsCardOther {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.relationsCardTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.relationsCardTag {
+  padding: 2px 8px;
+  font-size: 11px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  color: color-mix(in srgb, var(--accent) 80%, var(--text));
+}
+
+.relationsCardMuted {
+  font-size: 12px;
+  line-height: 1.45;
+  margin-top: 4px;
+}
+
+.relationDrawerBackdrop {
+  z-index: 1200;
+}
+
+.relationDrawerPanel {
+  width: min(480px, 92vw);
+  max-height: min(88vh, 720px);
+  overflow-y: auto;
+}
+
+.relationDrawerHint {
+  margin: 0 0 12px;
+  font-size: 12px;
+}
+
+.relationTypePickers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.relationTypeChip {
+  padding: 4px 10px;
+  font-size: 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.relationTypeChipActive {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  color: var(--text);
+}
+

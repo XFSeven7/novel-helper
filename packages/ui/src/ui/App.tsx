@@ -49,6 +49,7 @@ import { RightPanel, type RightTabId } from "./components/rightPanel/RightPanel"
 import { StatsPanel } from "./components/StatsPanel";
 import { AppModals } from "./components/modals/AppModals";
 import { GlobalInfoPanel, type GlobalTabId } from "./components/GlobalInfo/GlobalInfoPanel";
+import { RelationsCenter } from "./components/GlobalInfo/RelationsCenter";
 import { inferPlaceGroup } from "./components/GlobalInfo/PlacePanel";
 import {
   chapterStreamUrl,
@@ -512,6 +513,7 @@ export function App() {
   }, []);
 
   const showBookOverview = Boolean(activeBook && !selectedChapter);
+  const showRelationsCenter = Boolean(activeBook && leftTab === "global" && globalTab === "relations");
 
   function clearChapterTimer() {
     if (chapterTimerRef.current !== null) {
@@ -1087,7 +1089,10 @@ export function App() {
   const [editCharLockFingerprints, setEditCharLockFingerprints] = useState(false);
   const [editCharLockRelationalHooks, setEditCharLockRelationalHooks] = useState(false);
   const [relationsSearch, setRelationsSearch] = useState("");
-  const [relationsOnlyTyped, setRelationsOnlyTyped] = useState(false);
+  const [relationsFocusChar, setRelationsFocusChar] = useState<string | null>(null);
+  const [relationsTypeFilter, setRelationsTypeFilter] = useState<string | null>(null);
+  const [relationsOnlyWithRelations, setRelationsOnlyWithRelations] = useState(false);
+  const [relationsAddRequestKey, setRelationsAddRequestKey] = useState(0);
   const [auditCharactersSearch, setAuditCharactersSearch] = useState("");
   const [timelineIndex, setTimelineIndex] = useState<TimelineIndex | null>(null);
   const [timelineBusy, setTimelineBusy] = useState(false);
@@ -1889,7 +1894,10 @@ export function App() {
     setForeshadowExpanded({});
     setAuditCharactersSearch("");
     setRelationsSearch("");
-    setRelationsOnlyTyped(false);
+    setRelationsFocusChar(null);
+    setRelationsTypeFilter(null);
+    setRelationsOnlyWithRelations(false);
+    setRelationsAddRequestKey(0);
     setMemoryExpanded({});
     setAuditChapterStaleFilenames(new Set());
     auditChapterStaleHashRef.current = {};
@@ -3374,8 +3382,13 @@ export function App() {
                           setTimelineBusy={setTimelineBusy}
                           relationsSearch={relationsSearch}
                           setRelationsSearch={setRelationsSearch}
-                          relationsOnlyTyped={relationsOnlyTyped}
-                          setRelationsOnlyTyped={setRelationsOnlyTyped}
+                          relationsFocusChar={relationsFocusChar}
+                          setRelationsFocusChar={setRelationsFocusChar}
+                          relationsTypeFilter={relationsTypeFilter}
+                          setRelationsTypeFilter={setRelationsTypeFilter}
+                          relationsOnlyWithRelations={relationsOnlyWithRelations}
+                          setRelationsOnlyWithRelations={setRelationsOnlyWithRelations}
+                          onRelationsAddRequest={() => setRelationsAddRequestKey((k) => k + 1)}
                           auditCharactersSearch={auditCharactersSearch}
                           setAuditCharactersSearch={setAuditCharactersSearch}
                           expandedAuditCharIds={expandedAuditCharIds}
@@ -3441,6 +3454,13 @@ export function App() {
                   <>
                     <div className="centerTitle">
                       {homeCenterTab === "settings" ? "设置" : "请从书架打开一本书"}
+                    </div>
+                    <span className="titleAutosave autosaveHint" />
+                  </>
+                ) : showRelationsCenter ? (
+                  <>
+                    <div className="centerTitle">
+                      《{activeBookMeta?.title ?? activeBook}》· 人物关系
                     </div>
                     <span className="titleAutosave autosaveHint" />
                   </>
@@ -3695,6 +3715,17 @@ export function App() {
             ) : (
               <div className="empty centerBodyHint">从左侧书架选择一本书开始。</div>
             )
+          ) : showRelationsCenter ? (
+            <RelationsCenter
+              busy={busy}
+              activeBook={activeBook}
+              auditCharactersIndex={auditCharactersIndex}
+              setAuditCharactersIndex={setAuditCharactersIndex}
+              focusChar={relationsFocusChar}
+              setFocusChar={setRelationsFocusChar}
+              onStatus={setStatus}
+              addRequestKey={relationsAddRequestKey}
+            />
           ) : showBookOverview ? (
             <div className="centerBookStats">
               <StatsPanel
