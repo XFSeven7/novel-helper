@@ -335,6 +335,7 @@ export function App() {
       setInspirationErr("");
       try {
         const { index } = await getInspirationIndex(bookSlug);
+        if (activeBookRef.current !== bookSlug) return;
         setInspirationIndex(index);
       } catch (e: any) {
         setInspirationErr(e?.message || String(e));
@@ -643,15 +644,6 @@ export function App() {
   // 书架不再展开简介
 
   useEffect(() => {
-    if (!activeBook) {
-      setTimelineIndex(null);
-      return;
-    }
-    void refreshTimelineIndex(activeBook);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeBook]);
-
-  useEffect(() => {
     if (!createBookModalOpen) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -796,21 +788,7 @@ export function App() {
   const [auditForeshadowsIndex, setAuditForeshadowsIndex] = useState<any | null>(null);
   const [auditProgressIndex, setAuditProgressIndex] = useState<any | null>(null);
   /** 进入灵感库时拉取审核角色索引,供道具/功法「持有人」下拉(不依赖是否已打开某一章) */
-  useEffect(() => {
-    if (!activeBook || leftTab !== "inspiration") return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const { index } = await getAuditCharacters(activeBook);
-        if (!cancelled) setAuditCharactersIndex(index);
-      } catch {
-        // 保留已有数据
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeBook, leftTab]);
+  // 切书后由 reloadActiveBookData / loadGlobalArtifacts 统一加载
   const [writingPack, setWritingPack] = useState<WritingPack | null>(null);
   const [writingPackBusy, setWritingPackBusy] = useState(false);
   const [writingPackErr, setWritingPackErr] = useState("");
@@ -1329,21 +1307,6 @@ export function App() {
   }
 
   useEffect(() => {
-    if (!activeBook) return;
-    refreshChapters(activeBook).catch((e) => setStatus(String(e?.message || e)));
-    refreshStory(activeBook).catch((e) => setStatus(String(e?.message || e)));
-    void refreshChapterDraftStatus(activeBook);
-  }, [activeBook, refreshChapterDraftStatus]);
-
-  useEffect(() => {
-    if (!activeBook) {
-      setChaptersDraftOutOfSync(new Set());
-      serverDraftOutOfSyncRef.current = [];
-      return;
-    }
-  }, [activeBook]);
-
-  useEffect(() => {
     setCurrentChapterEditorHash(null);
     currentChapterEditorHashRef.current = null;
   }, [selectedChapter?.filename, activeBook]);
@@ -1484,8 +1447,7 @@ export function App() {
     setChapterAutosaveHint("");
     setCardAutosaveHint("");
     setChapterTitleEditing(false);
-    // 进入书籍后默认展示书籍概览(selectedChapter=null)
-    void loadInspiration(b.bookId);
+    // 进入书籍后默认展示书籍概览(selectedChapter=null); 数据由 activeBook useEffect 加载
   }
 
   function openCreateBookModal() {
@@ -1600,9 +1562,7 @@ export function App() {
     setNavHome(false);
     setNavCollapsed(false);
     setRightCollapsed(false);
-    setOutlineRefreshKey((k) => k + 1);
     setStatus(`已创建书籍：${book.title}`);
-    void loadInspiration(book.bookId);
   }
 
   async function submitCreateBookModal() {
@@ -1622,7 +1582,6 @@ export function App() {
       setNavCollapsed(false);
       setRightCollapsed(false);
       setStatus(`已创建书籍:${book.title}`);
-      void loadInspiration(book.bookId);
     } catch (e: any) {
       setStatus(e?.message || String(e));
     } finally {
@@ -1691,7 +1650,6 @@ export function App() {
         setSelectedCard(null);
         setCardContent("");
         cardBaselineRef.current = "";
-        void loadInspiration(bookSlug);
       }
 
       await refreshChapters(bookSlug);
@@ -1885,26 +1843,89 @@ export function App() {
   }
 
   async function loadGlobalArtifacts(slug: string) {
+    if (!slug) return;
     try {
-      const [{ index }, { index: timelineIdx }, { index: placesIdx }, { index: foreshadowsIdx }, { index: progressIdx }] =
-        await Promise.all([
+      const [
+        { index },
+        { index: timelineIdx },
+        { index: placesIdx },
+        { index: foreshadowsIdx },
+        { index: progressIdx },
+        { index: orgsIdx }
+      ] = await Promise.all([
         getAuditCharacters(slug).catch(() => ({ index: null })),
         getTimelineIndex(slug).catch(() => ({ index: null as any })),
         getAuditPlaces(slug).catch(() => ({ index: null as any })),
         getAuditForeshadows(slug).catch(() => ({ index: null as any })),
-        getAuditProgress(slug).catch(() => ({ index: null as any }))
+        getAuditProgress(slug).catch(() => ({ index: null as any })),
+        getAuditOrgs(slug).catch(() => ({ index: null as any }))
       ]);
+      if (activeBookRef.current !== slug) return;
       setAuditCharactersIndex(index);
       setTimelineIndex(timelineIdx);
       setAuditPlacesIndex(placesIdx);
       setAuditForeshadowsIndex(foreshadowsIdx);
       setAuditProgressIndex(progressIdx);
+      setAuditOrgsIndex(orgsIdx);
       void refreshAuditChapterStale(slug);
       void refreshChapterDraftStatus(slug);
     } catch {
       // ignore
     }
   }
+
+  const clearBookScopedState = useCallback(() => {
+    setAuditCharactersIndex(null);
+    setAuditPlacesIndex(null);
+    setAuditOrgsIndex(null);
+    setAuditForeshadowsIndex(null);
+    setAuditProgressIndex(null);
+    setTimelineIndex(null);
+    setInspirationIndex(null);
+    setChapters([]);
+    setStoryFiles([]);
+    setCharFiles([]);
+    setExpandedAuditCharIds({});
+    setForeshadowExpanded({});
+    setAuditCharactersSearch("");
+    setRelationsSearch("");
+    setRelationsOnlyTyped(false);
+    setMemoryExpanded({});
+    setAuditChapterStaleFilenames(new Set());
+    auditChapterStaleHashRef.current = {};
+    setLatestHistoryHashByChapter({});
+    setChaptersDraftOutOfSync(new Set());
+    serverDraftOutOfSyncRef.current = [];
+    setAuditRun(null);
+    setAuditLedger(null);
+    setWritingPack(null);
+    setWritingPackErr("");
+    setWritingPackListsOpen(false);
+    setAuditStreamPhase("idle");
+    resetAuditThinkingReveal();
+  }, [resetAuditThinkingReveal]);
+
+  const reloadActiveBookData = useCallback(
+    (slug: string) => {
+      if (!slug) return;
+      setOutlineRefreshKey((k) => k + 1);
+      setStatsRefreshKey((k) => k + 1);
+      void loadInspiration(slug);
+      void loadGlobalArtifacts(slug);
+      refreshChapters(slug).catch((e) => setStatus(String(e?.message || e)));
+      refreshStory(slug).catch((e) => setStatus(String(e?.message || e)));
+    },
+    [loadInspiration]
+  );
+
+  useEffect(() => {
+    if (!activeBook) {
+      clearBookScopedState();
+      return;
+    }
+    clearBookScopedState();
+    reloadActiveBookData(activeBook);
+  }, [activeBook, clearBookScopedState, reloadActiveBookData]);
 
   async function loadAuditArtifacts(slug: string, chapterFilename: string) {
     try {
