@@ -57,6 +57,9 @@ export function ChapterFindReplaceBar({
             onClose();
             return;
           }
+          if (e.altKey && e.shiftKey && (e.code === "Enter" || e.key === "Enter")) {
+            return;
+          }
           if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             onFindNext();
@@ -78,6 +81,9 @@ export function ChapterFindReplaceBar({
           if (e.key === "Escape") {
             e.preventDefault();
             onClose();
+            return;
+          }
+          if (e.altKey && e.shiftKey && (e.code === "Enter" || e.key === "Enter")) {
             return;
           }
           if (e.key === "Enter" && !e.shiftKey) {

@@ -56,6 +56,8 @@ export type ChapterEditorContentProps = {
     key: string
   ) => void;
   findHighlight?: ChapterFindHighlightState | null;
+  chapterWritingShortcutsEnabled?: boolean;
+  onInsertNewline?: () => void;
 };
 
 export function ChapterEditorContent({
@@ -92,7 +94,9 @@ export function ChapterEditorContent({
   timelineIndex,
   storyFiles,
   onJumpToOrganize,
-  findHighlight
+  findHighlight,
+  chapterWritingShortcutsEnabled,
+  onInsertNewline
 }: ChapterEditorContentProps) {
   return (
     <>
@@ -336,6 +340,8 @@ export function ChapterEditorContent({
       busy={busy}
       selectedChapter={selectedChapter}
       onChange={setChapterContent}
+      shortcutsEnabled={chapterWritingShortcutsEnabled}
+      onInsertNewline={onInsertNewline}
     />
 )}
 

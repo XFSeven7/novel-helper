@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import type { TextRange } from "../../utils/chapterFindReplace";
+import { isAltShiftEnter } from "../../utils/chapterEditorShortcutUtils";
 import { buildFindHighlightHtml } from "../../utils/chapterFindHighlight";
 
 export type ChapterFindHighlightState = {
@@ -17,7 +18,9 @@ export function ChapterTextareaWithFindHighlight({
   mobileFontPx,
   busy,
   selectedChapter,
-  onChange
+  onChange,
+  shortcutsEnabled,
+  onInsertNewline
 }: {
   highlight: ChapterFindHighlightState | null;
   chapterContent: string;
@@ -27,6 +30,8 @@ export function ChapterTextareaWithFindHighlight({
   busy: boolean;
   selectedChapter: unknown;
   onChange: (value: string) => void;
+  shortcutsEnabled?: boolean;
+  onInsertNewline?: () => void;
 }) {
   const backdropRef = useRef<HTMLPreElement | null>(null);
   const showBackdrop = Boolean(
@@ -83,6 +88,14 @@ export function ChapterTextareaWithFindHighlight({
         onChange={(e) => onChange(e.target.value)}
         disabled={busy || !selectedChapter}
         placeholder="在左侧选择章节或新建章节后开始写作..."
+        onKeyDown={(e) => {
+          if (!shortcutsEnabled || !onInsertNewline) return;
+          if (isAltShiftEnter(e.nativeEvent)) {
+            e.preventDefault();
+            e.stopPropagation();
+            onInsertNewline();
+          }
+        }}
       />
     </div>
   );

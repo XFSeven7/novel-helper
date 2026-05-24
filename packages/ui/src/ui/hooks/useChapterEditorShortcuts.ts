@@ -1,5 +1,9 @@
 import { useEffect, type RefObject } from "react";
-import { insertAtSelection } from "../utils/textareaEdit";
+import {
+  insertNewlineAtTextarea,
+  isAltR,
+  isAltShiftEnter
+} from "../utils/chapterEditorShortcutUtils";
 
 function isChapterEditorTarget(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
@@ -20,13 +24,11 @@ function isForeignInput(target: EventTarget | null): boolean {
 
 export function useChapterEditorShortcuts({
   enabled,
-  chapterContent,
   setChapterContent,
   textareaRef,
   onOpenFindReplace
 }: {
   enabled: boolean;
-  chapterContent: string;
   setChapterContent: (value: string) => void;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
   onOpenFindReplace: () => void;
@@ -37,26 +39,18 @@ export function useChapterEditorShortcuts({
     const onKey = (e: KeyboardEvent) => {
       if (isForeignInput(e.target)) return;
 
-      if (e.altKey && e.shiftKey && e.code === "Enter") {
+      if (isAltShiftEnter(e)) {
         const el = textareaRef.current;
         if (!el) return;
         e.preventDefault();
-        const { text, selectionStart, selectionEnd } = insertAtSelection(
-          chapterContent,
-          el.selectionStart,
-          el.selectionEnd,
-          "\n"
-        );
-        setChapterContent(text);
-        queueMicrotask(() => {
-          el.focus();
-          el.setSelectionRange(selectionStart, selectionEnd);
-        });
+        e.stopPropagation();
+        insertNewlineAtTextarea(el, setChapterContent);
         return;
       }
 
-      if (e.altKey && !e.shiftKey && !e.ctrlKey && !e.metaKey && e.code === "KeyR") {
+      if (isAltR(e)) {
         e.preventDefault();
+        e.stopPropagation();
         onOpenFindReplace();
         queueMicrotask(() => textareaRef.current?.focus());
       }
@@ -64,5 +58,5 @@ export function useChapterEditorShortcuts({
 
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [enabled, chapterContent, setChapterContent, textareaRef, onOpenFindReplace]);
+  }, [enabled, setChapterContent, textareaRef, onOpenFindReplace]);
 }

@@ -32,3 +32,16 @@ export function insertAtSelection(
   const pos = before.length + insert.length;
   return { text: next, selectionStart: pos, selectionEnd: pos };
 }
+
+/** 在当前行末尾下方插入空行，光标移到新行（不拆行） */
+export function insertLineBelowCursor(
+  text: string,
+  cursor: number
+): { text: string; selectionStart: number; selectionEnd: number } {
+  const at = Math.max(0, Math.min(cursor, text.length));
+  const nextNewline = text.indexOf("\n", at);
+  const lineEnd = nextNewline === -1 ? text.length : nextNewline;
+  const next = text.slice(0, lineEnd) + "\n" + text.slice(lineEnd);
+  const pos = lineEnd + 1;
+  return { text: next, selectionStart: pos, selectionEnd: pos };
+}

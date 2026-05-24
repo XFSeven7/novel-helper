@@ -100,7 +100,3 @@ pnpm dev
 ![纠错对照](docs/assets/polish.png)
 
 ---
-
-## 自用说明
-
-本项目主要给自己写书用，README 也只作备忘。功能设计草稿在 `docs/superpowers/specs/`，需要时自己翻即可。

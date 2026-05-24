@@ -11,6 +11,7 @@ import {
   type TextRange
 } from "../../utils/chapterFindReplace";
 import { scrollTextareaToSelection } from "../../utils/textareaEdit";
+import { insertNewlineAtTextarea } from "../../utils/chapterEditorShortcutUtils";
 import { applyLocalMobileLayout } from "../../utils/localMobileLayout";
 import { ChapterEditorContent, type ChapterEditorContentProps } from "./ChapterEditorContent";
 import { ChapterFindReplaceBar } from "./ChapterFindReplaceBar";
@@ -262,11 +263,16 @@ export function ChapterEditorPanel({
 
   useChapterEditorShortcuts({
     enabled: chapterWritingShortcutsEnabled,
-    chapterContent: contentProps.chapterContent,
     setChapterContent: contentProps.setChapterContent,
     textareaRef: contentProps.chapterTextareaRef,
     onOpenFindReplace: openFindReplace
   });
+
+  const insertNewlineAtCursor = useCallback(() => {
+    const el = contentProps.chapterTextareaRef.current;
+    if (!el) return;
+    insertNewlineAtTextarea(el, contentProps.setChapterContent);
+  }, [contentProps.chapterTextareaRef, contentProps.setChapterContent]);
 
   const canCompare =
     mobileReading &&
@@ -360,6 +366,8 @@ export function ChapterEditorPanel({
             }
           : null
       }
+      chapterWritingShortcutsEnabled={chapterWritingShortcutsEnabled}
+      onInsertNewline={insertNewlineAtCursor}
     />
   );
 
