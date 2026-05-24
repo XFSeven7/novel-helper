@@ -15,7 +15,7 @@ import {
 import { OutlineAiPreviewVisual } from "../outline/OutlineAiPreviewVisual";
 
 const STEPS: Array<{ id: BookSetupStepId; title: string; hint: string }> = [
-  { id: "intent", title: "你想写什么？", hint: "题材、创作概念、想达成的阅读体验。可参考 InkOS 建书对话：先定方向再细化。" },
+  { id: "intent", title: "你想写什么？", hint: "题材、创作概念、想达成的阅读体验。先定方向再细化。" },
   { id: "scale", title: "体量与结构", hint: "目标字数、章数、结构框架（三幕式等）。" },
   { id: "logline", title: "一句话梗概", hint: "可验证的终局方向，避免空话。" },
   { id: "synopsis", title: "故事梗概（五段）", hint: "起因/发展/转折/高潮/结局；可含前台线与后台线。" },
@@ -530,7 +530,8 @@ export function BookSetupWizard({
       {error ? <div className="modalError">{error}</div> : null}
 
       {draft ? (
-        <div className={`bookSetupSplit${isReview ? " bookSetupSplit--reviewOnly" : ""}`}>
+        <>
+          <div className={`bookSetupSplit${isReview ? " bookSetupSplit--reviewOnly" : ""}`}>
           <div className="bookSetupFormPane">
             <BookSetupTabs
               current={stepId}
@@ -540,20 +541,8 @@ export function BookSetupWizard({
             />
             <div className="bookSetupFormScroll">
               <div className="bookSetupFormHead">
-                <div>
-                  <h3 className="bookSetupStepTitle">{stepMeta.title}</h3>
-                  <p className="muted bookSetupStepHint">{stepMeta.hint}</p>
-                </div>
-                {showDiscard && !isReview ? (
-                  <button
-                    type="button"
-                    className="btnSort bookSetupDiscardBtn"
-                    disabled={busy || chatBusy}
-                    onClick={() => void onDiscardPlan?.()}
-                  >
-                    废弃当前规划
-                  </button>
-                ) : null}
+                <h3 className="bookSetupStepTitle">{stepMeta.title}</h3>
+                <p className="muted bookSetupStepHint">{stepMeta.hint}</p>
               </div>
 
               {isReview ? (
@@ -570,19 +559,6 @@ export function BookSetupWizard({
                 <BookSetupStepBody draft={draft} stepId={stepId} onChange={updateDraft} />
               )}
             </div>
-            <BookSetupActions
-              stepIdx={stepIdx}
-              isReview={isReview}
-              isLinked={isLinked}
-              ready={draft.readyToCreate}
-              busy={busy || chatBusy}
-              createBookTitle={createBookTitle}
-              onPrev={() => void prevStep()}
-              onSkip={() => void skipStep()}
-              onNext={() => void nextStep()}
-              onCommit={() => void handleCommit()}
-              onClose={onClose}
-            />
           </div>
 
           {!isReview ? (
@@ -607,6 +583,22 @@ export function BookSetupWizard({
             />
           ) : null}
         </div>
+        <BookSetupActions
+          stepIdx={stepIdx}
+          isReview={isReview}
+          isLinked={isLinked}
+          ready={draft.readyToCreate}
+          busy={busy || chatBusy}
+          createBookTitle={createBookTitle}
+          showDiscard={showDiscard}
+          onDiscard={() => void onDiscardPlan?.()}
+          onPrev={() => void prevStep()}
+          onSkip={() => void skipStep()}
+          onNext={() => void nextStep()}
+          onCommit={() => void handleCommit()}
+          onClose={onClose}
+        />
+        </>
       ) : (
         <p className="muted">加载向导…</p>
       )}
@@ -690,21 +682,6 @@ function BookSetupMainlineEditor({
     onChange({ outline: { ...draft.outline, book: { ...book, mainlineStages: next } } });
   };
 
-  const resizeStageCount = (count: number) => {
-    const n = Math.max(0, Math.min(24, Math.floor(Number.isFinite(count) ? count : 0)));
-    let next = [...stages];
-    while (next.length < n) {
-      next.push({
-        id: `stage-${Date.now()}-${next.length}`,
-        label: "",
-        chapterRange: "",
-        note: ""
-      });
-    }
-    if (next.length > n) next = next.slice(0, n);
-    setStages(next);
-  };
-
   const updateStage = (index: number, patch: Partial<MainlineStage>) => {
     const next = stages.map((st, j) => (j === index ? { ...st, ...patch } : st));
     setStages(next);
@@ -727,59 +704,49 @@ function BookSetupMainlineEditor({
 
   const stageKey = (st: MainlineStage, i: number) => st.id || `idx-${i}`;
 
+  const addStage = () => {
+    setStages([
+      ...stages,
+      { id: `stage-${Date.now()}`, label: "", chapterRange: "", note: "" }
+    ]);
+    setActiveIndex(stages.length);
+  };
+
   return (
     <BookSetupFields>
       <div className="bookSetupMainlineStickyNav">
-        <div className="bookSetupMainlineToolbar">
-          <span className="bookSetupMainlineToolbarTitle">阶段</span>
-          <label className="bookSetupMainlineCountInline">
-            <span className="bookSetupMainlineCountLabel">共</span>
-            <input
-              type="number"
-              className="bookSetupMainlineCountInput"
-              min={0}
-              max={24}
-              value={stages.length}
-              aria-label="阶段数量"
-              onChange={(e) => resizeStageCount(Number(e.target.value))}
-            />
-          </label>
+        <div className="bookSetupMainlineChips" role="tablist" aria-label="阶段切换">
+          {stages.map((st, i) => {
+            const key = stageKey(st, i);
+            const chipLabel = st.label?.trim() || "未命名";
+            const selected = i === activeIdx;
+            return (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                className={`bookSetupMainlineChip${selected ? " bookSetupMainlineChipActive" : ""}`}
+                title={`编辑第 ${i + 1} 阶段`}
+                onClick={() => setActiveIndex(i)}
+              >
+                <span className="bookSetupMainlineChipNum">第{i + 1}阶段</span>
+                <span className="bookSetupMainlineChipLabel">{chipLabel}</span>
+              </button>
+            );
+          })}
           <button
             type="button"
-            className="btnSort bookSetupMainlineAddBtn"
-            onClick={() => {
-              resizeStageCount(stages.length + 1);
-              setActiveIndex(stages.length);
-            }}
+            className="bookSetupMainlineChip bookSetupMainlineChipAdd"
+            title="手动添加阶段"
+            onClick={addStage}
           >
-            + 添加
+            + 添加阶段
           </button>
         </div>
-        {stages.length > 0 ? (
-          <div className="bookSetupMainlineChips" role="tablist" aria-label="阶段切换">
-            {stages.map((st, i) => {
-              const key = stageKey(st, i);
-              const chipLabel = st.label?.trim() || "未命名";
-              const selected = i === activeIdx;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  className={`bookSetupMainlineChip${selected ? " bookSetupMainlineChipActive" : ""}`}
-                  title={`编辑第 ${i + 1} 阶段`}
-                  onClick={() => setActiveIndex(i)}
-                >
-                  <span className="bookSetupMainlineChipNum">第{i + 1}阶段</span>
-                  <span className="bookSetupMainlineChipLabel">{chipLabel}</span>
-                </button>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="muted bookSetupMainlineEmpty">暂无阶段，可设置数量或点击下方添加。</p>
-        )}
+        {stages.length === 0 ? (
+          <p className="muted bookSetupMainlineEmpty">或在右侧与 AI 讨论后「应用到本步」。</p>
+        ) : null}
       </div>
 
       {activeStage ? (() => {
@@ -848,20 +815,6 @@ function BookSetupMainlineEditor({
           </div>
         );
       })() : null}
-
-      <button
-        type="button"
-        className="btnSort"
-        onClick={() => {
-          setStages([
-            ...stages,
-            { id: `stage-${Date.now()}`, label: "", chapterRange: "", note: "" }
-          ]);
-          setActiveIndex(stages.length);
-        }}
-      >
-        + 添加阶段
-      </button>
     </BookSetupFields>
   );
 }
@@ -975,8 +928,7 @@ function BookSetupStepBody({
 
   if (stepId === "mainline") {
     const stages = book.mainlineStages ?? [];
-    const mainlineKey = stages.map((s) => `${s.id}|${s.label}|${s.chapterRange}|${s.note ?? ""}`).join(";;") || "empty";
-    return <BookSetupMainlineEditor key={mainlineKey} draft={draft} stages={stages} onChange={onChange} />;
+    return <BookSetupMainlineEditor draft={draft} stages={stages} onChange={onChange} />;
   }
 
   if (stepId === "volumes") {
@@ -1235,6 +1187,8 @@ function BookSetupActions({
   ready,
   busy,
   createBookTitle,
+  showDiscard,
+  onDiscard,
   onPrev,
   onSkip,
   onNext,
@@ -1247,6 +1201,8 @@ function BookSetupActions({
   ready: boolean;
   busy: boolean;
   createBookTitle?: string;
+  showDiscard?: boolean;
+  onDiscard?: () => void;
   onPrev: () => void;
   onSkip: () => void;
   onNext: () => void;
@@ -1255,41 +1211,55 @@ function BookSetupActions({
 }) {
   const commitDisabled = busy || !ready;
   return (
-    <div className="modalActions modalActionsWrap">
-      <button type="button" className="btnModalSecondary" disabled={busy} onClick={onClose}>
-        {isLinked ? "关闭" : "取消"}
-      </button>
-      {stepIdx > 0 ? (
-        <button type="button" className="btnModalSecondary" disabled={busy} onClick={onPrev}>
-          上一步
-        </button>
-      ) : null}
-      {!isReview ? (
-        <button type="button" className="btnModalSecondary" disabled={busy} onClick={onSkip}>
-          跳过本步
-        </button>
-      ) : null}
-      {!isReview && stepIdx < STEPS.length - 1 ? (
-        <button type="button" className="btnModalPrimary" disabled={busy} onClick={onNext}>
-          下一步
-        </button>
-      ) : null}
-      {isReview && !isLinked ? (
-        <span
-          className="bookSetupCommitWrap"
-          title={commitDisabled && createBookTitle ? createBookTitle : undefined}
-        >
+    <div className="modalActions modalActionsWrap bookSetupWizardActions">
+      <div className="bookSetupWizardActionsStart">
+        {showDiscard ? (
           <button
             type="button"
-            className="btnModalPrimary"
-            disabled={commitDisabled}
-            aria-disabled={commitDisabled}
-            onClick={onCommit}
+            className="btnModalSecondary bookSetupDiscardBtn"
+            disabled={busy}
+            onClick={onDiscard}
           >
-            创建书籍
+            废弃当前规划
           </button>
-        </span>
-      ) : null}
+        ) : null}
+      </div>
+      <div className="bookSetupWizardActionsEnd">
+        <button type="button" className="btnModalSecondary" disabled={busy} onClick={onClose}>
+          {isLinked ? "关闭" : "取消"}
+        </button>
+        {stepIdx > 0 ? (
+          <button type="button" className="btnModalSecondary" disabled={busy} onClick={onPrev}>
+            上一步
+          </button>
+        ) : null}
+        {!isReview ? (
+          <button type="button" className="btnModalSecondary" disabled={busy} onClick={onSkip}>
+            跳过本步
+          </button>
+        ) : null}
+        {!isReview && stepIdx < STEPS.length - 1 ? (
+          <button type="button" className="btnModalPrimary" disabled={busy} onClick={onNext}>
+            下一步
+          </button>
+        ) : null}
+        {isReview && !isLinked ? (
+          <span
+            className="bookSetupCommitWrap"
+            title={commitDisabled && createBookTitle ? createBookTitle : undefined}
+          >
+            <button
+              type="button"
+              className="btnModalPrimary"
+              disabled={commitDisabled}
+              aria-disabled={commitDisabled}
+              onClick={onCommit}
+            >
+              创建书籍
+            </button>
+          </span>
+        ) : null}
+      </div>
     </div>
   );
 }

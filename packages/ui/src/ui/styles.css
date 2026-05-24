@@ -1171,7 +1171,8 @@ code {
 .bookSetupMainlineChips {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
+  padding: 2px 0;
 }
 
 .bookSetupMainlineChip {
@@ -1198,6 +1199,18 @@ code {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
   background: color-mix(in srgb, var(--accent) 14%, var(--panel));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+
+.bookSetupMainlineChipAdd {
+  border-style: dashed;
+  color: var(--muted);
+  font-weight: 550;
+}
+
+.bookSetupMainlineChipAdd:hover {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
 }
 
 .bookSetupStageRowActive {
@@ -1272,6 +1285,29 @@ code {
   margin: 0 0 6px;
   font-size: 11px;
   line-height: 1.35;
+}
+
+.modalPanel.bookSetupWizard .bookSetupWizardActions {
+  flex-shrink: 0;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding-top: 6px;
+  margin-top: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.bookSetupWizardActionsStart {
+  flex-shrink: 0;
+}
+
+.bookSetupWizardActionsEnd {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
 }
 
 .modalPanel.bookSetupWizard .modalActionsWrap {
@@ -1794,17 +1830,20 @@ code {
 }
 
 .bookSetupFormHead {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
   margin-bottom: 4px;
 }
 
 .bookSetupDiscardBtn {
-  flex-shrink: 0;
-  font-size: 11px;
-  white-space: nowrap;
+  font-size: 12px;
+  padding: 5px 12px;
+  color: var(--muted);
+  border-color: color-mix(in srgb, var(--border) 85%, transparent);
+  background: color-mix(in srgb, var(--panel2) 80%, transparent);
+}
+
+.bookSetupDiscardBtn:hover:not(:disabled) {
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel2) 100%, transparent);
 }
 
 .bookPlanningReviewBtn {
