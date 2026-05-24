@@ -7439,6 +7439,15 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   justify-content: space-between;
   gap: 8px;
   flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.outlineStageTreeToolbarActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
 }
 
 .outlineStageTreeToolbarTitle {
@@ -7466,6 +7475,33 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
 
 .outlineStageTreeRow--selected {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.outlineStageTreeRow--draggable {
+  touch-action: pan-y;
+}
+
+.outlineStageTreeRow--dragging {
+  opacity: 0.45;
+}
+
+.outlineStageTree--dragging .outlineStageTreeRow--draggable {
+  cursor: grabbing;
+}
+
+.outlineStageTreeDropLine {
+  height: 2px;
+  margin: 1px 8px;
+  border-radius: 1px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.outlineStageTreeSiblingDivider {
+  height: 1px;
+  margin: 2px 8px 2px 0;
+  background: color-mix(in srgb, var(--border) 75%, transparent);
+  pointer-events: none;
 }
 
 .outlineStageTreeToggle {
@@ -7549,6 +7585,16 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
 
 .outlineStageTreeAct--danger:hover {
   color: var(--danger, #c44);
+}
+
+.outlineStageTreeAct:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.outlineStageTreeAct:disabled:hover {
+  background: transparent;
+  color: inherit;
 }
 
 .outlineStageTreeEmpty {

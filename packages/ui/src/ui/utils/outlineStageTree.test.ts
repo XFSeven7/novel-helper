@@ -7,6 +7,7 @@ import {
   insertSiblingStage,
   pickSelectionAfterDelete,
   removeStageNode,
+  reorderStageSibling,
   updateStageNode,
   type OutlineStageNode
 } from "./outlineStageTree";
@@ -75,5 +76,22 @@ describe("pickSelectionAfterDelete", () => {
 describe("collectStagePathLabels", () => {
   it("returns breadcrumb labels", () => {
     expect(collectStagePathLabels(sample, "a2")).toEqual(["第一幕", "承"]);
+  });
+});
+
+describe("reorderStageSibling", () => {
+  it("moves root to end", () => {
+    const next = reorderStageSibling(sample, "a", 2)!;
+    expect(next.map((n) => n.id)).toEqual(["b", "a"]);
+  });
+
+  it("moves nested sibling before previous", () => {
+    const next = reorderStageSibling(sample, "a2", 0)!;
+    const siblings = findStageNode(next, "a1")!.siblings;
+    expect(siblings.map((n) => n.id)).toEqual(["a2", "a1"]);
+  });
+
+  it("no-op when dropping adjacent to self", () => {
+    expect(reorderStageSibling(sample, "a1", 1)).toBe(sample);
   });
 });

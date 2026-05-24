@@ -3,16 +3,20 @@ import type { OutlineStageNode } from "../../api";
 import { useLocalStorageState } from "../../hooks/useLocalStorageState";
 import { appConfirm } from "../../dialog/dialog";
 import {
-  countDescendants,
   findStageNode,
   insertChildStage,
   insertRootStage,
   insertSiblingStage,
   pickSelectionAfterDelete,
   removeStageNode,
+  reorderStageSibling,
+  collectExpandableStageIds,
   stageRoots,
   updateStageNode
 } from "../../utils/outlineStageTree";
+
+const LONG_PRESS_MS = 450;
+const MOVE_CANCEL_PX = 8;
 
 type Props = {
   bookId: string;
@@ -22,6 +26,14 @@ type Props = {
   onSelect: (id: string) => void;
   onStagesChange: (stages: OutlineStageNode[]) => void;
   onSelectionAfterDelete: (id: string | null) => void;
+};
+
+type DragSession = {
+  nodeId: string;
+  pointerId: number;
+  timer: number | null;
+  active: boolean;
+  moved: boolean;
 };
 
 export function OutlineStageTree({
@@ -42,6 +54,18 @@ export function OutlineStageTree({
   });
 
   const expandedSet = useMemo(() => new Set(expandedIds), [expandedIds]);
+  const expandableIds = useMemo(() => collectExpandableStageIds(roots), [roots]);
+  const allExpanded =
+    expandableIds.length > 0 && expandableIds.every((id) => expandedSet.has(id));
+  const anyExpanded = expandableIds.some((id) => expandedSet.has(id));
+
+  const handleExpandAll = useCallback(() => {
+    setExpandedIds(expandableIds);
+  }, [expandableIds, setExpandedIds]);
+
+  const handleCollapseAll = useCallback(() => {
+    setExpandedIds([]);
+  }, [setExpandedIds]);
 
   const toggleExpanded = useCallback(
     (id: string) => {
@@ -59,14 +83,162 @@ export function OutlineStageTree({
   const [renameDraft, setRenameDraft] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
 
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [dropInsertAt, setDropInsertAt] = useState<number | null>(null);
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  const dragSessionRef = useRef<DragSession | null>(null);
+  const dropInsertAtRef = useRef<number | null>(null);
+  const suppressClickRef = useRef(false);
+  const rootsRef = useRef(roots);
+  rootsRef.current = roots;
+
   useEffect(() => {
     if (!renamingId) return;
     renameInputRef.current?.focus();
     renameInputRef.current?.select();
   }, [renamingId]);
 
+  const applyStages = useCallback(
+    (next: OutlineStageNode[]) => {
+      onStagesChange(next.length ? next : []);
+    },
+    [onStagesChange]
+  );
+
+  const dragContext = useMemo(() => {
+    if (!draggingId) return null;
+    const found = findStageNode(roots, draggingId);
+    if (!found) return null;
+    return {
+      draggingId,
+      siblingIds: found.siblings.map((s) => s.id)
+    };
+  }, [draggingId, roots]);
+
+  const computeDropInsertAt = useCallback((clientY: number, siblingIds: string[]) => {
+    for (let i = 0; i < siblingIds.length; i++) {
+      const el = rowRefs.current.get(siblingIds[i]!);
+      if (!el) continue;
+      const rect = el.getBoundingClientRect();
+      if (clientY < rect.top + rect.height / 2) return i;
+    }
+    return siblingIds.length;
+  }, []);
+
+  const clearDragSession = useCallback(() => {
+    const session = dragSessionRef.current;
+    if (session?.timer) window.clearTimeout(session.timer);
+    dragSessionRef.current = null;
+    setDraggingId(null);
+    setDropInsertAt(null);
+    dropInsertAtRef.current = null;
+    document.body.style.userSelect = "";
+    document.body.style.cursor = "";
+  }, []);
+
+  const finishDrag = useCallback(
+    (nodeId: string) => {
+      const insertAt = dropInsertAtRef.current;
+      clearDragSession();
+      if (insertAt == null) return;
+      const next = reorderStageSibling(rootsRef.current, nodeId, insertAt);
+      if (next) applyStages(next);
+      suppressClickRef.current = true;
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
+    },
+    [clearDragSession, applyStages]
+  );
+
+
+  const startDrag = useCallback(
+    (nodeId: string, clientY: number) => {
+      const session = dragSessionRef.current;
+      if (!session || session.nodeId !== nodeId) return;
+      session.active = true;
+      setDraggingId(nodeId);
+      onSelect(nodeId);
+      document.body.style.userSelect = "none";
+      document.body.style.cursor = "grabbing";
+      const found = findStageNode(rootsRef.current, nodeId);
+      if (!found) return;
+      const siblingIds = found.siblings.map((s) => s.id);
+      const insertAt = computeDropInsertAt(clientY, siblingIds);
+      dropInsertAtRef.current = insertAt;
+      setDropInsertAt(insertAt);
+    },
+    [computeDropInsertAt, onSelect]
+  );
+
+  const handleRowPointerDown = (e: React.PointerEvent, node: OutlineStageNode) => {
+    if (disabled || renamingId || e.button !== 0) return;
+    if ((e.target as HTMLElement).closest(".outlineStageTreeAct, .outlineStageTreeRenameInput")) return;
+
+    const startY = e.clientY;
+    const session: DragSession = {
+      nodeId: node.id,
+      pointerId: e.pointerId,
+      timer: null,
+      active: false,
+      moved: false
+    };
+    dragSessionRef.current = session;
+
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== session.pointerId) return;
+      const sessionLive = dragSessionRef.current;
+      if (!sessionLive) return;
+
+      if (!sessionLive.active) {
+        if (Math.abs(ev.clientY - startY) > MOVE_CANCEL_PX) {
+          sessionLive.moved = true;
+          if (sessionLive.timer) {
+            window.clearTimeout(sessionLive.timer);
+            sessionLive.timer = null;
+          }
+        }
+        return;
+      }
+
+      ev.preventDefault();
+      const found = findStageNode(rootsRef.current, sessionLive.nodeId);
+      if (!found) return;
+      const siblingIds = found.siblings.map((s) => s.id);
+      const insertAt = computeDropInsertAt(ev.clientY, siblingIds);
+      dropInsertAtRef.current = insertAt;
+      setDropInsertAt(insertAt);
+    };
+
+    const onUp = (ev: PointerEvent) => {
+      if (ev.pointerId !== session.pointerId) return;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+
+      const sessionLive = dragSessionRef.current;
+      if (sessionLive?.active) {
+        finishDrag(sessionLive.nodeId);
+      } else {
+        clearDragSession();
+      }
+    };
+
+    session.timer = window.setTimeout(() => {
+      const sessionLive = dragSessionRef.current;
+      if (!sessionLive || sessionLive.moved || sessionLive.nodeId !== node.id) return;
+      const found = findStageNode(rootsRef.current, node.id);
+      if (!found || found.siblings.length <= 1) return;
+      startDrag(node.id, startY);
+    }, LONG_PRESS_MS);
+
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+  };
+
   const startRename = (node: OutlineStageNode) => {
-    if (disabled) return;
+    if (disabled || draggingId) return;
     setRenamingId(node.id);
     setRenameDraft(node.label?.trim() || "");
     onSelect(node.id);
@@ -85,12 +257,9 @@ export function OutlineStageTree({
   };
 
   const handleRowActivate = (node: OutlineStageNode, hasChildren: boolean) => {
+    if (suppressClickRef.current || draggingId) return;
     onSelect(node.id);
     if (hasChildren) toggleExpanded(node.id);
-  };
-
-  const applyStages = (next: OutlineStageNode[]) => {
-    onStagesChange(next.length ? next : []);
   };
 
   const handleAddRoot = () => {
@@ -118,11 +287,10 @@ export function OutlineStageTree({
   const handleDelete = async (id: string) => {
     const found = findStageNode(roots, id);
     if (!found) return;
-    const subCount = countDescendants(found.node);
+    if ((found.node.children ?? []).length > 0) return;
     const ok = await appConfirm({
       title: "删除阶段",
-      message:
-        subCount > 0 ? `将同时删除 ${subCount} 个子阶段，是否继续？` : "确定删除此阶段？",
+      message: "确定删除此阶段？",
       confirmLabel: "删除",
       variant: "danger"
     });
@@ -134,21 +302,54 @@ export function OutlineStageTree({
     onSelectionAfterDelete(selectedId === id ? nextPick : selectedId);
   };
 
-  const renderNode = (node: OutlineStageNode, depth: number) => {
+  const renderNode = (node: OutlineStageNode, depth: number, siblingIndex: number, siblingCount: number) => {
     const children = node.children ?? [];
     const hasChildren = children.length > 0;
     const expanded = expandedSet.has(node.id);
     const selected = selectedId === node.id;
     const label = node.label?.trim() || "未命名阶段";
-
     const isRenaming = renamingId === node.id;
+    const isDragging = draggingId === node.id;
+    const isDropSibling = dragContext?.siblingIds.includes(node.id) ?? false;
+    const showDropBefore =
+      isDropSibling && dropInsertAt != null && dropInsertAt === siblingIndex && draggingId !== node.id;
+    const showDropAfter =
+      isDropSibling &&
+      dropInsertAt != null &&
+      dropInsertAt === siblingCount &&
+      siblingIndex === siblingCount - 1 &&
+      draggingId !== node.id;
 
     return (
       <div key={node.id} className="outlineStageTreeNode">
+        {showDropBefore ? <div className="outlineStageTreeDropLine" aria-hidden /> : null}
+        {siblingIndex > 0 && !showDropBefore ? (
+          <div
+            className="outlineStageTreeSiblingDivider"
+            style={{ marginLeft: `${8 + depth * 14}px` }}
+            aria-hidden
+          />
+        ) : null}
         <div
-          className={`outlineStageTreeRow${selected ? " outlineStageTreeRow--selected" : ""}`}
+          ref={(el) => {
+            if (el) rowRefs.current.set(node.id, el);
+            else rowRefs.current.delete(node.id);
+          }}
+          className={[
+            "outlineStageTreeRow",
+            selected ? "outlineStageTreeRow--selected" : "",
+            isDragging ? "outlineStageTreeRow--dragging" : "",
+            !disabled && !isRenaming ? "outlineStageTreeRow--draggable" : ""
+          ]
+            .filter(Boolean)
+            .join(" ")}
           style={{ paddingLeft: `${8 + depth * 14}px` }}
+          onPointerDown={(e) => handleRowPointerDown(e, node)}
           onContextMenu={(e) => {
+            if (draggingId) {
+              e.preventDefault();
+              return;
+            }
             e.preventDefault();
             startRename(node);
           }}
@@ -193,7 +394,7 @@ export function OutlineStageTree({
               className="outlineStageTreeLabelBtn"
               disabled={disabled}
               onClick={() => handleRowActivate(node, hasChildren)}
-              title={`${label}（右键改名）`}
+              title={`${label}（右键改名，长按拖动排序）`}
             >
               {label}
             </button>
@@ -225,7 +426,8 @@ export function OutlineStageTree({
               <button
                 type="button"
                 className="outlineStageTreeAct outlineStageTreeAct--danger"
-                title="删除"
+                title={hasChildren ? "请先删除子阶段" : "删除"}
+                disabled={hasChildren}
                 onClick={(e) => {
                   e.stopPropagation();
                   void handleDelete(node.id);
@@ -236,25 +438,48 @@ export function OutlineStageTree({
             </span>
           ) : null}
         </div>
+        {showDropAfter ? <div className="outlineStageTreeDropLine" aria-hidden /> : null}
         {hasChildren && expanded ? (
-          <div className="outlineStageTreeChildren">{children.map((c) => renderNode(c, depth + 1))}</div>
+          <div className="outlineStageTreeChildren">
+            {children.map((c, i) => renderNode(c, depth + 1, i, children.length))}
+          </div>
         ) : null}
       </div>
     );
   };
 
   return (
-    <div className="outlineStageTree">
-      <p className="muted outlineHint outlineHintCompact">点击展开/选中；右键改名；细纲在中间区编辑。</p>
+    <div className={`outlineStageTree${draggingId ? " outlineStageTree--dragging" : ""}`}>
+      <p className="muted outlineHint outlineHintCompact">
+        点击展开/选中；右键改名；长按拖动同级排序；细纲在中间区编辑。
+      </p>
       <div className="outlineStageTreeToolbar">
         <span className="outlineStageTreeToolbarTitle">阶段</span>
-        <button type="button" className="btnSort" disabled={disabled} onClick={handleAddRoot}>
-          + 根阶段
-        </button>
+        <div className="outlineStageTreeToolbarActions">
+          <button
+            type="button"
+            className="btnSort btnSortCompact"
+            disabled={disabled || expandableIds.length === 0 || allExpanded}
+            onClick={handleExpandAll}
+          >
+            全部展开
+          </button>
+          <button
+            type="button"
+            className="btnSort btnSortCompact"
+            disabled={disabled || expandableIds.length === 0 || !anyExpanded}
+            onClick={handleCollapseAll}
+          >
+            全部收起
+          </button>
+          <button type="button" className="btnSort btnSortCompact" disabled={disabled} onClick={handleAddRoot}>
+            + 根阶段
+          </button>
+        </div>
       </div>
       {roots.length ? (
         <div className="outlineStageTreeScroll" role="tree">
-          {roots.map((node) => renderNode(node, 0))}
+          {roots.map((node, i) => renderNode(node, 0, i, roots.length))}
         </div>
       ) : (
         <p className="muted outlineStageTreeEmpty">暂无阶段。点击「根阶段」或在规划向导中设计。</p>

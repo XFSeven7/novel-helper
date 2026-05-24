@@ -162,3 +162,51 @@ export function pickSelectionAfterDelete(
 export function stageRoots(bookMainline: OutlineStageNode[] | undefined): OutlineStageNode[] {
   return bookMainline ?? [];
 }
+
+/** 有子节点的 id 列表（用于全部展开） */
+export function collectExpandableStageIds(roots: OutlineStageNode[]): string[] {
+  const ids: string[] = [];
+  const walk = (nodes: OutlineStageNode[]) => {
+    for (const node of nodes) {
+      const children = node.children ?? [];
+      if (children.length > 0) {
+        ids.push(node.id);
+        walk(children);
+      }
+    }
+  };
+  walk(roots);
+  return ids;
+}
+
+/** insertAt：同级列表中的插入位置（0 = 最前，length = 最后） */
+export function reorderStageSibling(
+  roots: OutlineStageNode[],
+  nodeId: string,
+  insertAt: number
+): OutlineStageNode[] | null {
+  const found = findStageNode(roots, nodeId);
+  if (!found) return null;
+  const { siblings, index: fromIndex, parent } = found;
+  const len = siblings.length;
+  if (len <= 1) return null;
+  if (insertAt < 0 || insertAt > len) return null;
+  if (insertAt === fromIndex || insertAt === fromIndex + 1) return roots;
+
+  const toIndex = insertAt > fromIndex ? insertAt - 1 : insertAt;
+  const nextSiblings = [...siblings];
+  const [item] = nextSiblings.splice(fromIndex, 1);
+  nextSiblings.splice(toIndex, 0, item!);
+
+  if (!parent) return nextSiblings;
+
+  const parentId = parent.id;
+  const mapNodes = (nodes: OutlineStageNode[]): OutlineStageNode[] =>
+    nodes.map((n) => {
+      if (n.id === parentId) return { ...n, children: nextSiblings };
+      const children = n.children;
+      if (!children?.length) return n;
+      return { ...n, children: mapNodes(children) };
+    });
+  return mapNodes(roots);
+}
