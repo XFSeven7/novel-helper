@@ -1,3 +1,8 @@
+export function isAltEnter(e: KeyboardEvent): boolean {
+  if (!e.altKey || e.shiftKey || e.ctrlKey || e.metaKey) return false;
+  return e.code === "Enter" || e.code === "NumpadEnter" || e.key === "Enter";
+}
+
 export function getFullscreenElement(): Element | null {
   const d = document as Document & {
     webkitFullscreenElement?: Element | null;

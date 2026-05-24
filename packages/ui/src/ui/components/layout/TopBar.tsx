@@ -96,7 +96,7 @@ export function TopBar({
               onFullscreenError("无法切换全屏:浏览器不支持或权限被拒绝。")
             )
           }
-          title={fullscreenOn ? "退出全屏(Esc)" : "全屏显示"}
+          title={fullscreenOn ? "退出全屏(Alt+Enter 或 Esc)" : "全屏显示(Alt+Enter)"}
           aria-label={fullscreenOn ? "退出全屏" : "全屏"}
           aria-pressed={fullscreenOn}
         >

@@ -57,7 +57,7 @@ import {
   stripAiPlainTextOutput
 } from "./utils/chapterSseStream";
 import { InspirationTab } from "./components/inspiration/InspirationTab";
-import { getFullscreenElement } from "./components/layout/fullscreen";
+import { getFullscreenElement, isAltEnter, toggleDocumentFullscreen } from "./components/layout/fullscreen";
 import { TopBar } from "./components/layout/TopBar";
 import { SettingsPage, type SettingsTabId } from "./components/settings/SettingsPage";
 import { SettingsModelsPanel } from "./components/settings/SettingsModelsPanel";
@@ -751,6 +751,18 @@ export function App() {
       document.removeEventListener("mozfullscreenchange", sync);
       document.removeEventListener("MSFullscreenChange", sync);
     };
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!isAltEnter(e)) return;
+      e.preventDefault();
+      void toggleDocumentFullscreen().catch(() =>
+        setStatus("无法切换全屏:浏览器不支持或权限被拒绝。")
+      );
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, []);
 
   // 布局拖拽与持久化由 useLayout3Splitters 负责
