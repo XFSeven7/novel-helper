@@ -1,4 +1,5 @@
 import React from "react";
+import { useSyncScrollPair } from "../../hooks/useSyncScrollPair";
 import {
   buildAuditTargets,
   diffChars,
@@ -35,10 +36,8 @@ export type ChapterEditorContentProps = {
   polishModeOn: boolean;
   setPolishModeOn: React.Dispatch<React.SetStateAction<boolean>>;
   polishBusy: boolean;
-  polishOriginal: string;
   polishDraft: string;
   setPolishPhase: React.Dispatch<React.SetStateAction<"idle" | "running" | "done" | "error">>;
-  setPolishOriginal: React.Dispatch<React.SetStateAction<string>>;
   setPolishDraft: React.Dispatch<React.SetStateAction<string>>;
   onPolishSelectedChapter: () => void | Promise<void>;
   okModelCount: number;
@@ -77,10 +76,8 @@ export function ChapterEditorContent({
   polishModeOn,
   setPolishModeOn,
   polishBusy,
-  polishOriginal,
   polishDraft,
   setPolishPhase,
-  setPolishOriginal,
   setPolishDraft,
   onPolishSelectedChapter,
   okModelCount,
@@ -98,6 +95,12 @@ export function ChapterEditorContent({
   chapterWritingShortcutsEnabled,
   onInsertNewline
 }: ChapterEditorContentProps) {
+  const polishScrollSyncKey = `${selectedChapter?.filename ?? ""}:${chapterContent.length}:${polishDraft.length}:${polishBusy}`;
+  const { leftRef: polishLeftRef, rightRef: polishRightRef } = useSyncScrollPair(
+    polishModeOn,
+    polishScrollSyncKey
+  );
+
   return (
     <>
 {expandModeOn ? (
@@ -165,7 +168,7 @@ export function ChapterEditorContent({
         <div className="polishTitle">
           纠错对照
           <span className="polishCounts muted">
-            原文 {approximateWordCount(polishOriginal || chapterContent)} 字 · 纠错后{" "}
+            原文 {approximateWordCount(chapterContent)} 字 · 纠错后{" "}
             {approximateWordCount(polishDraft)} 字
           </span>
         </div>
@@ -187,7 +190,6 @@ export function ChapterEditorContent({
               setChapterContent(polishDraft);
               setPolishModeOn(false);
               setPolishPhase("idle");
-              setPolishOriginal("");
               setPolishDraft("");
             }}
             title="用右侧纠错稿替换正文"
@@ -199,12 +201,14 @@ export function ChapterEditorContent({
       <div className="polishCols">
         <div className="polishCol">
           <div className="polishColTitle muted">原文</div>
-          <div className="polishText">{polishOriginal || chapterContent}</div>
+          <div ref={polishLeftRef} className="polishText">
+            {chapterContent}
+          </div>
         </div>
         <div className="polishCol">
           <div className="polishColTitle muted">纠错后</div>
-          <div className="polishDiffPreview" aria-label="纠错改动标记预览">
-            {diffChars(polishOriginal || chapterContent, polishDraft).map((seg, idx) =>
+          <div ref={polishRightRef} className="polishDiffPreview" aria-label="纠错改动标记预览">
+            {diffChars(chapterContent, polishDraft).map((seg, idx) =>
               seg.t === "ins" ? (
                 <span key={idx} className="polishDiffIns">
                   {seg.s}

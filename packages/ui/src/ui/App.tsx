@@ -1149,7 +1149,6 @@ export function App() {
   const [polishBusy, setPolishBusy] = useState(false);
   type PolishPhase = "idle" | "running" | "done" | "error";
   const [polishPhase, setPolishPhase] = useState<PolishPhase>("idle");
-  const [polishOriginal, setPolishOriginal] = useState("");
   const [polishDraft, setPolishDraft] = useState("");
 
   const [mobileLayoutBusy, setMobileLayoutBusy] = useState(false);
@@ -2731,8 +2730,7 @@ export function App() {
     setPolishBusy(true);
     setStatus("");
     setPolishPhase("running");
-    const original = polishOriginal || chapterContent;
-    setPolishOriginal(original);
+    const original = chapterContentRef.current;
     setPolishDraft("");
     try {
       await putModelConfigs({ configs: modelConfigs as any, activeId: activeModelId ?? null }).catch(() => {});
@@ -3690,7 +3688,6 @@ export function App() {
                     setPolishModeOn((v) => {
                       const next = !v;
                       if (next) {
-                        setPolishOriginal(chapterContent);
                         setPolishDraft("");
                         setPolishPhase("idle");
                         void onPolishSelectedChapter();
@@ -3843,10 +3840,8 @@ export function App() {
               polishModeOn={polishModeOn}
               setPolishModeOn={setPolishModeOn}
               polishBusy={polishBusy}
-              polishOriginal={polishOriginal}
               polishDraft={polishDraft}
               setPolishPhase={setPolishPhase}
-              setPolishOriginal={setPolishOriginal}
               setPolishDraft={setPolishDraft}
               onPolishSelectedChapter={() => void onPolishSelectedChapter()}
               okModelCount={okModelConfigs.length}
