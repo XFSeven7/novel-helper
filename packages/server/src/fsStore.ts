@@ -1311,6 +1311,8 @@ export async function createNovel(
 
   const { initNotesIndexForNewBook } = await import("./bookNotes/store.js");
   await initNotesIndexForNewBook(dataDir, bookId);
+  const { initWritingGuidanceIndexForNewBook } = await import("./writingGuidance/store.js");
+  await initWritingGuidanceIndexForNewBook(dataDir, bookId);
 
   return meta;
 }

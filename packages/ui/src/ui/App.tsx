@@ -76,6 +76,9 @@ import {
   StageOutlineCenterTop
 } from "./components/outline/StageOutlineCenter";
 import { BookNotesPanel } from "./components/notes/BookNotesPanel";
+import { WritingGuidanceProvider } from "./components/writingGuidance/WritingGuidanceContext";
+import { WritingGuidanceNavPanel } from "./components/writingGuidance/WritingGuidanceNavPanel";
+import { WritingGuidanceChatPanel } from "./components/writingGuidance/WritingGuidanceChatPanel";
 import { appConfirm } from "./dialog/dialog";
 import { useLayout3Splitters } from "./hooks/useLayout3Splitters";
 import { useLocalStorageState } from "./hooks/useLocalStorageState";
@@ -171,7 +174,7 @@ const CHARACTER_TAG_OPTIONS = ["盟友", "敌对", "家人", "同事", "组织",
 
 export function App() {
   const [leftTab, setLeftTab] = useState<
-    "chapters" | "outline" | "global" | "progress" | "inspiration" | "notes"
+    "chapters" | "outline" | "global" | "progress" | "inspiration" | "notes" | "writingGuidance"
   >("chapters");
   const [notesFocusRequest, setNotesFocusRequest] = useState(0);
   const [globalTab, setGlobalTab] = useState<GlobalTabId>("auditCharacters");
@@ -320,8 +323,24 @@ export function App() {
     serialize: (v) => (v ? "1" : "0")
   });
 
-  const { navW: layout3NavW, rightW: layout3RightW, dragging: layout3Dragging, setDragging: setLayout3Dragging, dragStartRef: layout3DragStartRef } =
-    useLayout3Splitters();
+  const {
+    navW: layout3NavW,
+    guidanceW: layout3GuidanceW,
+    rightW: layout3RightW,
+    dragging: layout3Dragging,
+    setDragging: setLayout3Dragging,
+    dragStartRef: layout3DragStartRef,
+    rightWMin: layout3RightWMin
+  } = useLayout3Splitters();
+
+  const showWritingGuidancePane = Boolean(
+    activeBook && leftTab === "writingGuidance" && !navCollapsed
+  );
+  const pinchRightForGuidance = Boolean(activeBook && leftTab === "writingGuidance");
+  const layout3EffectiveRightW =
+    pinchRightForGuidance && !rightCollapsed
+      ? Math.min(layout3RightW, layout3RightWMin)
+      : layout3RightW;
 
   const [chapterAutosaveHint, setChapterAutosaveHint] = useState("");
   const [cardAutosaveHint, setCardAutosaveHint] = useState("");
@@ -3187,12 +3206,21 @@ export function App() {
       />
 
       <OutlineBookProvider bookId={activeBook || null} refreshToken={outlineRefreshKey}>
+      <WritingGuidanceProvider
+        bookId={activeBook || ""}
+        inactive={!activeBook}
+        busy={busy}
+        activeModelId={activeModelId}
+        okModelCount={okModelConfigs.length}
+        onStatus={setStatus}
+      >
       <div
-        className={`layout3 ${navCollapsed ? "layout3NavCollapsed" : ""} ${rightCollapsed ? "layout3RightCollapsed" : ""}`}
+        className={`layout3 ${navCollapsed ? "layout3NavCollapsed" : ""} ${rightCollapsed ? "layout3RightCollapsed" : ""} ${showWritingGuidancePane ? "layout3WritingGuidance" : ""}`}
         style={
           {
             ["--layout3-nav" as any]: navCollapsed ? "0px" : `${layout3NavW}px`,
-            ["--layout3-right" as any]: rightCollapsed ? "0px" : `${layout3RightW}px`
+            ["--layout3-guidance" as any]: `${layout3GuidanceW}px`,
+            ["--layout3-right" as any]: rightCollapsed ? "0px" : `${layout3EffectiveRightW}px`
           } as React.CSSProperties
         }
       >
@@ -3322,6 +3350,19 @@ export function App() {
                         备注
                       </button>
                     ) : null}
+                    {activeBook ? (
+                      <button
+                        type="button"
+                        role="tab"
+                        className={`browserTab ${leftTab === "writingGuidance" ? "active" : ""}`}
+                        aria-selected={leftTab === "writingGuidance"}
+                        onClick={() => setLeftTab("writingGuidance")}
+                        disabled={busy}
+                        title="场景写作技法指导（不传本书信息）"
+                      >
+                        写作指导
+                      </button>
+                    ) : null}
                     </div>
                   </div>
 
@@ -3363,6 +3404,8 @@ export function App() {
                       onStatus={setStatus}
                       focusRequest={notesFocusRequest}
                     />
+                  ) : leftTab === "writingGuidance" && activeBook ? (
+                    <WritingGuidanceNavPanel />
                   ) : leftTab === "inspiration" ? (
                     <InspirationTab
                       busy={busy}
@@ -3525,10 +3568,41 @@ export function App() {
           onMouseDown={(e) => {
             if (navCollapsed) return;
             e.preventDefault();
-            layout3DragStartRef.current = { kind: "nav", x: e.clientX, navW: layout3NavW, rightW: layout3RightW };
+            layout3DragStartRef.current = {
+              kind: "nav",
+              x: e.clientX,
+              navW: layout3NavW,
+              guidanceW: layout3GuidanceW,
+              rightW: layout3RightW
+            };
             setLayout3Dragging("nav");
           }}
         />
+
+        {showWritingGuidancePane ? (
+          <>
+            <aside className="guidancePane" aria-label="写作指导对话">
+              <WritingGuidanceChatPanel />
+            </aside>
+            <div
+              className={`layoutDivider ${layout3Dragging === "guidance" ? "dragging" : ""}`}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="调整写作指导栏宽度"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                layout3DragStartRef.current = {
+                  kind: "guidance",
+                  x: e.clientX,
+                  navW: layout3NavW,
+                  guidanceW: layout3GuidanceW,
+                  rightW: layout3RightW
+                };
+                setLayout3Dragging("guidance");
+              }}
+            />
+          </>
+        ) : null}
 
         <main className="center">
           <div className="centerTop">
@@ -3908,7 +3982,13 @@ export function App() {
           onMouseDown={(e) => {
             if (rightCollapsed) return;
             e.preventDefault();
-            layout3DragStartRef.current = { kind: "right", x: e.clientX, navW: layout3NavW, rightW: layout3RightW };
+            layout3DragStartRef.current = {
+              kind: "right",
+              x: e.clientX,
+              navW: layout3NavW,
+              guidanceW: layout3GuidanceW,
+              rightW: layout3RightW
+            };
             setLayout3Dragging("right");
           }}
         />
@@ -3985,6 +4065,7 @@ export function App() {
         />
         ) : null}
       </div>
+      </WritingGuidanceProvider>
       </OutlineBookProvider>
 
       <ClearBookAuditModal

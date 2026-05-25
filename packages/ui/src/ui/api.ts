@@ -1219,3 +1219,97 @@ export async function deleteBookNoteEntry(bookId: string, entryId: string) {
   );
 }
 
+export type GuidanceMessage = {
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+};
+
+export type GuidanceSession = {
+  id: string;
+  notebookId: string;
+  title: string;
+  messages: GuidanceMessage[];
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WritingGuidanceIndex = {
+  version: 1;
+  updatedAt: string;
+  notebooks: BookNotebook[];
+  sessions: GuidanceSession[];
+};
+
+export async function fetchWritingGuidance(bookId: string) {
+  return await http<{ index: WritingGuidanceIndex }>(
+    `/api/books/${encodeURIComponent(bookId)}/writing-guidance`
+  );
+}
+
+export async function createGuidanceNotebook(bookId: string, name: string) {
+  return await http<{ index: WritingGuidanceIndex }>(
+    `/api/books/${encodeURIComponent(bookId)}/writing-guidance/notebooks`,
+    { method: "POST", body: JSON.stringify({ name }) }
+  );
+}
+
+export async function patchGuidanceNotebook(
+  bookId: string,
+  notebookId: string,
+  body: { name?: string; order?: number }
+) {
+  return await http<{ index: WritingGuidanceIndex }>(
+    `/api/books/${encodeURIComponent(bookId)}/writing-guidance/notebooks/${encodeURIComponent(notebookId)}`,
+    { method: "PATCH", body: JSON.stringify(body) }
+  );
+}
+
+export async function deleteGuidanceNotebook(bookId: string, notebookId: string) {
+  return await http<{ index: WritingGuidanceIndex }>(
+    `/api/books/${encodeURIComponent(bookId)}/writing-guidance/notebooks/${encodeURIComponent(notebookId)}`,
+    { method: "DELETE" }
+  );
+}
+
+export async function createGuidanceSession(
+  bookId: string,
+  notebookId: string,
+  title?: string
+) {
+  return await http<{ index: WritingGuidanceIndex; sessionId: string }>(
+    `/api/books/${encodeURIComponent(bookId)}/writing-guidance/sessions`,
+    { method: "POST", body: JSON.stringify({ notebookId, title }) }
+  );
+}
+
+export async function patchGuidanceSession(
+  bookId: string,
+  sessionId: string,
+  body: { title?: string; notebookId?: string }
+) {
+  return await http<{ index: WritingGuidanceIndex }>(
+    `/api/books/${encodeURIComponent(bookId)}/writing-guidance/sessions/${encodeURIComponent(sessionId)}`,
+    { method: "PATCH", body: JSON.stringify(body) }
+  );
+}
+
+export async function deleteGuidanceSession(bookId: string, sessionId: string) {
+  return await http<{ index: WritingGuidanceIndex }>(
+    `/api/books/${encodeURIComponent(bookId)}/writing-guidance/sessions/${encodeURIComponent(sessionId)}`,
+    { method: "DELETE" }
+  );
+}
+
+export async function reorderGuidanceSessions(
+  bookId: string,
+  notebookId: string,
+  sessionIds: string[]
+) {
+  return await http<{ index: WritingGuidanceIndex }>(
+    `/api/books/${encodeURIComponent(bookId)}/writing-guidance/sessions/reorder`,
+    { method: "POST", body: JSON.stringify({ notebookId, sessionIds }) }
+  );
+}
+
