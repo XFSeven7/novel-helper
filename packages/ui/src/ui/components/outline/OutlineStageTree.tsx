@@ -57,7 +57,6 @@ export function OutlineStageTree({
   const expandableIds = useMemo(() => collectExpandableStageIds(roots), [roots]);
   const allExpanded =
     expandableIds.length > 0 && expandableIds.every((id) => expandedSet.has(id));
-  const anyExpanded = expandableIds.some((id) => expandedSet.has(id));
 
   const handleExpandAll = useCallback(() => {
     setExpandedIds(expandableIds);
@@ -66,6 +65,11 @@ export function OutlineStageTree({
   const handleCollapseAll = useCallback(() => {
     setExpandedIds([]);
   }, [setExpandedIds]);
+
+  const toggleExpandAll = useCallback(() => {
+    if (allExpanded) handleCollapseAll();
+    else handleExpandAll();
+  }, [allExpanded, handleCollapseAll, handleExpandAll]);
 
   const toggleExpanded = useCallback(
     (id: string) => {
@@ -459,18 +463,11 @@ export function OutlineStageTree({
           <button
             type="button"
             className="btnSort btnSortCompact"
-            disabled={disabled || expandableIds.length === 0 || allExpanded}
-            onClick={handleExpandAll}
+            disabled={disabled || expandableIds.length === 0}
+            title={allExpanded ? "收起全部阶段" : "展开全部阶段"}
+            onClick={toggleExpandAll}
           >
-            全部展开
-          </button>
-          <button
-            type="button"
-            className="btnSort btnSortCompact"
-            disabled={disabled || expandableIds.length === 0 || !anyExpanded}
-            onClick={handleCollapseAll}
-          >
-            全部收起
+            {allExpanded ? "收起" : "展开"}
           </button>
           <button type="button" className="btnSort btnSortCompact" disabled={disabled} onClick={handleAddRoot}>
             + 根阶段
