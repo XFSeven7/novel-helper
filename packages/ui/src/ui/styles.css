@@ -5136,25 +5136,25 @@ code {
 .browserTabsStrip {
   display: flex;
   align-items: flex-end;
-  gap: 3px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  flex-wrap: nowrap;
+  gap: 2px;
+  overflow-x: hidden;
+  overflow-y: visible;
+  flex-wrap: wrap;
   min-width: 0;
   max-height: none;
+  scrollbar-width: none;
+}
+
+.browserTabsStrip::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .browserTabsStrip.tabsWrap {
   overflow-x: hidden;
   overflow-y: visible;
   flex-wrap: wrap;
-  scrollbar-width: none; /* Firefox: hide scrollbar */
-}
-
-.browserTabsStrip.tabsWrap::-webkit-scrollbar {
-  width: 0;
-  height: 0;
-  display: none; /* WebKit: hide scrollbar */
 }
 
 .browserTabsStrip .browserTab {
