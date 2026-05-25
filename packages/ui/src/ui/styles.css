@@ -102,6 +102,15 @@ code {
   margin-left: 12px;
 }
 
+.topbarClock {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  white-space: nowrap;
+  user-select: none;
+}
+
 .settingsPage {
   flex: 1;
   min-height: 0;

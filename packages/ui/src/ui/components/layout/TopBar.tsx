@@ -7,6 +7,7 @@ import {
   IconSettings
 } from "./LayoutIcons";
 import { ThemePicker } from "./ThemePicker";
+import { TopBarClock } from "./TopBarClock";
 import { toggleDocumentFullscreen } from "./fullscreen";
 
 export type TopBarProps = {
@@ -43,6 +44,7 @@ export function TopBar({
       </button>
       <span className="topbarTagline">您的智能小说助理</span>
       <div className="topbarRight">
+        <TopBarClock active={fullscreenOn} />
         <div className="layoutSideToggles" role="group" aria-label="侧栏布局">
           <button
             type="button"
