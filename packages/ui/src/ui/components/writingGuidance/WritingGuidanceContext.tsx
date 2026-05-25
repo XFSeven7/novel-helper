@@ -212,18 +212,31 @@ function WritingGuidanceProviderInner({
   const disabled = busy || guidance.loading || streaming;
 
   const handleNewSession = useCallback(async () => {
-    if (!activeNotebook) return;
+    if (!activeNotebook) {
+      onStatus?.("请先选择笔记本");
+      return;
+    }
+    setShowStarredOnly(false);
     try {
       const { sessionId } = await guidance.addSession(activeNotebook.id);
       setSelectedSessionId(sessionId);
       const nextExpanded = new Set(expandedSessionIds);
       nextExpanded.add(sessionId);
       setExpandedRaw(JSON.stringify([...nextExpanded]));
+      onStatus?.("已新建指导");
       queueMicrotask(() => composerRef.current?.focus());
-    } catch {
-      /* */
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      onStatus?.(msg || "新建指导失败");
     }
-  }, [activeNotebook, guidance, expandedSessionIds, setExpandedRaw]);
+  }, [
+    activeNotebook,
+    guidance,
+    expandedSessionIds,
+    setExpandedRaw,
+    setShowStarredOnly,
+    onStatus
+  ]);
 
   const handleSend = useCallback(async () => {
     const text = composer.trim();
@@ -276,15 +289,23 @@ function WritingGuidanceProviderInner({
   };
 
   const handleNewNotebook = async () => {
+    setTabsEditMode(false);
+    setShowStarredOnly(false);
     try {
       const idx = await guidance.addNotebook("新笔记本");
-      const created = idx?.notebooks[idx.notebooks.length - 1];
-      if (created) {
-        setActiveNotebookId(created.id);
-        startRenameNotebook(created);
+      const created = idx?.notebooks.find(
+        (n) => !notebooks.some((prev) => prev.id === n.id)
+      );
+      const fallback = idx?.notebooks[idx.notebooks.length - 1];
+      const nb = created ?? fallback;
+      if (nb) {
+        setActiveNotebookId(nb.id);
+        startRenameNotebook(nb);
+        onStatus?.("已新建笔记本");
       }
-    } catch {
-      /* */
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      onStatus?.(msg || "新建笔记本失败");
     }
   };
 

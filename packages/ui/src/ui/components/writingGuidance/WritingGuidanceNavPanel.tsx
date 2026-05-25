@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { GuidanceSession, GuidanceTurn } from "../../api";
 import {
   sessionHasStarredTurn,
@@ -49,6 +50,7 @@ export function WritingGuidanceNavPanel() {
     handleNewSession,
     handleNewNotebook,
     handleDeleteNotebook,
+    handleDeleteSession,
     renamingId,
     renameDraft,
     setRenameDraft,
@@ -82,6 +84,10 @@ export function WritingGuidanceNavPanel() {
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressClickRef = useRef(false);
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
+  const [menuSession, setMenuSession] = useState<GuidanceSession | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   const sortedSessions = useMemo(
     () => sortGuidanceSessions(sessions, sortDesc),
@@ -114,6 +120,59 @@ export function WritingGuidanceNavPanel() {
   const toggleExpandAllVisible = useCallback(() => {
     applyExpandedToSessions(visibleSessionIds, !allVisibleExpanded);
   }, [applyExpandedToSessions, visibleSessionIds, allVisibleExpanded]);
+
+  const menuOtherNotebooks = useMemo(
+    () => notebooks.filter((n) => n.id !== menuSession?.notebookId),
+    [notebooks, menuSession?.notebookId]
+  );
+
+  const closeMenu = useCallback(() => {
+    setMenuSession(null);
+    setMenuPos(null);
+    menuTriggerRef.current = null;
+  }, []);
+
+  const openMenu = useCallback((session: GuidanceSession, el: HTMLButtonElement) => {
+    const r = el.getBoundingClientRect();
+    setMenuSession(session);
+    setMenuPos({ top: r.bottom + 4, left: r.right });
+    menuTriggerRef.current = el;
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!menuSession || !menuPos || !menuRef.current) return;
+    const rect = menuRef.current.getBoundingClientRect();
+    const pad = 8;
+    let top = menuPos.top;
+    let left = menuPos.left;
+    if (rect.bottom > window.innerHeight - pad) top = Math.max(pad, menuPos.top - rect.height - 8);
+    if (rect.left > window.innerWidth - pad) left = window.innerWidth - pad;
+    if (left !== menuPos.left || top !== menuPos.top) setMenuPos({ top, left });
+  }, [menuSession, menuPos]);
+
+  useEffect(() => {
+    if (!menuSession) return;
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (menuRef.current?.contains(t) || menuTriggerRef.current?.contains(t)) return;
+      closeMenu();
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [menuSession, closeMenu]);
+
+  const handleMigrateSession = async (session: GuidanceSession, targetNotebookId: string) => {
+    closeMenu();
+    if (targetNotebookId === session.notebookId) return;
+    try {
+      await guidance.patchSession(session.id, { notebookId: targetNotebookId });
+      if (selectedSessionId === session.id && targetNotebookId !== activeNotebookId) {
+        setSelectedSessionId(null);
+      }
+    } catch {
+      /* hook */
+    }
+  };
 
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current) {
@@ -290,8 +349,11 @@ export function WritingGuidanceNavPanel() {
             type="button"
             className="bookNotesTabAdd"
             title="新建笔记本"
-            disabled={disabled || tabsEditMode}
-            onClick={() => void handleNewNotebook()}
+            disabled={disabled}
+            onClick={() => {
+              if (tabsEditMode) setTabsEditMode(false);
+              void handleNewNotebook();
+            }}
           >
             +
           </button>
@@ -442,6 +504,23 @@ export function WritingGuidanceNavPanel() {
                       <span>{formatTime(session.updatedAt)}</span>
                     </div>
                   </div>
+                  <button
+                    type="button"
+                    className={`bookNotesMoreBtn writingGuidanceSessionMore ${menuSession?.id === session.id ? "active" : ""}`}
+                    disabled={disabled || Boolean(reorderDragId)}
+                    title="重命名、迁移、删除"
+                    aria-label={`「${session.title}」更多操作`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (menuSession?.id === session.id) {
+                        closeMenu();
+                        return;
+                      }
+                      openMenu(session, e.currentTarget);
+                    }}
+                  >
+                    ⋯
+                  </button>
                 </div>
                 {expanded ? (
                   <div className="writingGuidanceTurnList">
@@ -547,6 +626,58 @@ export function WritingGuidanceNavPanel() {
           })
         )}
       </div>
+
+      {menuSession && menuPos
+        ? createPortal(
+            <div
+              ref={menuRef}
+              className="bookNotesEntryMenu bookNotesEntryMenuFloating"
+              role="menu"
+              style={{
+                position: "fixed",
+                top: menuPos.top,
+                left: menuPos.left,
+                transform: "translateX(-100%)"
+              }}
+            >
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  closeMenu();
+                  ctx.setRenamingSessionId(menuSession.id);
+                  setSessionRenameDraft(menuSession.title);
+                }}
+              >
+                重命名
+              </button>
+              {menuOtherNotebooks.length ? (
+                <div className="bookNotesMigrate">
+                  <span className="muted">迁移到</span>
+                  {menuOtherNotebooks.map((nb) => (
+                    <button
+                      key={nb.id}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => void handleMigrateSession(menuSession, nb.id)}
+                    >
+                      {nb.name}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              <button
+                type="button"
+                role="menuitem"
+                className="danger"
+                onClick={() => void handleDeleteSession(menuSession)}
+              >
+                删除
+              </button>
+            </div>,
+            document.body
+          )
+        : null}
     </div>
   );
 }

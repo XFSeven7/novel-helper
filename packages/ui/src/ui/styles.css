@@ -7434,13 +7434,19 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
 .writingGuidanceSessionRow {
   display: flex;
   align-items: flex-start;
-  gap: 4px;
+  gap: 2px;
 }
 
 .writingGuidanceSessionMain {
   flex: 1;
   min-width: 0;
   cursor: pointer;
+}
+
+.writingGuidanceSessionMore {
+  flex-shrink: 0;
+  align-self: center;
+  margin-top: 2px;
 }
 
 .writingGuidanceSessionChevron {
