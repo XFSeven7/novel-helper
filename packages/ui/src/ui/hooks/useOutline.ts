@@ -72,6 +72,13 @@ export function useOutline(slug: string | null, refreshToken = 0) {
     [saveNow]
   );
 
+  /** 服务端已持久化（如阶段 AI 流结束），仅同步内存，不触发 saving / 二次保存 */
+  const replaceOutlineFromServer = useCallback((next: OutlineIndex) => {
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    skipNextSave.current = true;
+    setOutline(next);
+  }, []);
+
   useEffect(() => {
     if (skipNextSave.current) {
       skipNextSave.current = false;
@@ -136,6 +143,7 @@ export function useOutline(slug: string | null, refreshToken = 0) {
     load,
     saveNow,
     updateOutline,
+    replaceOutlineFromServer,
     runAi,
     applyPreview
   };

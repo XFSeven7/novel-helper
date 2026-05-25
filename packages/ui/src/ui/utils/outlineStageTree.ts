@@ -1,9 +1,12 @@
+import type { StageChatTurn } from "../api";
+
 export type OutlineStageNode = {
   id: string;
   label: string;
   note?: string;
   children?: OutlineStageNode[];
   chapterRange?: string;
+  chatTurns?: StageChatTurn[];
 };
 
 export type FoundStageNode = {
@@ -59,7 +62,7 @@ export function collectStagePathLabels(roots: OutlineStageNode[], id: string): s
 export function updateStageNode(
   roots: OutlineStageNode[],
   id: string,
-  patch: Partial<Pick<OutlineStageNode, "label" | "note">>
+  patch: Partial<Pick<OutlineStageNode, "label" | "note" | "chatTurns">>
 ): OutlineStageNode[] {
   const mapNodes = (nodes: OutlineStageNode[]): OutlineStageNode[] =>
     nodes.map((node) => {

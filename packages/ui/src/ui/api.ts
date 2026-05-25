@@ -855,6 +855,12 @@ export async function getBookStats(bookId: string) {
   return await http<{ stats: BookStats }>(`/api/books/${encodeURIComponent(bookId)}/stats`);
 }
 
+export type StageChatTurn = {
+  id: string;
+  user: { content: string; createdAt: string };
+  assistant: { content: string; createdAt: string };
+};
+
 export type OutlineStageNode = {
   id: string;
   label: string;
@@ -862,6 +868,7 @@ export type OutlineStageNode = {
   children?: OutlineStageNode[];
   /** @deprecated v1 UI 不编辑，normalize 时保留 */
   chapterRange?: string;
+  chatTurns?: StageChatTurn[];
 };
 
 export type BookOutline = {

@@ -8079,6 +8079,105 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   gap: 8px;
 }
 
+.outlineStageSplit {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  min-height: 0;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.outlineStageSplit--dragging {
+  cursor: col-resize;
+  user-select: none;
+}
+
+.outlineStageCol {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 200px;
+  overflow: hidden;
+}
+
+.outlineStageColNote,
+.outlineStageColNoteOnly {
+  padding-right: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.outlineStageColChat {
+  flex: 1;
+  min-width: 200px;
+  border-left: none;
+}
+
+.outlineStageSplitDivider {
+  flex: none;
+  width: 8px;
+  cursor: col-resize;
+  background: color-mix(in srgb, var(--border) 40%, transparent);
+  transition: background 0.15s;
+}
+
+.outlineStageSplitDivider:hover,
+.outlineStageSplit--dragging .outlineStageSplitDivider {
+  background: color-mix(in srgb, var(--accent) 35%, var(--border));
+}
+
+.outlineStageChatPanel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  overflow: hidden;
+}
+
+.outlineStageChatHead {
+  flex: none;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 650;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.outlineStageChatScroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 10px 12px;
+}
+
+.outlineStageChatEmpty {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.outlineStageChatTurn {
+  margin-bottom: 12px;
+}
+
+.outlineStageChatTags {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px 0;
+}
+
+.outlineStageChatComposer {
+  flex: none;
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
 .outlineStageEditorCenter--empty {
   align-items: center;
   justify-content: center;
@@ -8086,7 +8185,7 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
 
 .outlineStageEditorNote {
   flex: 1;
-  min-height: 280px;
+  min-height: 120px;
   width: 100%;
   resize: none;
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);

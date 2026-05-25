@@ -102,6 +102,7 @@ import { runOutlineAi, type OutlineAiMode } from "./outlineAi.js";
 import { registerBookSetupRoutes } from "./bookSetup/routes.js";
 import { registerBookNotesRoutes } from "./bookNotes/routes.js";
 import { registerWritingGuidanceRoutes } from "./writingGuidance/routes.js";
+import { registerOutlineStageChatRoutes } from "./outlineStageChat/routes.js";
 import { migrateBookIds } from "./migrateBookIds.js";
 import { mergeOccurredNotes } from "./characterOccurredNotes.js";
 import { parseChapterExtract } from "./audit/auditExtractSchema.js";
@@ -4376,6 +4377,12 @@ registerBookSetupRoutes(app, {
 
 registerBookNotesRoutes(app, { getDataDir });
 registerWritingGuidanceRoutes(app, {
+  getDataDir,
+  readModelSettings,
+  createAiSdkModel: (cfg) => createAiSdkModel(cfg as ModelConfig),
+  sseWrite
+});
+registerOutlineStageChatRoutes(app, {
   getDataDir,
   readModelSettings,
   createAiSdkModel: (cfg) => createAiSdkModel(cfg as ModelConfig),

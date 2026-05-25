@@ -64,18 +64,27 @@ export function StageOutlineCenterTop({
 }
 
 export function StageOutlineCenterBody({
+  bookId,
   selectedId,
   busy,
-  onClearSelection
+  activeModelId,
+  modelOk,
+  onClearSelection,
+  onStatus
 }: {
+  bookId: string;
   selectedId: string | null;
   busy: boolean;
+  activeModelId: string | null;
+  modelOk: boolean;
   onClearSelection: () => void;
+  onStatus: (msg: string) => void;
 }) {
   const ctx = useOptionalOutlineBook();
   const outline = ctx?.outline;
   const saving = ctx?.saving ?? false;
-  const disabled = busy || saving || (ctx?.aiBusy ?? false);
+  const noteDisabled = busy || (ctx?.aiBusy ?? false);
+  const chatDisabled = busy || saving || (ctx?.aiBusy ?? false);
 
   useEffect(() => {
     if (!selectedId || !outline) return;
@@ -92,9 +101,13 @@ export function StageOutlineCenterBody({
 
   return (
     <OutlineStageEditorCenter
+      bookId={bookId}
       stages={outline?.book.mainlineStages}
       selectedId={selectedId}
-      disabled={disabled}
+      noteDisabled={noteDisabled}
+      chatDisabled={chatDisabled}
+      modelOk={modelOk}
+      activeModelId={activeModelId}
       onUpdate={(id, patch) => {
         ctx.updateOutline((prev) => ({
           ...prev,
@@ -104,6 +117,8 @@ export function StageOutlineCenterBody({
           }
         }));
       }}
+      onOutlineFromServer={ctx.replaceOutlineFromServer}
+      onError={onStatus}
     />
   );
 }

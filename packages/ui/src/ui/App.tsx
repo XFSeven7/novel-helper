@@ -3897,9 +3897,13 @@ export function App() {
             />
           ) : showStageOutlineCenter ? (
             <StageOutlineCenterBody
+              bookId={activeBook}
               selectedId={selectedStageNodeId}
               busy={busy}
+              activeModelId={activeModelId}
+              modelOk={okModelConfigs.length > 0}
               onClearSelection={() => setSelectedStageNodeId(null)}
+              onStatus={setStatus}
             />
           ) : showBookOverview ? (
             <div className="centerBookStats">

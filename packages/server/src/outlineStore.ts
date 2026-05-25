@@ -2,6 +2,10 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import crypto from "node:crypto";
 import type { ChapterMeta } from "./fsStore.js";
+import { normalizeStageChatTurns } from "./outlineStageChat/normalize.js";
+import type { StageChatTurn } from "./outlineStageChat/types.js";
+
+export type { StageChatTurn } from "./outlineStageChat/types.js";
 
 export type OutlineStageNode = {
   id: string;
@@ -9,6 +13,7 @@ export type OutlineStageNode = {
   note?: string;
   children?: OutlineStageNode[];
   chapterRange?: string;
+  chatTurns?: StageChatTurn[];
 };
 
 export type BookOutline = {
@@ -166,7 +171,15 @@ function normalizeStageNode(raw: any, fallbackIndex: number): OutlineStageNode |
   const children = childrenRaw
     .map((c: any, i: number) => normalizeStageNode(c, i))
     .filter((c: OutlineStageNode | null): c is OutlineStageNode => c !== null);
-  return { id, label, note, chapterRange, children };
+  const chatTurns = normalizeStageChatTurns(raw?.chatTurns);
+  return {
+    id,
+    label,
+    note,
+    chapterRange,
+    children,
+    ...(chatTurns ? { chatTurns } : {})
+  };
 }
 
 function normalizeMainlineStages(raw: unknown): OutlineStageNode[] | undefined {

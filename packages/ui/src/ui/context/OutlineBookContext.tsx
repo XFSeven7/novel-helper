@@ -10,6 +10,7 @@ type OutlineBookContextValue = {
   aiBusy: boolean;
   err: string;
   updateOutline: (updater: (prev: OutlineIndex) => OutlineIndex) => void;
+  replaceOutlineFromServer: (next: OutlineIndex) => void;
   saveNow: (next: OutlineIndex) => Promise<void>;
   runAi: (input: {
     mode: OutlineAiMode;
@@ -45,6 +46,7 @@ export function OutlineBookProvider({
     aiBusy: ctl.aiBusy,
     err: ctl.err,
     updateOutline: ctl.updateOutline,
+    replaceOutlineFromServer: ctl.replaceOutlineFromServer,
     saveNow: ctl.saveNow,
     runAi: ctl.runAi,
     applyPreview: ctl.applyPreview
