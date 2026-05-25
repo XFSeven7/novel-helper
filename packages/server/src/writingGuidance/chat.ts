@@ -26,6 +26,7 @@ export async function performWritingGuidanceChat(
   if (!cfg) throw new Error("未配置模型");
 
   const trimmed = trimMessagesForModel(opts.history);
+  const isFirstTurn = trimmed.length === 0;
   const sdkHistory = trimmed.map((m) => ({
     role: m.role as "user" | "assistant",
     content: m.content
@@ -38,7 +39,7 @@ export async function performWritingGuidanceChat(
   const r = await streamText({
     model,
     messages: [
-      { role: "system", content: buildWritingGuidanceSystemPrompt() },
+      { role: "system", content: buildWritingGuidanceSystemPrompt({ isFirstTurn }) },
       ...sdkHistory,
       { role: "user", content: userMessage }
     ],

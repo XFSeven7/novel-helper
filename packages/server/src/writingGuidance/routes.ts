@@ -11,7 +11,9 @@ import {
   getSessionForChat,
   patchNotebook,
   patchSession,
-  reorderSessions
+  patchTurn,
+  reorderSessions,
+  turnsForModel
 } from "./store.js";
 import { MAX_GUIDANCE_SESSION_MESSAGES, MAX_GUIDANCE_USER_MESSAGE_LEN } from "./types.js";
 
@@ -105,7 +107,8 @@ export function registerWritingGuidanceRoutes(app: FastifyInstance, deps: Writin
     const body = z
       .object({
         title: z.string().min(1).optional(),
-        notebookId: z.string().min(1).optional()
+        notebookId: z.string().min(1).optional(),
+        starred: z.boolean().optional()
       })
       .parse((req as { body: unknown }).body);
     try {
@@ -137,6 +140,35 @@ export function registerWritingGuidanceRoutes(app: FastifyInstance, deps: Writin
       return reply.code(400).send({ message: msg });
     }
   });
+
+  app.patch(
+    "/api/books/:bookId/writing-guidance/sessions/:sessionId/turns/:turnId",
+    async (req, reply) => {
+      const params = bookIdParam
+        .extend({ sessionId: z.string().min(1), turnId: z.string().min(1) })
+        .parse((req as { params: unknown }).params);
+      const body = z
+        .object({
+          hidden: z.boolean().optional(),
+          starred: z.boolean().optional()
+        })
+        .parse((req as { body: unknown }).body);
+      try {
+        const index = await patchTurn(
+          deps.getDataDir(),
+          params.bookId,
+          params.sessionId,
+          params.turnId,
+          body
+        );
+        return { index };
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg === "Not found") return reply.code(404).send({ message: msg });
+        return reply.code(400).send({ message: msg });
+      }
+    }
+  );
 
   app.delete("/api/books/:bookId/writing-guidance/sessions/:sessionId", async (req, reply) => {
     const params = bookIdParam
@@ -195,7 +227,7 @@ export function registerWritingGuidanceRoutes(app: FastifyInstance, deps: Writin
         deps.sseWrite(reply.raw, { type: "log", text: "生成写作指导…\n" });
         const assistantText = await performWritingGuidanceChat(deps, {
           modelConfigId: body.modelConfigId,
-          history: session.messages,
+          history: turnsForModel(session.turns),
           userMessage: body.userMessage,
           onDelta: (d) => {
             if (d) deps.sseWrite(reply.raw, { type: "delta", textDelta: d });

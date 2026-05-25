@@ -7,8 +7,10 @@ import {
   fetchWritingGuidance,
   patchGuidanceNotebook,
   patchGuidanceSession,
+  patchGuidanceTurn,
   reorderGuidanceSessions,
   type GuidanceSession,
+  type GuidanceTurn,
   type WritingGuidanceIndex
 } from "../api";
 import { consumeGuidanceSseStream, guidanceChatStreamUrl } from "../utils/guidanceSseStream";
@@ -98,8 +100,15 @@ export function useWritingGuidance(bookId: string | null) {
       setIndex(res.index);
       return { index: res.index, sessionId: res.sessionId };
     },
-    patchSession: (sessionId: string, patch: { title?: string; notebookId?: string }) =>
-      run(() => patchGuidanceSession(bookId!, sessionId, patch)),
+    patchSession: (
+      sessionId: string,
+      patch: { title?: string; notebookId?: string; starred?: boolean }
+    ) => run(() => patchGuidanceSession(bookId!, sessionId, patch)),
+    patchTurn: (
+      sessionId: string,
+      turnId: string,
+      patch: { hidden?: boolean; starred?: boolean }
+    ) => run(() => patchGuidanceTurn(bookId!, sessionId, turnId, patch)),
     reorderSessions: (notebookId: string, sessionIds: string[]) =>
       run(() => reorderGuidanceSessions(bookId!, notebookId, sessionIds)),
     removeSession: (sessionId: string) => run(() => deleteGuidanceSession(bookId!, sessionId)),
@@ -115,14 +124,33 @@ export function sortGuidanceSessions(sessions: GuidanceSession[], sortDesc: bool
   });
 }
 
+export function sessionHasStarredTurn(session: GuidanceSession): boolean {
+  return session.turns.some((t) => t.starred);
+}
+
+export function turnLabel(turn: GuidanceTurn, max = 40): string {
+  const t = turn.user.content.replace(/\s+/g, " ").trim();
+  if (!t) return "（空）";
+  return t.length <= max ? t : `${t.slice(0, max)}…`;
+}
+
 export function previewAssistantText(session: GuidanceSession): string {
-  for (let i = session.messages.length - 1; i >= 0; i--) {
-    const m = session.messages[i];
-    if (m?.role === "assistant") {
-      const one = m.content.replace(/\s+/g, " ").trim();
-      if (one.length <= 80) return one;
-      return `${one.slice(0, 80)}…`;
-    }
+  for (let i = session.turns.length - 1; i >= 0; i--) {
+    const a = session.turns[i]!.assistant.content.replace(/\s+/g, " ").trim();
+    if (a) return a.length <= 80 ? a : `${a.slice(0, 80)}…`;
   }
   return "";
+}
+
+export type GuidanceNavFilter = "all" | "starredSessions" | "starredTurns";
+
+export function filterGuidanceSessions(
+  sessions: GuidanceSession[],
+  filter: GuidanceNavFilter
+): GuidanceSession[] {
+  if (filter === "starredSessions") return sessions.filter((s) => s.starred);
+  if (filter === "starredTurns") {
+    return sessions.filter((s) => s.turns.some((t) => t.starred));
+  }
+  return sessions;
 }

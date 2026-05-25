@@ -1225,18 +1225,32 @@ export type GuidanceMessage = {
   createdAt: string;
 };
 
+export type GuidanceTurnPart = {
+  content: string;
+  createdAt: string;
+};
+
+export type GuidanceTurn = {
+  id: string;
+  user: GuidanceTurnPart;
+  assistant: GuidanceTurnPart;
+  hidden?: boolean;
+  starred?: boolean;
+};
+
 export type GuidanceSession = {
   id: string;
   notebookId: string;
   title: string;
-  messages: GuidanceMessage[];
+  turns: GuidanceTurn[];
+  starred?: boolean;
   order: number;
   createdAt: string;
   updatedAt: string;
 };
 
 export type WritingGuidanceIndex = {
-  version: 1;
+  version: 1 | 2;
   updatedAt: string;
   notebooks: BookNotebook[];
   sessions: GuidanceSession[];
@@ -1287,10 +1301,22 @@ export async function createGuidanceSession(
 export async function patchGuidanceSession(
   bookId: string,
   sessionId: string,
-  body: { title?: string; notebookId?: string }
+  body: { title?: string; notebookId?: string; starred?: boolean }
 ) {
   return await http<{ index: WritingGuidanceIndex }>(
     `/api/books/${encodeURIComponent(bookId)}/writing-guidance/sessions/${encodeURIComponent(sessionId)}`,
+    { method: "PATCH", body: JSON.stringify(body) }
+  );
+}
+
+export async function patchGuidanceTurn(
+  bookId: string,
+  sessionId: string,
+  turnId: string,
+  body: { hidden?: boolean; starred?: boolean }
+) {
+  return await http<{ index: WritingGuidanceIndex }>(
+    `/api/books/${encodeURIComponent(bookId)}/writing-guidance/sessions/${encodeURIComponent(sessionId)}/turns/${encodeURIComponent(turnId)}`,
     { method: "PATCH", body: JSON.stringify(body) }
   );
 }

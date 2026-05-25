@@ -1,7 +1,10 @@
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import type { GuidanceSession } from "../../api";
-import { sortGuidanceSessions } from "../../hooks/useWritingGuidance";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { GuidanceSession, GuidanceTurn } from "../../api";
+import {
+  sessionHasStarredTurn,
+  sortGuidanceSessions,
+  turnLabel
+} from "../../hooks/useWritingGuidance";
 import { useWritingGuidanceContext } from "./WritingGuidanceContext";
 
 const BUILT_IN_NOTEBOOK_ID = "default";
@@ -46,7 +49,6 @@ export function WritingGuidanceNavPanel() {
     handleNewSession,
     handleNewNotebook,
     handleDeleteNotebook,
-    handleDeleteSession,
     renamingId,
     renameDraft,
     setRenameDraft,
@@ -58,15 +60,21 @@ export function WritingGuidanceNavPanel() {
     commitRenameNotebook,
     commitRenameSession,
     startRenameNotebook,
-    previewAssistantText
+    expandedSessionIds,
+    toggleSessionExpanded,
+    applyExpandedToSessions,
+    showStarredOnly,
+    setShowStarredOnly,
+    revealAllTurnsSessionId,
+    hiddenBucketOpen,
+    toggleHiddenBucket,
+    scrollToTurn
   } = ctx;
 
   const notebooks = guidance.index?.notebooks ?? [];
   const activeNotebook = notebooks.find((n) => n.id === activeNotebookId) ?? notebooks[0];
   const hasCustomNotebook = notebooks.some(isCustomNotebook);
 
-  const [menuSession, setMenuSession] = useState<GuidanceSession | null>(null);
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const [reorderDragId, setReorderDragId] = useState<string | null>(null);
   const [draftOrderIds, setDraftOrderIds] = useState<string[] | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
@@ -74,8 +82,6 @@ export function WritingGuidanceNavPanel() {
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const suppressClickRef = useRef(false);
   const rowRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  const menuRef = useRef<HTMLDivElement>(null);
-  const menuTriggerRef = useRef<HTMLButtonElement | null>(null);
 
   const sortedSessions = useMemo(
     () => sortGuidanceSessions(sessions, sortDesc),
@@ -88,45 +94,26 @@ export function WritingGuidanceNavPanel() {
     return ids.map((id) => map.get(id)).filter((s): s is GuidanceSession => Boolean(s));
   }, [draftOrderIds, sortedSessions, sessions]);
 
-  const menuOtherNotebooks = useMemo(
-    () => notebooks.filter((n) => n.id !== menuSession?.notebookId),
-    [notebooks, menuSession?.notebookId]
+  const visibleSessions = useMemo(() => {
+    if (!showStarredOnly) return displaySessions;
+    return displaySessions.filter((s) => sessionHasStarredTurn(s));
+  }, [displaySessions, showStarredOnly]);
+
+  const visibleSessionIds = useMemo(
+    () => visibleSessions.map((s) => s.id),
+    [visibleSessions]
   );
 
-  const closeMenu = useCallback(() => {
-    setMenuSession(null);
-    setMenuPos(null);
-    menuTriggerRef.current = null;
-  }, []);
+  const allVisibleExpanded = useMemo(
+    () =>
+      visibleSessionIds.length > 0 &&
+      visibleSessionIds.every((id) => expandedSessionIds.has(id)),
+    [visibleSessionIds, expandedSessionIds]
+  );
 
-  const openMenu = useCallback((session: GuidanceSession, el: HTMLButtonElement) => {
-    const r = el.getBoundingClientRect();
-    setMenuSession(session);
-    setMenuPos({ top: r.bottom + 4, left: r.right });
-    menuTriggerRef.current = el;
-  }, []);
-
-  useLayoutEffect(() => {
-    if (!menuSession || !menuPos || !menuRef.current) return;
-    const rect = menuRef.current.getBoundingClientRect();
-    const pad = 8;
-    let top = menuPos.top;
-    let left = menuPos.left;
-    if (rect.bottom > window.innerHeight - pad) top = Math.max(pad, menuPos.top - rect.height - 8);
-    if (rect.left > window.innerWidth - pad) left = window.innerWidth - pad;
-    if (left !== menuPos.left || top !== menuPos.top) setMenuPos({ top, left });
-  }, [menuSession, menuPos]);
-
-  useEffect(() => {
-    if (!menuSession) return;
-    const onDown = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (menuRef.current?.contains(t) || menuTriggerRef.current?.contains(t)) return;
-      closeMenu();
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [menuSession, closeMenu]);
+  const toggleExpandAllVisible = useCallback(() => {
+    applyExpandedToSessions(visibleSessionIds, !allVisibleExpanded);
+  }, [applyExpandedToSessions, visibleSessionIds, allVisibleExpanded]);
 
   const clearLongPressTimer = () => {
     if (longPressTimerRef.current) {
@@ -161,7 +148,7 @@ export function WritingGuidanceNavPanel() {
 
   const findRowIdAtY = useCallback(
     (clientY: number) => {
-      for (const s of displaySessions) {
+      for (const s of visibleSessions) {
         const el = rowRefs.current.get(s.id);
         if (!el) continue;
         const r = el.getBoundingClientRect();
@@ -169,7 +156,7 @@ export function WritingGuidanceNavPanel() {
       }
       return null;
     },
-    [displaySessions]
+    [visibleSessions]
   );
 
   useEffect(() => {
@@ -196,17 +183,17 @@ export function WritingGuidanceNavPanel() {
     };
   }, [reorderDragId, findRowIdAtY, finishReorder]);
 
-  const handleMigrateSession = async (session: GuidanceSession, targetNotebookId: string) => {
-    closeMenu();
-    if (targetNotebookId === session.notebookId) return;
-    try {
-      await guidance.patchSession(session.id, { notebookId: targetNotebookId });
-      if (selectedSessionId === session.id && targetNotebookId !== activeNotebookId) {
-        setSelectedSessionId(null);
-      }
-    } catch {
-      /* */
+  const getNavTurnGroups = (session: GuidanceSession) => {
+    if (showStarredOnly) {
+      const starred = session.turns.filter((t) => t.starred);
+      return { main: starred, hidden: [] as GuidanceTurn[], showBucket: false };
     }
+    const revealAll = revealAllTurnsSessionId === session.id;
+    const turns = session.turns;
+    if (revealAll) return { main: turns, hidden: [] as GuidanceTurn[], showBucket: false };
+    const main = turns.filter((t) => !t.hidden);
+    const hidden = turns.filter((t) => t.hidden);
+    return { main, hidden, showBucket: hidden.length > 0 };
   };
 
   const onRowPointerDown = (sessionId: string, e: React.PointerEvent) => {
@@ -324,21 +311,53 @@ export function WritingGuidanceNavPanel() {
         ) : null}
       </div>
 
-      <div className="bookNotesToolbar">
-        <button type="button" className="btnSort" disabled={disabled} onClick={() => setSortDesc((v) => !v)}>
-          {sortDesc ? "⇩ 倒序" : "⇧ 正序"}
-        </button>
-        <button
-          type="button"
-          className="btnSort"
-          disabled={disabled || !activeNotebook}
-          onClick={() => void handleNewSession()}
-        >
-          + 新指导
-        </button>
-        <span className="bookNotesCount muted">{sessions.length} 条</span>
+      <div className="bookNotesToolbar writingGuidanceToolbar">
+        <div className="writingGuidanceToolbarMain">
+          <div className="writingGuidanceToolbarGroup" role="group" aria-label="列表视图">
+            <button
+              type="button"
+              className="btnSort"
+              disabled={disabled}
+              title={sortDesc ? "切换为升序" : "切换为降序"}
+              onClick={() => setSortDesc((v) => !v)}
+            >
+              {sortDesc ? "⇩ 倒序" : "⇧ 正序"}
+            </button>
+            <button
+              type="button"
+              className="btnSort"
+              disabled={disabled || visibleSessionIds.length === 0}
+              title={allVisibleExpanded ? "收起当前列表中的分组" : "展开当前列表中的分组"}
+              onClick={toggleExpandAllVisible}
+            >
+              {allVisibleExpanded ? "收起" : "展开"}
+            </button>
+            <button
+              type="button"
+              className={`btnSort ${showStarredOnly ? "active" : ""}`}
+              disabled={disabled}
+              title="只显示含收藏子项的分组"
+              onClick={() => setShowStarredOnly((v) => !v)}
+            >
+              ★ 收藏
+            </button>
+          </div>
+          <button
+            type="button"
+            className="btnSort writingGuidanceToolbarNew"
+            disabled={disabled || !activeNotebook}
+            onClick={() => void handleNewSession()}
+          >
+            + 新指导
+          </button>
+        </div>
+        <span className="bookNotesCount writingGuidanceToolbarCount muted">
+          {showStarredOnly ? `${visibleSessions.length}/${displaySessions.length}` : visibleSessions.length} 条
+        </span>
       </div>
-      <p className="writingGuidanceListHint muted">长按拖动排序 · ⋯ 迁移到其他分组</p>
+      <p className="writingGuidanceListHint muted">
+        点击分组展开/收起 · 子项右侧 ★ 收藏 · 双击子项可隐藏 · 长按排序
+      </p>
 
       {guidance.error ? <div className="bookNotesErr">{guidance.error}</div> : null}
 
@@ -347,138 +366,187 @@ export function WritingGuidanceNavPanel() {
           <div className="bookNotesEmpty muted">加载中…</div>
         ) : displaySessions.length === 0 ? (
           <div className="bookNotesEmpty muted">暂无指导，点「+ 新指导」开始</div>
+        ) : visibleSessions.length === 0 ? (
+          <div className="bookNotesEmpty muted">暂无收藏，在子项右侧点 ★ 标记</div>
         ) : (
-          displaySessions.map((session) => {
+          visibleSessions.map((session) => {
+            const hasStarred = sessionHasStarredTurn(session);
             const active = session.id === selectedSessionId;
-            const preview = previewAssistantText(session);
             const dragging = reorderDragId === session.id;
             const dropTarget = dropTargetId === session.id && reorderDragId && !dragging;
+            const expanded = expandedSessionIds.has(session.id);
+            const { main: mainTurns, hidden: hiddenTurns, showBucket } = getNavTurnGroups(session);
+            const bucketOpen = hiddenBucketOpen.has(session.id);
             return (
               <div
                 key={session.id}
+                className={`writingGuidanceSessionTreeItem ${hasStarred ? "hasStarredTurns" : ""}`}
                 ref={(el) => {
                   if (el) rowRefs.current.set(session.id, el);
                   else rowRefs.current.delete(session.id);
                 }}
-                className={`writingGuidanceSessionRow ${active ? "active" : ""} ${dragging ? "reorderDragging" : ""} ${dropTarget ? "reorderDropTarget" : ""}`}
-                role="button"
-                tabIndex={0}
-                onClick={() => {
-                  if (suppressClickRef.current || reorderDragId) return;
-                  setSelectedSessionId(session.id);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !reorderDragId) setSelectedSessionId(session.id);
-                }}
-                onPointerDown={(e) => onRowPointerDown(session.id, e)}
-                onPointerUp={onRowPointerUp}
-                onPointerCancel={onRowPointerUp}
               >
-                {renamingSessionId === session.id ? (
-                  <input
-                    className="writingGuidanceSessionRename"
-                    value={sessionRenameDraft}
-                    autoFocus
-                    disabled={disabled}
-                    onClick={(e) => e.stopPropagation()}
-                    onChange={(e) => setSessionRenameDraft(e.target.value)}
-                    onBlur={() => void commitRenameSession()}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") void commitRenameSession();
-                      if (e.key === "Escape") ctx.setRenamingSessionId(null);
-                    }}
-                  />
-                ) : (
+                <div
+                  className={`writingGuidanceSessionRow ${active ? "active" : ""} ${dragging ? "reorderDragging" : ""} ${dropTarget ? "reorderDropTarget" : ""}`}
+                  onPointerDown={(e) => onRowPointerDown(session.id, e)}
+                  onPointerUp={onRowPointerUp}
+                  onPointerCancel={onRowPointerUp}
+                >
                   <div
-                    className="writingGuidanceSessionTitle"
-                    onDoubleClick={(e) => {
-                      e.stopPropagation();
-                      ctx.setRenamingSessionId(session.id);
-                      setSessionRenameDraft(session.title);
+                    className="writingGuidanceSessionMain"
+                    role="button"
+                    tabIndex={0}
+                    aria-expanded={expanded}
+                    onClick={() => {
+                      if (suppressClickRef.current || reorderDragId) return;
+                      setSelectedSessionId(session.id);
+                      toggleSessionExpanded(session.id);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !reorderDragId) {
+                        setSelectedSessionId(session.id);
+                        toggleSessionExpanded(session.id);
+                      }
                     }}
                   >
-                    {session.title}
-                  </div>
-                )}
-                <div className="writingGuidanceSessionMeta muted">
-                  <span>{formatTime(session.updatedAt)}</span>
-                  <div className="writingGuidanceSessionActions">
-                    <button
-                      type="button"
-                      className={`bookNotesMoreBtn ${menuSession?.id === session.id ? "active" : ""}`}
-                      disabled={disabled || Boolean(reorderDragId)}
-                      title="重命名、迁移、删除"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        if (menuSession?.id === session.id) {
-                          closeMenu();
-                          return;
-                        }
-                        openMenu(session, e.currentTarget);
-                      }}
-                    >
-                      ⋯
-                    </button>
+                    {renamingSessionId === session.id ? (
+                      <input
+                        className="writingGuidanceSessionRename"
+                        value={sessionRenameDraft}
+                        autoFocus
+                        disabled={disabled}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => setSessionRenameDraft(e.target.value)}
+                        onBlur={() => void commitRenameSession()}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") void commitRenameSession();
+                          if (e.key === "Escape") ctx.setRenamingSessionId(null);
+                        }}
+                      />
+                    ) : (
+                      <div
+                        className="writingGuidanceSessionTitle"
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          ctx.setRenamingSessionId(session.id);
+                          setSessionRenameDraft(session.title);
+                        }}
+                      >
+                        <span className="writingGuidanceSessionChevron" aria-hidden>
+                          {expanded ? "▼" : "▶"}
+                        </span>
+                        {session.title}
+                      </div>
+                    )}
+                    <div className="writingGuidanceSessionMeta muted">
+                      <span>{formatTime(session.updatedAt)}</span>
+                    </div>
                   </div>
                 </div>
-                {preview ? <div className="writingGuidanceSessionPreview muted">{preview}</div> : null}
+                {expanded ? (
+                  <div className="writingGuidanceTurnList">
+                    {mainTurns.map((turn) => (
+                      <div
+                        key={turn.id}
+                        className={`writingGuidanceTurnRow ${turn.hidden ? "isHidden" : ""} ${turn.starred ? "starred" : ""}`}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => {
+                          if (reorderDragId) return;
+                          setSelectedSessionId(session.id);
+                          scrollToTurn(turn.id);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            setSelectedSessionId(session.id);
+                            scrollToTurn(turn.id);
+                          }
+                        }}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          if (reorderDragId || disabled) return;
+                          void guidance.patchTurn(session.id, turn.id, { hidden: !turn.hidden });
+                        }}
+                        title="双击隐藏/恢复此轮"
+                      >
+                        <span className="writingGuidanceTurnLabel">
+                          {turn.hidden ? "（已隐藏）" : ""}
+                          {turnLabel(turn)}
+                        </span>
+                        <div className="writingGuidanceTurnActions">
+                          <button
+                            type="button"
+                            className={`writingGuidanceStarBtn sm ${turn.starred ? "on" : ""}`}
+                            title={turn.starred ? "取消标记" : "标记重要"}
+                            disabled={disabled}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void guidance.patchTurn(session.id, turn.id, {
+                                starred: !turn.starred
+                              });
+                            }}
+                          >
+                            ★
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                    {showBucket ? (
+                      <>
+                        <button
+                          type="button"
+                          className="writingGuidanceHiddenBucket muted"
+                          onClick={() => toggleHiddenBucket(session.id)}
+                        >
+                          已隐藏 {hiddenTurns.length} 条 {bucketOpen ? "▲" : "▼"}
+                        </button>
+                        {bucketOpen
+                          ? hiddenTurns.map((turn) => (
+                              <div
+                                key={turn.id}
+                                className="writingGuidanceTurnRow isHidden"
+                                role="button"
+                                tabIndex={0}
+                                onClick={() => {
+                                  setSelectedSessionId(session.id);
+                                  scrollToTurn(turn.id);
+                                }}
+                                onDoubleClick={(e) => {
+                                  e.stopPropagation();
+                                  if (disabled) return;
+                                  void guidance.patchTurn(session.id, turn.id, { hidden: false });
+                                }}
+                                title="双击恢复显示"
+                              >
+                                <span className="writingGuidanceTurnLabel">（已隐藏）{turnLabel(turn)}</span>
+                                <div className="writingGuidanceTurnActions">
+                                  <button
+                                    type="button"
+                                    className={`writingGuidanceStarBtn sm ${turn.starred ? "on" : ""}`}
+                                    title={turn.starred ? "取消标记" : "标记重要"}
+                                    disabled={disabled}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      void guidance.patchTurn(session.id, turn.id, {
+                                        starred: !turn.starred
+                                      });
+                                    }}
+                                  >
+                                    ★
+                                  </button>
+                                </div>
+                              </div>
+                            ))
+                          : null}
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             );
           })
         )}
       </div>
-
-      {menuSession && menuPos
-        ? createPortal(
-            <div
-              ref={menuRef}
-              className="bookNotesEntryMenu bookNotesEntryMenuFloating"
-              role="menu"
-              style={{
-                position: "fixed",
-                top: menuPos.top,
-                left: menuPos.left,
-                transform: "translateX(-100%)"
-              }}
-            >
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  closeMenu();
-                  ctx.setRenamingSessionId(menuSession.id);
-                  setSessionRenameDraft(menuSession.title);
-                }}
-              >
-                重命名
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                className="danger"
-                onClick={() => void handleDeleteSession(menuSession)}
-              >
-                删除
-              </button>
-              {menuOtherNotebooks.length ? (
-                <div className="bookNotesMigrate">
-                  <span className="muted">迁移到</span>
-                  {menuOtherNotebooks.map((nb) => (
-                    <button
-                      key={nb.id}
-                      type="button"
-                      role="menuitem"
-                      onClick={() => void handleMigrateSession(menuSession, nb.id)}
-                    >
-                      {nb.name}
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>,
-            document.body
-          )
-        : null}
     </div>
   );
 }

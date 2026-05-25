@@ -7356,6 +7356,196 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   line-height: 1.35;
 }
 
+.writingGuidanceToolbar {
+  align-items: center;
+  gap: 10px;
+}
+
+.writingGuidanceToolbarMain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.writingGuidanceToolbarGroup {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 2px;
+  border-radius: 7px;
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  background: color-mix(in srgb, var(--panel) 92%, var(--bg));
+}
+
+.writingGuidanceToolbarGroup .btnSort {
+  border: none;
+  border-radius: 5px;
+  margin: 0;
+  padding: 3px 8px;
+  box-shadow: none;
+}
+
+.writingGuidanceToolbarGroup .btnSort:not(:first-child) {
+  border-left: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  border-radius: 0;
+}
+
+.writingGuidanceToolbarGroup .btnSort:first-child {
+  border-top-left-radius: 5px;
+  border-bottom-left-radius: 5px;
+}
+
+.writingGuidanceToolbarGroup .btnSort:last-child {
+  border-top-right-radius: 5px;
+  border-bottom-right-radius: 5px;
+}
+
+.writingGuidanceToolbarGroup .btnSort.active {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+  color: var(--text);
+  z-index: 1;
+}
+
+.writingGuidanceToolbarNew {
+  flex-shrink: 0;
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel));
+}
+
+.writingGuidanceToolbarCount {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.writingGuidanceSessionTreeItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.writingGuidanceSessionTreeItem.hasStarredTurns .writingGuidanceSessionTitle {
+  color: color-mix(in srgb, #e6a817 55%, var(--text));
+}
+
+.writingGuidanceSessionRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.writingGuidanceSessionMain {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.writingGuidanceSessionChevron {
+  display: inline-block;
+  width: 1em;
+  margin-right: 4px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.writingGuidanceStarBtn {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px;
+  line-height: 1;
+}
+
+.writingGuidanceStarBtn.on {
+  color: #e6a817;
+}
+
+.writingGuidanceStarBtn.sm {
+  font-size: 10px;
+  padding: 0 2px;
+}
+
+.writingGuidanceTurnList {
+  margin-left: 22px;
+  padding-left: 6px;
+  border-left: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.writingGuidanceTurnActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.writingGuidanceTurnRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.writingGuidanceTurnRow:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.writingGuidanceTurnRow.isHidden {
+  opacity: 0.65;
+}
+
+.writingGuidanceTurnRow.starred .writingGuidanceTurnLabel {
+  color: color-mix(in srgb, #e6a817 70%, var(--text));
+}
+
+.writingGuidanceTurnLabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.writingGuidanceHiddenBucket {
+  border: none;
+  background: transparent;
+  text-align: left;
+  font-size: 11px;
+  padding: 4px 6px;
+  cursor: pointer;
+}
+
+.writingGuidanceShowHiddenBtn {
+  display: block;
+  width: calc(100% - 16px);
+  margin: 4px 8px;
+  border: none;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+  border-radius: 4px;
+  font-size: 11px;
+  padding: 4px 8px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.writingGuidanceTurn {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
 .writingGuidanceChat {
   flex: 1;
   min-height: 0;

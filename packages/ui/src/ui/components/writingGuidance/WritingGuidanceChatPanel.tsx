@@ -1,8 +1,20 @@
-import React from "react";
+import React, { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import type { GuidanceTurn } from "../../api";
 import { WRITING_GUIDANCE_TAGS } from "./writingGuidanceTags";
 import { useWritingGuidanceContext } from "./WritingGuidanceContext";
+
+function visibleTurnsForChat(
+  turns: GuidanceTurn[],
+  showHidden: boolean,
+  showStarredOnly: boolean
+): GuidanceTurn[] {
+  let list = turns;
+  if (showStarredOnly) list = list.filter((t) => t.starred);
+  if (!showHidden) list = list.filter((t) => !t.hidden);
+  return list;
+}
 
 export function WritingGuidanceChatPanel() {
   const {
@@ -14,21 +26,42 @@ export function WritingGuidanceChatPanel() {
     streamDraft,
     handleSend,
     composerRef,
-    chatEndRef
+    chatEndRef,
+    showHiddenInChat,
+    setShowHiddenInChat,
+    showStarredOnly,
+    registerTurnAnchor
   } = useWritingGuidanceContext();
 
-  const renderMessages = () => {
-    const msgs = selectedSession?.messages ?? [];
-    const items: React.ReactNode[] = msgs.map((m, i) => (
-      <div
-        key={`${m.createdAt}-${i}`}
-        className={`writingGuidanceMsg ${m.role === "user" ? "user" : "assistant"}`}
-      >
-        {m.role === "assistant" ? (
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
-        ) : (
-          <div className="writingGuidanceMsgPlain">{m.content}</div>
-        )}
+  const hiddenCount = useMemo(
+    () => (selectedSession?.turns ?? []).filter((t) => t.hidden).length,
+    [selectedSession?.turns]
+  );
+
+  const displayTurns = useMemo(
+    () =>
+      selectedSession
+        ? visibleTurnsForChat(selectedSession.turns, showHiddenInChat, showStarredOnly)
+        : [],
+    [selectedSession, showHiddenInChat, showStarredOnly]
+  );
+
+  const renderTurns = () => {
+    const items: React.ReactNode[] = displayTurns.map((turn) => (
+      <div key={turn.id} className="writingGuidanceTurn" data-turn-id={turn.id}>
+        <div className="writingGuidanceMsg user">
+          <div className="writingGuidanceMsgPlain">{turn.user.content}</div>
+        </div>
+        <div
+          className="writingGuidanceMsg assistant"
+          ref={(el) => registerTurnAnchor(turn.id, el)}
+        >
+          {turn.assistant.content ? (
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{turn.assistant.content}</ReactMarkdown>
+          ) : (
+            <span className="muted">（无回复）</span>
+          )}
+        </div>
       </div>
     ));
     if (streaming && streamDraft) {
@@ -57,7 +90,25 @@ export function WritingGuidanceChatPanel() {
         ) : (
           <>
             <div className="writingGuidanceChatHead">{selectedSession.title}</div>
-            <div className="writingGuidanceChatScroll">{renderMessages()}</div>
+            {hiddenCount > 0 && !showHiddenInChat ? (
+              <button
+                type="button"
+                className="writingGuidanceShowHiddenBtn muted"
+                onClick={() => setShowHiddenInChat(true)}
+              >
+                显示已隐藏 ({hiddenCount})
+              </button>
+            ) : null}
+            {showHiddenInChat && hiddenCount > 0 ? (
+              <button
+                type="button"
+                className="writingGuidanceShowHiddenBtn muted"
+                onClick={() => setShowHiddenInChat(false)}
+              >
+                收起已隐藏
+              </button>
+            ) : null}
+            <div className="writingGuidanceChatScroll">{renderTurns()}</div>
             <div ref={chatEndRef} />
           </>
         )}

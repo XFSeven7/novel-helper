@@ -7,12 +7,16 @@ import {
   DEFAULT_GUIDANCE_SESSION_TITLE,
   MAX_GUIDANCE_MODEL_MESSAGES,
   MAX_GUIDANCE_SESSION_MESSAGES,
+  MAX_GUIDANCE_SESSION_TURNS,
   MAX_GUIDANCE_USER_MESSAGE_LEN,
   type GuidanceMessage,
   type GuidanceNotebook,
   type GuidanceSession,
+  type GuidanceTurn,
+  type GuidanceTurnPart,
   type WritingGuidanceIndex
 } from "./types.js";
+import { splitAssistantSessionTitle } from "./parseReply.js";
 
 async function exists(p: string): Promise<boolean> {
   try {
@@ -27,10 +31,85 @@ function guidanceIndexPath(dataDir: string, bookId: string) {
   return path.join(dataDir, bookId, "writing-guidance", "index.json");
 }
 
+export function migrateMessagesToTurns(
+  messages: Array<{ role: string; content: string; createdAt: string }>
+): GuidanceTurn[] {
+  const turns: GuidanceTurn[] = [];
+  let pendingUser: GuidanceTurnPart | null = null;
+  for (const m of messages) {
+    if (m.role === "user") {
+      if (pendingUser) {
+        turns.push({
+          id: crypto.randomUUID(),
+          user: pendingUser,
+          assistant: { content: "", createdAt: pendingUser.createdAt }
+        });
+      }
+      const content = String(m.content || "").trim();
+      if (!content) continue;
+      pendingUser = {
+        content: content.slice(0, MAX_GUIDANCE_USER_MESSAGE_LEN),
+        createdAt: typeof m.createdAt === "string" ? m.createdAt : new Date().toISOString()
+      };
+    } else if (m.role === "assistant" && pendingUser) {
+      turns.push({
+        id: crypto.randomUUID(),
+        user: pendingUser,
+        assistant: {
+          content: String(m.content || "")
+            .trim()
+            .slice(0, MAX_GUIDANCE_USER_MESSAGE_LEN * 4),
+          createdAt: typeof m.createdAt === "string" ? m.createdAt : new Date().toISOString()
+        }
+      });
+      pendingUser = null;
+    }
+  }
+  if (pendingUser) {
+    turns.push({
+      id: crypto.randomUUID(),
+      user: pendingUser,
+      assistant: { content: "", createdAt: pendingUser.createdAt }
+    });
+  }
+  if (turns.length > MAX_GUIDANCE_SESSION_TURNS) {
+    return turns.slice(-MAX_GUIDANCE_SESSION_TURNS);
+  }
+  return turns;
+}
+
+function normalizeTurn(raw: unknown): GuidanceTurn | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as GuidanceTurn;
+  const id = String(o.id || "").trim();
+  if (!id) return null;
+  const userContent = String(o.user?.content ?? "").trim();
+  if (!userContent) return null;
+  const now = new Date().toISOString();
+  const userCreated = typeof o.user?.createdAt === "string" ? o.user.createdAt : now;
+  const assistantCreated =
+    typeof o.assistant?.createdAt === "string" ? o.assistant.createdAt : userCreated;
+  return {
+    id,
+    user: {
+      content: userContent.slice(0, MAX_GUIDANCE_USER_MESSAGE_LEN),
+      createdAt: userCreated
+    },
+    assistant: {
+      content: String(o.assistant?.content ?? "")
+        .trim()
+        .slice(0, MAX_GUIDANCE_USER_MESSAGE_LEN * 4),
+      createdAt: assistantCreated
+    },
+    ...(o.hidden ? { hidden: true } : {}),
+    ...(o.starred ? { starred: true } : {})
+  };
+}
+
 export function createDefaultGuidanceIndex(): WritingGuidanceIndex {
   const now = new Date().toISOString();
   return {
-    version: 1,
+    version: 2,
     updatedAt: now,
     notebooks: [
       {
@@ -73,28 +152,39 @@ function normalizeMessage(raw: unknown): GuidanceMessage | null {
 
 function normalizeSession(raw: unknown): GuidanceSession | null {
   if (!raw || typeof raw !== "object") return null;
-  const o = raw as GuidanceSession;
+  const o = raw as GuidanceSession & { messages?: GuidanceMessage[] };
   const id = String(o.id || "").trim();
   const notebookId = String(o.notebookId || "").trim();
   if (!id || !notebookId) return null;
-  const messages: GuidanceMessage[] = [];
-  if (Array.isArray(o.messages)) {
-    for (const m of o.messages) {
-      const msg = normalizeMessage(m);
-      if (msg) messages.push(msg);
+
+  let turns: GuidanceTurn[] = [];
+  if (Array.isArray(o.turns)) {
+    for (const t of o.turns) {
+      const turn = normalizeTurn(t);
+      if (turn) turns.push(turn);
     }
   }
-  if (messages.length > MAX_GUIDANCE_SESSION_MESSAGES) {
-    messages.splice(0, messages.length - MAX_GUIDANCE_SESSION_MESSAGES);
+  if (turns.length === 0 && Array.isArray(o.messages)) {
+    const legacy: GuidanceMessage[] = [];
+    for (const m of o.messages) {
+      const msg = normalizeMessage(m);
+      if (msg) legacy.push(msg);
+    }
+    if (legacy.length > 0) turns = migrateMessagesToTurns(legacy);
   }
+  if (turns.length > MAX_GUIDANCE_SESSION_TURNS) {
+    turns = turns.slice(-MAX_GUIDANCE_SESSION_TURNS);
+  }
+
   const now = new Date().toISOString();
   const title = String(o.title || "").trim() || DEFAULT_GUIDANCE_SESSION_TITLE;
-  const order = Number.isFinite((o as GuidanceSession).order) ? Number((o as GuidanceSession).order) : NaN;
+  const order = Number.isFinite(o.order) ? Number(o.order) : NaN;
   return {
     id,
     notebookId,
     title: title.slice(0, 120),
-    messages,
+    turns,
+    ...(o.starred ? { starred: true } : {}),
     order,
     createdAt: typeof o.createdAt === "string" ? o.createdAt : now,
     updatedAt: typeof o.updatedAt === "string" ? o.updatedAt : now
@@ -164,7 +254,7 @@ export function normalizeGuidanceIndex(parsed: unknown): WritingGuidanceIndex {
   }
 
   return {
-    version: 1,
+    version: 2,
     updatedAt: typeof p.updatedAt === "string" ? p.updatedAt : new Date().toISOString(),
     notebooks,
     sessions: ensureSessionOrders(sessions)
@@ -174,6 +264,23 @@ export function normalizeGuidanceIndex(parsed: unknown): WritingGuidanceIndex {
 export function trimMessagesForModel(messages: GuidanceMessage[]): GuidanceMessage[] {
   if (messages.length <= MAX_GUIDANCE_MODEL_MESSAGES) return messages;
   return messages.slice(-MAX_GUIDANCE_MODEL_MESSAGES);
+}
+
+export function turnsForModel(turns: GuidanceTurn[]): GuidanceMessage[] {
+  const out: GuidanceMessage[] = [];
+  for (const t of turns) {
+    if (t.hidden) continue;
+    const userText = t.user.content.trim();
+    const assistantText = t.assistant.content.trim();
+    if (!userText || !assistantText) continue;
+    out.push({ role: "user", content: userText, createdAt: t.user.createdAt });
+    out.push({
+      role: "assistant",
+      content: assistantText,
+      createdAt: t.assistant.createdAt
+    });
+  }
+  return trimMessagesForModel(out);
 }
 
 export async function readGuidanceIndex(
@@ -285,7 +392,7 @@ export async function addSession(
     id: sessionId,
     notebookId: input.notebookId,
     title: title.slice(0, 120),
-    messages: [],
+    turns: [],
     order: maxOrderInNotebook(index.sessions, input.notebookId) + 1,
     createdAt: now,
     updatedAt: now
@@ -301,7 +408,7 @@ export async function patchSession(
   dataDir: string,
   bookId: string,
   sessionId: string,
-  patch: { title?: string; notebookId?: string }
+  patch: { title?: string; notebookId?: string; starred?: boolean }
 ): Promise<WritingGuidanceIndex> {
   const index = await ensureGuidanceIndex(dataDir, bookId);
   const i = index.sessions.findIndex((s) => s.id === sessionId);
@@ -320,11 +427,38 @@ export async function patchSession(
     ...current,
     ...(patch.title !== undefined ? { title: patch.title.trim().slice(0, 120) || current.title } : {}),
     ...(patch.notebookId !== undefined ? { notebookId: patch.notebookId } : {}),
+    ...(patch.starred !== undefined ? { starred: patch.starred } : {}),
     order,
     updatedAt: now
   };
   const sessions = [...index.sessions];
   sessions[i] = nextSession;
+  return writeGuidanceIndex(dataDir, bookId, { ...index, sessions });
+}
+
+export async function patchTurn(
+  dataDir: string,
+  bookId: string,
+  sessionId: string,
+  turnId: string,
+  patch: { hidden?: boolean; starred?: boolean }
+): Promise<WritingGuidanceIndex> {
+  const index = await ensureGuidanceIndex(dataDir, bookId);
+  const i = index.sessions.findIndex((s) => s.id === sessionId);
+  if (i < 0) throw new Error("Not found");
+  const current = index.sessions[i]!;
+  const ti = current.turns.findIndex((t) => t.id === turnId);
+  if (ti < 0) throw new Error("Not found");
+  const turn = current.turns[ti]!;
+  const nextTurn: GuidanceTurn = {
+    ...turn,
+    ...(patch.hidden !== undefined ? { hidden: patch.hidden } : {}),
+    ...(patch.starred !== undefined ? { starred: patch.starred } : {})
+  };
+  const turns = [...current.turns];
+  turns[ti] = nextTurn;
+  const sessions = [...index.sessions];
+  sessions[i] = { ...current, turns, updatedAt: new Date().toISOString() };
   return writeGuidanceIndex(dataDir, bookId, { ...index, sessions });
 }
 
@@ -365,7 +499,7 @@ export async function deleteSession(
 export function getSessionForChat(index: WritingGuidanceIndex, sessionId: string): GuidanceSession {
   const session = findSession(index, sessionId);
   if (!session) throw new Error("Not found");
-  if (session.messages.length >= MAX_GUIDANCE_SESSION_MESSAGES) {
+  if (session.turns.length >= MAX_GUIDANCE_SESSION_TURNS) {
     throw new Error("Session message limit");
   }
   return session;
@@ -383,19 +517,34 @@ export async function appendChatTurn(
   if (i < 0) throw new Error("Not found");
   const current = index.sessions[i]!;
   const text = userContent.trim().slice(0, MAX_GUIDANCE_USER_MESSAGE_LEN);
-  const assistant = assistantContent.trim().slice(0, MAX_GUIDANCE_USER_MESSAGE_LEN * 4);
-  if (!text || !assistant) throw new Error("Content required");
+  const rawAssistant = assistantContent.trim();
+  if (!text || !rawAssistant) throw new Error("Content required");
+  const isFirstTurn = current.turns.length === 0;
+  const parsed = isFirstTurn
+    ? splitAssistantSessionTitle(rawAssistant)
+    : { content: rawAssistant };
+  const assistant = parsed.content.slice(0, MAX_GUIDANCE_USER_MESSAGE_LEN * 4);
+  if (!assistant) throw new Error("Content required");
   const now = new Date().toISOString();
-  const userMsg: GuidanceMessage = { role: "user", content: text, createdAt: now };
-  const assistantMsg: GuidanceMessage = { role: "assistant", content: assistant, createdAt: now };
+  const userPart: GuidanceTurnPart = { content: text, createdAt: now };
+  const assistantPart: GuidanceTurnPart = { content: assistant, createdAt: now };
   let title = current.title;
-  if (current.messages.length === 0 && title === DEFAULT_GUIDANCE_SESSION_TITLE) {
-    title = text.slice(0, 40);
+  const turn: GuidanceTurn = {
+    id: crypto.randomUUID(),
+    user: userPart,
+    assistant: assistantPart
+  };
+  if (isFirstTurn) {
+    if (parsed.sessionTitle) {
+      title = parsed.sessionTitle.slice(0, 120);
+    } else if (title === DEFAULT_GUIDANCE_SESSION_TITLE) {
+      title = text.slice(0, 14);
+    }
   }
   const nextSession: GuidanceSession = {
     ...current,
     title,
-    messages: [...current.messages, userMsg, assistantMsg],
+    turns: [...current.turns, turn],
     updatedAt: now
   };
   const sessions = [...index.sessions];
