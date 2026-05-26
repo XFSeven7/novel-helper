@@ -26,7 +26,7 @@ export function WritingGuidanceChatPanel() {
     streamDraft,
     handleSend,
     composerRef,
-    chatEndRef,
+    chatScrollRef,
     showHiddenInChat,
     setShowHiddenInChat,
     showStarredOnly,
@@ -108,8 +108,9 @@ export function WritingGuidanceChatPanel() {
                 收起已隐藏
               </button>
             ) : null}
-            <div className="writingGuidanceChatScroll">{renderTurns()}</div>
-            <div ref={chatEndRef} />
+            <div className="writingGuidanceChatScroll" ref={chatScrollRef}>
+              {renderTurns()}
+            </div>
           </>
         )}
       </div>

@@ -7,6 +7,11 @@ import {
   useWritingGuidance
 } from "../../hooks/useWritingGuidance";
 import { useLocalStorageState } from "../../hooks/useLocalStorageState";
+import {
+  isChatNearBottom,
+  scrollChatToBottom,
+  scrollChatToBottomAfterPaint
+} from "../../utils/chatScroll";
 
 const BUILT_IN_NOTEBOOK_ID = "default";
 
@@ -45,7 +50,7 @@ export type WritingGuidanceContextValue = {
   commitRenameSession: () => Promise<void>;
   startRenameNotebook: (nb: { id: string; name: string }) => void;
   composerRef: React.RefObject<HTMLTextAreaElement | null>;
-  chatEndRef: React.RefObject<HTMLDivElement | null>;
+  chatScrollRef: React.RefObject<HTMLDivElement | null>;
   previewAssistantText: (session: GuidanceSession) => string;
   expandedSessionIds: Set<string>;
   toggleSessionExpanded: (sessionId: string) => void;
@@ -104,7 +109,7 @@ function WritingGuidanceProviderInner({
   const [tabsEditMode, setTabsEditMode] = useState(false);
   const [renamingSessionId, setRenamingSessionId] = useState<string | null>(null);
   const [sessionRenameDraft, setSessionRenameDraft] = useState("");
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatScrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const turnAnchorsRef = useRef<Map<string, HTMLElement>>(new Map());
   const [expandedRaw, setExpandedRaw] = useLocalStorageState<string>({
@@ -206,8 +211,16 @@ function WritingGuidanceProviderInner({
   }, [showStarredOnly, selectedSessionId, sessions]);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [selectedSession?.turns.length, streamDraft, streaming]);
+    const el = chatScrollRef.current;
+    if (!el || !isChatNearBottom(el)) return;
+    scrollChatToBottom(el, "auto");
+  }, [streamDraft]);
+
+  useEffect(() => {
+    const el = chatScrollRef.current;
+    if (!el || !isChatNearBottom(el)) return;
+    scrollChatToBottom(el, "auto");
+  }, [selectedSession?.turns.length]);
 
   const disabled = busy || guidance.loading || streaming;
 
@@ -260,6 +273,7 @@ function WritingGuidanceProviderInner({
       setComposer("");
       setStreaming(true);
       setStreamDraft("");
+      scrollChatToBottomAfterPaint(() => chatScrollRef.current, "auto");
       await guidance.chatStream(sessionId, text, activeModelId, {
         onDelta: (d) => setStreamDraft((s) => s + d)
       });
@@ -398,7 +412,7 @@ function WritingGuidanceProviderInner({
     commitRenameSession,
     startRenameNotebook,
     composerRef,
-    chatEndRef,
+    chatScrollRef,
     previewAssistantText,
     expandedSessionIds,
     toggleSessionExpanded,
