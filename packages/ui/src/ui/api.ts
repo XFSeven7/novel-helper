@@ -287,7 +287,11 @@ export async function createChapterVersion(
   filename: string,
   input: { label?: string }
 ) {
-  return await http<{ version: ChapterVersionMeta }>(
+  return await http<{
+    version: ChapterVersionMeta;
+    /** 模拟评论已在后台排队生成 */
+    readerCommentsQueued?: boolean;
+  }>(
     `/api/books/${encodeURIComponent(bookId)}/chapters/${encodeURIComponent(filename)}/versions`,
     { method: "POST", body: JSON.stringify(input) }
   );
@@ -1343,6 +1347,160 @@ export async function reorderGuidanceSessions(
   return await http<{ index: WritingGuidanceIndex }>(
     `/api/books/${encodeURIComponent(bookId)}/writing-guidance/sessions/reorder`,
     { method: "POST", body: JSON.stringify({ notebookId, sessionIds }) }
+  );
+}
+
+export type ReaderCommentsSettings = {
+  maxAiCommentsPerChapter: number;
+  commentsPerChapterMin: number;
+  commentsPerChapterMax: number;
+  useChapterAnalysisInput: boolean;
+  npcReplyProbability: number;
+  readerReplyReaderProbability: number;
+  inviteCooldownMs: number;
+};
+
+export type ReaderPersona = {
+  id: string;
+  nickname: string;
+  archetype: string;
+  tier: "deep" | "normal" | "lurker";
+  traits: string[];
+  emojiStyle: "none" | "light" | "heavy";
+  templateSlots: { like?: string[]; short?: string[]; deep?: string[] };
+  source: "builtin" | "generated";
+};
+
+export type ReaderPersonaPoolStats = {
+  builtinCount: number;
+  customCount: number;
+  totalCount: number;
+  commentsPerChapterMin: number;
+  commentsPerChapterMax: number;
+};
+
+export type FeatureModelsResponse = {
+  configs: ModelConfig[];
+  activeId: string | null;
+  featureModels: { organize?: string | null; readerComments?: string | null };
+  features: { readerCommentsEnabled?: boolean };
+  readerComments: ReaderCommentsSettings;
+  readerPersonaPool?: ReaderPersonaPoolStats;
+};
+
+export async function getFeatureModels() {
+  return await http<FeatureModelsResponse>(`/api/settings/feature-models`);
+}
+
+export async function putFeatureModels(input: Partial<FeatureModelsResponse>) {
+  return await http<{ ok: true }>(`/api/settings/feature-models`, {
+    method: "PUT",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function listReaderPersonas(params?: { q?: string; page?: number; pageSize?: number }) {
+  const sp = new URLSearchParams();
+  if (params?.q) sp.set("q", params.q);
+  if (params?.page) sp.set("page", String(params.page));
+  if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
+  const qs = sp.toString();
+  return await http<{ items: ReaderPersona[]; total: number; page: number; pageSize: number }>(
+    `/api/settings/reader-personas${qs ? `?${qs}` : ""}`
+  );
+}
+
+export async function generateReaderPersonas(count: number) {
+  return await http<{ ok: true; added: number }>(`/api/settings/reader-personas/generate`, {
+    method: "POST",
+    body: JSON.stringify({ count })
+  });
+}
+
+export type ReaderCommentReply = {
+  id: string;
+  authorKind: "persona" | "author";
+  personaId: string | null;
+  replyToId: string | null;
+  text: string;
+  createdAt: string;
+};
+
+export type ReaderCommentThread = {
+  id: string;
+  personaId: string;
+  kind: "deep" | "short" | "like";
+  text: string;
+  createdAt: string;
+  pinned?: boolean;
+  replies: ReaderCommentReply[];
+};
+
+export type ChapterReaderComments = {
+  version: 1;
+  contentHash: string;
+  generatedAt: string;
+  readCount: number;
+  threads: ReaderCommentThread[];
+  lurkerSample: string[];
+};
+
+export async function getChapterReaderComments(bookId: string, filename: string) {
+  return await http<{
+    comments: ChapterReaderComments | null;
+    nicknames: Record<string, string>;
+    generating?: boolean;
+  }>(
+    `/api/books/${encodeURIComponent(bookId)}/chapters/${encodeURIComponent(filename)}/reader-comments`
+  );
+}
+
+export async function generateChapterReaderComments(
+  bookId: string,
+  filename: string,
+  force?: boolean
+) {
+  return await http<{ comments: ChapterReaderComments; nicknames: Record<string, string> }>(
+    `/api/books/${encodeURIComponent(bookId)}/chapters/${encodeURIComponent(filename)}/reader-comments/generate`,
+    { method: "POST", body: JSON.stringify({ force: force ?? false }) }
+  );
+}
+
+export async function replyChapterReaderComment(
+  bookId: string,
+  filename: string,
+  threadId: string,
+  text: string
+) {
+  return await http<{ comments: ChapterReaderComments; nicknames: Record<string, string> }>(
+    `/api/books/${encodeURIComponent(bookId)}/chapters/${encodeURIComponent(filename)}/reader-comments/reply`,
+    { method: "POST", body: JSON.stringify({ threadId, text }) }
+  );
+}
+
+export async function patchReaderCommentThread(
+  bookId: string,
+  filename: string,
+  threadId: string,
+  pinned: boolean
+) {
+  return await http<{ comments: ChapterReaderComments; nicknames: Record<string, string> }>(
+    `/api/books/${encodeURIComponent(bookId)}/chapters/${encodeURIComponent(filename)}/reader-comments/threads/${encodeURIComponent(threadId)}`,
+    { method: "PATCH", body: JSON.stringify({ pinned }) }
+  );
+}
+
+export async function deleteReaderCommentThread(bookId: string, filename: string, threadId: string) {
+  return await http<{ comments: ChapterReaderComments; nicknames: Record<string, string> }>(
+    `/api/books/${encodeURIComponent(bookId)}/chapters/${encodeURIComponent(filename)}/reader-comments/threads/${encodeURIComponent(threadId)}`,
+    { method: "DELETE" }
+  );
+}
+
+export async function inviteReaderPersonas(bookId: string, count = 20) {
+  return await http<{ ok: true; added: number }>(
+    `/api/books/${encodeURIComponent(bookId)}/reader-personas/invite`,
+    { method: "POST", body: JSON.stringify({ count }) }
   );
 }
 

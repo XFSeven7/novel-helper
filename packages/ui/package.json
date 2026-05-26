@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@multiavatar/multiavatar": "^1.0.7",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-markdown": "^10.1.0",

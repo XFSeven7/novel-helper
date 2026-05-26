@@ -61,6 +61,7 @@ import { InspirationTab } from "./components/inspiration/InspirationTab";
 import { getFullscreenElement, isAltEnter, toggleDocumentFullscreen } from "./components/layout/fullscreen";
 import { TopBar } from "./components/layout/TopBar";
 import { SettingsPage, type SettingsTabId } from "./components/settings/SettingsPage";
+import { SettingsFeaturesPanel } from "./components/settings/SettingsFeaturesPanel";
 import { SettingsShortcutsPanel } from "./components/settings/SettingsShortcutsPanel";
 import { SettingsModelsPanel } from "./components/settings/SettingsModelsPanel";
 import { SettingsDataDirPanel } from "./components/settings/SettingsDataDirPanel";
@@ -108,6 +109,9 @@ import {
   clearBookAudit,
   restoreBook,
   putModelConfigs,
+  getFeatureModels,
+  putFeatureModels,
+  type FeatureModelsResponse,
   auditChapter,
   getAuditLatest,
   getAuditChapterStale,
@@ -159,6 +163,7 @@ import {
   getChapterDraftStatus,
   listChapterVersions,
   createChapterVersion,
+  getChapterReaderComments,
   getChapterVersion,
   restoreChapterVersion,
   type ChapterVersionMeta
@@ -296,6 +301,8 @@ export function App() {
   const [latestHistoryHashByChapter, setLatestHistoryHashByChapter] = useState<Record<string, string | null>>({});
   const [chapterSaveDraftModalOpen, setChapterSaveDraftModalOpen] = useState(false);
   const [chapterSaveDraftBusy, setChapterSaveDraftBusy] = useState(false);
+  const [readerCommentsRefreshKey, setReaderCommentsRefreshKey] = useState(0);
+  const [readerCommentsGenerating, setReaderCommentsGenerating] = useState(false);
   const [currentChapterEditorHash, setCurrentChapterEditorHash] = useState<string | null>(null);
   const serverDraftOutOfSyncRef = useRef<string[]>([]);
   const latestHistoryHashByChapterRef = useRef<Record<string, string | null>>({});
@@ -310,6 +317,9 @@ export function App() {
   const [modelTestStatus, setModelTestStatus] = useState<string>("");
   const [homeCenterTab, setHomeCenterTab] = useState<"welcome" | "settings">("welcome");
   const [settingsTab, setSettingsTab] = useState<SettingsTabId>("models");
+  const [featureSettings, setFeatureSettings] = useState<FeatureModelsResponse | null>(null);
+  const [featureSettingsDraft, setFeatureSettingsDraft] = useState<FeatureModelsResponse | null>(null);
+  const [featureSaveBusy, setFeatureSaveBusy] = useState(false);
   const [navCollapsed, setNavCollapsed] = useLocalStorageState<boolean>({
     key: NAV_COLLAPSED_STORAGE_KEY,
     defaultValue: false,
@@ -813,6 +823,15 @@ export function App() {
     void putModelConfigs({ configs: modelConfigs as any, activeId: activeModelId ?? null }).catch(() => {});
   }, [modelConfigs, activeModelId]);
 
+  useEffect(() => {
+    void getFeatureModels()
+      .then((f) => {
+        setFeatureSettings(f);
+        setFeatureSettingsDraft(f);
+      })
+      .catch(() => {});
+  }, []);
+
   const [auditRun, setAuditRun] = useState<any | null>(null);
   const [auditDirty, setAuditDirty] = useState(false);
   const [auditDirtyDelta, setAuditDirtyDelta] = useState<{ abs: number; ratio: number } | null>(null);
@@ -930,18 +949,26 @@ export function App() {
     if (!sel) return;
     setChapterSaveDraftBusy(true);
     setStatus("");
+    let commentsQueued = false;
     try {
       await flushChapterSave();
-      const { version } = await createChapterVersion(sel.bookSlug, sel.filename, {
+      const res = await createChapterVersion(sel.bookSlug, sel.filename, {
         label: label || undefined
       });
+      const { version } = res;
+      commentsQueued = Boolean(res.readerCommentsQueued);
       setLatestHistoryHashByChapter((prev) => ({ ...prev, [sel.filename]: version.contentHash }));
       setCurrentChapterEditorHash(version.contentHash);
       currentChapterEditorHashRef.current = version.contentHash;
       await refreshChapterDraftStatus(sel.bookSlug);
       if (historyPaneOpen) await loadChapterVersionsForCurrent();
       setChapterSaveDraftModalOpen(false);
-      setStatus("");
+      if (commentsQueued) {
+        setReaderCommentsGenerating(true);
+        setStatus("存稿成功，模拟评论后台生成中…");
+      } else {
+        setStatus("");
+      }
     } catch (e: any) {
       const raw = String(e?.message || e);
       try {
@@ -1159,7 +1186,6 @@ export function App() {
   );
   const auditChapterStaleHashRef = useRef<Record<string, string>>({});
   const okModelConfigs = useMemo(() => modelConfigs.filter((c) => c.lastTestOk), [modelConfigs]);
-  const [auditModelPickerOpen, setAuditModelPickerOpen] = useState(false);
   const [auditModelSearch, setAuditModelSearch] = useState("");
   type AuditStreamPhase = "idle" | "running" | "done" | "error";
   const [auditStreamPhase, setAuditStreamPhase] = useState<AuditStreamPhase>("idle");
@@ -1281,12 +1307,69 @@ export function App() {
     setModelState((prev) => ({ ...prev, activeId: okModelConfigs[0].id }));
   }, [okModelConfigs, activeModelId]);
 
-  const activeModelLabel = useMemo(() => {
-    const c = okModelConfigs.find((x) => x.id === activeModelId) ?? okModelConfigs[0];
+  const organizeModelId =
+    featureSettingsDraft?.featureModels?.organize ??
+    featureSettings?.featureModels?.organize ??
+    featureSettings?.activeId ??
+    activeModelId;
+
+  const organizeModelLabel = useMemo(() => {
+    const c = okModelConfigs.find((x) => x.id === organizeModelId) ?? okModelConfigs[0];
     if (!c) return "暂无可用模型";
     const name = (c.model ?? "").trim();
     return name ? `${c.label} · ${name}` : c.label;
-  }, [okModelConfigs, activeModelId]);
+  }, [okModelConfigs, organizeModelId]);
+
+  const readerCommentsEnabled = Boolean(
+    featureSettingsDraft?.features?.readerCommentsEnabled ?? featureSettings?.features?.readerCommentsEnabled
+  );
+  const readerCommentsModelId =
+    featureSettingsDraft?.featureModels?.readerComments ?? featureSettings?.featureModels?.readerComments ?? null;
+  const readerCommentsModelOk =
+    readerCommentsEnabled &&
+    Boolean(readerCommentsModelId) &&
+    okModelConfigs.some((c) => c.id === readerCommentsModelId);
+
+  const contentOrganizeModelId = organizeModelId ?? activeModelId;
+
+  useEffect(() => {
+    if (!readerCommentsEnabled && rightTab === "readerComments") {
+      setRightTab("chapterAnalysis");
+    }
+  }, [readerCommentsEnabled, rightTab]);
+
+  useEffect(() => {
+    if (!readerCommentsGenerating || !activeBook || !selectedChapter?.filename) return;
+    const bookId = activeBook;
+    const filename = selectedChapter.filename;
+    let stopped = false;
+    const poll = async () => {
+      try {
+        const res = await getChapterReaderComments(bookId, filename);
+        if (stopped) return;
+        if (!res.generating) {
+          setReaderCommentsGenerating(false);
+          setReaderCommentsRefreshKey((k) => k + 1);
+          setStatus((prev) => (prev.includes("生成中") ? "模拟评论已更新" : prev));
+        }
+      } catch {
+        /* 轮询失败忽略，下次再试 */
+      }
+    };
+    void poll();
+    const intervalId = window.setInterval(() => void poll(), 2000);
+    const timeoutId = window.setTimeout(() => {
+      if (!stopped) {
+        setReaderCommentsGenerating(false);
+        setReaderCommentsRefreshKey((k) => k + 1);
+      }
+    }, 120_000);
+    return () => {
+      stopped = true;
+      window.clearInterval(intervalId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [readerCommentsGenerating, activeBook, selectedChapter?.filename]);
 
   const okModelGroups = useMemo(() => {
     type Item =
@@ -1340,7 +1423,6 @@ export function App() {
     } catch {
       // ignore
     }
-    setAuditModelPickerOpen(false);
     setAuditModelSearch("");
     setNavHome(true);
     setHomeCenterTab("settings");
@@ -1588,7 +1670,7 @@ export function App() {
     }
     setBusy(true);
     try {
-      const { title } = await suggestBookSetupTitle(sessionId, { modelConfigId: activeModelId });
+      const { title } = await suggestBookSetupTitle(sessionId, { modelConfigId: contentOrganizeModelId });
       await refreshBookSetupPlans();
       setStatus(`已生成标题：${title}`);
     } catch (e: unknown) {
@@ -2076,7 +2158,10 @@ export function App() {
     setWritingPackBusy(true);
     setWritingPackErr("");
     try {
-      const { pack } = await generateWritingPack(slug, { chapterFilename, modelConfigId: activeModelId ?? null });
+      const { pack } = await generateWritingPack(slug, {
+        chapterFilename,
+        modelConfigId: contentOrganizeModelId ?? null
+      });
       setWritingPack(pack);
       setWritingPackListsOpen(false);
     } catch (e: any) {
@@ -2297,7 +2382,7 @@ export function App() {
       const { index } = await compressTimelineRange(activeBook, {
         startChapter: targetA,
         endChapter: targetB,
-        modelConfigId: activeModelId ?? null
+        modelConfigId: contentOrganizeModelId ?? null
       });
       setTimelineIndex(index);
     } finally {
@@ -2656,7 +2741,7 @@ export function App() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ modelConfigId: activeModelId ?? null })
+          body: JSON.stringify({ modelConfigId: contentOrganizeModelId ?? null })
         }
       );
       if (!res.ok || !res.body) {
@@ -2769,7 +2854,7 @@ export function App() {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ modelConfigId: activeModelId ?? null, original })
+          body: JSON.stringify({ modelConfigId: contentOrganizeModelId ?? null, original })
         }
       );
       if (!res.ok || !res.body) {
@@ -2837,7 +2922,7 @@ export function App() {
       await putModelConfigs({ configs: modelConfigs as any, activeId: activeModelId ?? null }).catch(() => {});
       await consumeChapterSseStream(
         chapterStreamUrl(activeBook, selectedChapter.filename, "mobile-layout"),
-        { modelConfigId: activeModelId ?? null, original },
+        { modelConfigId: contentOrganizeModelId ?? null, original },
         {
           onDelta: (d) => setMobileLayoutDraft((prev) => prev + d),
           onDone: (t) => setMobileLayoutDraft(stripAiPlainTextOutput(t))
@@ -2876,7 +2961,7 @@ export function App() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            modelConfigId: activeModelId ?? null,
+            modelConfigId: contentOrganizeModelId ?? null,
             original: chapterContent,
             targetWords,
             extraContext
@@ -2981,7 +3066,7 @@ export function App() {
     try {
       await flushChapterSave();
       const { results } = await suggestChapterTitlesBatch(activeBook, selectedChapter.filename, {
-        modelConfigId: activeModelId ?? null,
+        modelConfigId: contentOrganizeModelId ?? null,
         count: 5
       });
       const map: Record<string, string[]> = {};
@@ -3177,12 +3262,16 @@ export function App() {
       }
       const ok = res.status >= 200 && res.status < 300;
       setModelEditorDraft((prev) => (prev ? { ...prev, lastTestOk: ok } : prev));
+      const nextConfigs = modelConfigs.map((c) =>
+        c.id === cfg.id ? { ...c, lastTestOk: ok, lastModels: lastModels ?? c.lastModels } : c
+      );
       setModelState((prev) => ({
         ...prev,
         configs: prev.configs.map((c) =>
           c.id === cfg.id ? { ...c, lastTestOk: ok, lastModels: lastModels ?? c.lastModels } : c
         )
       }));
+      void putModelConfigs({ configs: nextConfigs as any, activeId: activeModelId ?? null }).catch(() => {});
       setModelTestStatus(`HTTP ${res.status}${suffix}`);
     } catch (e: any) {
       setModelTestStatus(e?.message || String(e));
@@ -3846,6 +3935,62 @@ export function App() {
               <SettingsPage
                 tab={settingsTab}
                 onTabChange={setSettingsTab}
+                featuresPanel={
+                  <SettingsFeaturesPanel
+                    feature={featureSettingsDraft ?? featureSettings}
+                    savedFeature={featureSettings}
+                    okConfigs={okModelConfigs}
+                    saveBusy={featureSaveBusy}
+                    onPoolRefresh={async () => {
+                      const next = await getFeatureModels();
+                      setFeatureSettings(next);
+                      setFeatureSettingsDraft(next);
+                    }}
+                    onChange={(patch) =>
+                      setFeatureSettingsDraft((prev) => {
+                        const base = prev ?? featureSettings;
+                        if (!base) return prev;
+                        return {
+                          ...base,
+                          ...patch,
+                          featureModels: { ...base.featureModels, ...patch.featureModels },
+                          features: { ...base.features, ...patch.features },
+                          readerComments: { ...base.readerComments, ...patch.readerComments }
+                        };
+                      })
+                    }
+                    onSave={async () => {
+                      if (!featureSettingsDraft) return;
+                      setFeatureSaveBusy(true);
+                      try {
+                        await putModelConfigs({
+                          configs: modelConfigs as any,
+                          activeId: featureSettingsDraft.featureModels?.organize ?? activeModelId ?? null
+                        });
+                        await putFeatureModels({
+                          configs: modelConfigs as FeatureModelsResponse["configs"],
+                          activeId: featureSettingsDraft.featureModels?.organize ?? activeModelId,
+                          featureModels: featureSettingsDraft.featureModels,
+                          features: featureSettingsDraft.features,
+                          readerComments: featureSettingsDraft.readerComments
+                        });
+                        const next = await getFeatureModels();
+                        setFeatureSettings(next);
+                        setFeatureSettingsDraft(next);
+                        if (next.featureModels?.organize) {
+                          setModelState((prev) => ({ ...prev, activeId: next.featureModels!.organize! }));
+                        }
+                        setStatus("已保存功能设置。");
+                      } catch (e: unknown) {
+                        const msg = e instanceof Error ? e.message : String(e);
+                        setStatus(msg);
+                        throw e instanceof Error ? e : new Error(msg);
+                      } finally {
+                        setFeatureSaveBusy(false);
+                      }
+                    }}
+                  />
+                }
                 modelsPanel={
                   <SettingsModelsPanel
                     busy={busy}
@@ -4030,15 +4175,12 @@ export function App() {
           rightTab={rightTab}
           setRightTab={setRightTab}
           okModelConfigs={okModelConfigs}
-          activeModelId={activeModelId}
-          activeModelLabel={activeModelLabel}
-          auditModelPickerOpen={auditModelPickerOpen}
-          setAuditModelPickerOpen={setAuditModelPickerOpen}
-          auditModelSearch={auditModelSearch}
-          setAuditModelSearch={setAuditModelSearch}
-          okModelGroupsFiltered={okModelGroupsFiltered}
-          setModelState={setModelState}
-          onGoModelConfigList={() => void goSettings("models")}
+          organizeModelLabel={organizeModelLabel}
+          onGoFeaturesSettings={() => void goSettings("features")}
+          readerCommentsEnabled={readerCommentsEnabled}
+          readerCommentsModelOk={readerCommentsModelOk}
+          readerCommentsRefreshKey={readerCommentsRefreshKey}
+          readerCommentsGenerating={readerCommentsGenerating}
           writingPack={writingPack}
           writingPackBusy={writingPackBusy}
           writingPackErr={writingPackErr}

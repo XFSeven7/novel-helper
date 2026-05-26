@@ -4,9 +4,10 @@ import remarkGfm from "remark-gfm";
 import type { ChapterVersionMeta, WritingPack } from "../../api";
 import type { ChapterSelected } from "../editor/ChapterEditorContent";
 import { ChapterHistoryVersionList } from "./ChapterHistoryVersionList";
+import { ReaderCommentsTab } from "../readerComments/ReaderCommentsTab";
 import { countNameOccurrencesInText } from "../../utils/countNameOccurrencesInText";
 
-export type RightTabId = "chapterAnalysis" | "chapterEntities" | "writingPack";
+export type RightTabId = "chapterAnalysis" | "chapterEntities" | "writingPack" | "readerComments";
 
 export type RightPanelProps = {
   busy: boolean;
@@ -15,15 +16,12 @@ export type RightPanelProps = {
   rightTab: RightTabId;
   setRightTab: React.Dispatch<React.SetStateAction<RightTabId>>;
   okModelConfigs: Array<{ id: string; model?: string; lastTestOk?: boolean }>;
-  activeModelId: string | null;
-  activeModelLabel: string;
-  auditModelPickerOpen: boolean;
-  setAuditModelPickerOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  auditModelSearch: string;
-  setAuditModelSearch: React.Dispatch<React.SetStateAction<string>>;
-  okModelGroupsFiltered: any[];
-  setModelState: React.Dispatch<React.SetStateAction<any>>;
-  onGoModelConfigList: () => void;
+  organizeModelLabel: string;
+  onGoFeaturesSettings: () => void;
+  readerCommentsEnabled: boolean;
+  readerCommentsModelOk: boolean;
+  readerCommentsRefreshKey?: number;
+  readerCommentsGenerating?: boolean;
   writingPack: WritingPack | null;
   writingPackBusy: boolean;
   writingPackErr: string;
@@ -63,15 +61,12 @@ export function RightPanel({
   rightTab,
   setRightTab,
   okModelConfigs,
-  activeModelId,
-  activeModelLabel,
-  auditModelPickerOpen,
-  setAuditModelPickerOpen,
-  auditModelSearch,
-  setAuditModelSearch,
-  okModelGroupsFiltered,
-  setModelState,
-  onGoModelConfigList,
+  organizeModelLabel,
+  onGoFeaturesSettings,
+  readerCommentsEnabled,
+  readerCommentsModelOk,
+  readerCommentsRefreshKey = 0,
+  readerCommentsGenerating = false,
   writingPack,
   writingPackBusy,
   writingPackErr,
@@ -140,83 +135,13 @@ export function RightPanel({
     <div className="contentOrganizeHeader">
       <div className="panelTitle contentOrganizeTitle">{historyPaneOpen ? "历史存稿" : "内容整理"}</div>
       {!historyPaneOpen ? (
-      <div className="auditModelPicker auditModelPickerHeader">
-        <button
-          type="button"
-          className="auditModelBtn"
-          disabled={busy || okModelConfigs.length === 0}
-          onClick={() => setAuditModelPickerOpen((v) => !v)}
-          title={
-            okModelConfigs.length === 0
-              ? "暂无连接成功的模型,请先在「设置」中配置模型并测试连接"
-              : "选择具体模型(仅显示连接成功的)"
-          }
-        >
-          <span className="auditModelBtnText">{activeModelLabel}</span>
-          <span className="auditModelBtnCaret">▾</span>
-        </button>
-
-        {auditModelPickerOpen ? (
-          <div className="auditModelPopover" role="listbox" aria-label="选择模型">
-            <input
-              className="auditModelSearch"
-              placeholder="搜索模型..."
-              value={auditModelSearch}
-              onChange={(e) => setAuditModelSearch(e.target.value)}
-              disabled={busy}
-              autoFocus
-            />
-            <div className="auditModelList">
-              {okModelGroupsFiltered.length ? (
-                okModelGroupsFiltered.map((g) => (
-                  <div key={g.id} className="auditModelGroup">
-                    <div className="auditModelGroupTitle">{g.label}</div>
-                    {g.items.map((it: any) => {
-                      const text = it.label;
-                      const checked =
-                        it.configId === activeModelId &&
-                        (it.kind !== "ollamaModel" ||
-                          text === (okModelConfigs.find((x) => x.id === activeModelId)?.model ?? "").trim());
-                      return (
-                        <button
-                          key={it.id}
-                          type="button"
-                          className={`auditModelItem ${checked ? "active" : ""}`}
-                          role="option"
-                          aria-selected={checked}
-                          onClick={() => {
-                            setModelState((prev: any) => ({
-                              ...prev,
-                              activeId: it.configId,
-                              configs:
-                                it.kind === "ollamaModel"
-                                  ? prev.configs.map((c: any) =>
-                                      c.id === it.configId ? { ...c, model: it.modelName } : c
-                                    )
-                                  : prev.configs
-                            }));
-                            setAuditModelPickerOpen(false);
-                            setAuditModelSearch("");
-                          }}
-                          disabled={busy}
-                        >
-                          <span className="auditModelItemText">{text}</span>
-                          {checked ? <span className="auditModelItemCheck">✓</span> : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ))
-              ) : (
-                <div className="auditModelEmpty muted">没有匹配的模型。</div>
-              )}
-            </div>
-            <button type="button" className="auditModelManage" onClick={() => void onGoModelConfigList()}>
-              设置
-            </button>
-          </div>
-        ) : null}
-      </div>
+        <div className="organizeModelHint muted">
+          模型：{organizeModelLabel || "未配置"}
+          {" · "}
+          <button type="button" className="btnLink" onClick={() => void onGoFeaturesSettings()}>
+            在设置中更改
+          </button>
+        </div>
       ) : null}
     </div>
 
@@ -266,6 +191,18 @@ export function RightPanel({
             >
               本章实体
             </button>
+            {readerCommentsEnabled ? (
+              <button
+                type="button"
+                role="tab"
+                className={`browserTab ${rightTab === "readerComments" ? "active" : ""}`}
+                aria-selected={rightTab === "readerComments"}
+                onClick={() => setRightTab("readerComments")}
+                disabled={busy}
+              >
+                模拟评论
+              </button>
+            ) : null}
           </div>
         </div>
 
@@ -631,7 +568,7 @@ export function RightPanel({
                       {!okModelConfigs.length ? (
                         <div className="muted auditStreamEmptyHint">暂无连接成功的模型,请先在「设置」中配置模型并测试连接。</div>
                       ) : (
-                        <div className="muted auditStreamEmptyHint">使用右侧所选模型梳理本章要点。</div>
+                        <div className="muted auditStreamEmptyHint">使用设置中的内容整理模型梳理本章要点。</div>
                       )}
                     </div>
                   )}
@@ -779,6 +716,17 @@ export function RightPanel({
                 );
               })()}
             </div>
+          ) : rightTab === "readerComments" ? (
+            <ReaderCommentsTab
+              bookId={activeBook}
+              chapterFilename={selectedChapter?.filename ?? null}
+              busy={busy}
+              readerCommentsModelOk={readerCommentsModelOk}
+              refreshToken={readerCommentsRefreshKey}
+              generating={readerCommentsGenerating}
+              onGoSettings={() => onGoFeaturesSettings()}
+              setStatus={setStatus}
+            />
           ) : (
             <div className="empty">该页签后续完善。</div>
           )}

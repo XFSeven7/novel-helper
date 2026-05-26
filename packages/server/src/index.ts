@@ -103,6 +103,16 @@ import { registerBookSetupRoutes } from "./bookSetup/routes.js";
 import { registerBookNotesRoutes } from "./bookNotes/routes.js";
 import { registerWritingGuidanceRoutes } from "./writingGuidance/routes.js";
 import { registerOutlineStageChatRoutes } from "./outlineStageChat/routes.js";
+import { registerReaderCommentsRoutes } from "./readerComments/routes.js";
+import { registerReaderPersonaRoutes } from "./readerPersonas/routes.js";
+import { queueReaderCommentsOnSave } from "./readerComments/background.js";
+import {
+  assertReaderCommentsReady,
+  readFeatureSettings,
+  resolveOrganizeModelId,
+  writeFeatureSettings,
+  type FeatureSettingsFile
+} from "./featureSettings.js";
 import { migrateBookIds } from "./migrateBookIds.js";
 import { mergeOccurredNotes } from "./characterOccurredNotes.js";
 import { parseChapterExtract } from "./audit/auditExtractSchema.js";
@@ -191,19 +201,21 @@ function settingsDir() {
 }
 
 async function readModelSettings(): Promise<{ configs: ModelConfig[]; activeId: string | null }> {
-  try {
-    const p = path.join(settingsDir(), "model-configs.json");
-    const raw = await fs.readFile(p, "utf8");
-    return JSON.parse(raw) as any;
-  } catch {
-    return { configs: [], activeId: null };
-  }
+  const f = await readFeatureSettings();
+  return { configs: f.configs as ModelConfig[], activeId: f.activeId };
 }
 
 async function writeModelSettings(v: { configs: ModelConfig[]; activeId: string | null }) {
-  await fs.mkdir(settingsDir(), { recursive: true });
-  const p = path.join(settingsDir(), "model-configs.json");
-  await fs.writeFile(p, JSON.stringify(v, null, 2), "utf8");
+  const current = await readFeatureSettings();
+  await writeFeatureSettings({
+    ...current,
+    configs: v.configs as FeatureSettingsFile["configs"],
+    activeId: v.activeId,
+    featureModels: {
+      ...current.featureModels,
+      organize: v.activeId ?? current.featureModels?.organize ?? null
+    }
+  });
 }
 
 function stripJsonFence(s: string): string {
@@ -1181,8 +1193,8 @@ async function performAuditWithAiSdk(input: {
   };
 
   emitPhase(1, "准备输入（读取章节/角色/索引）");
-  const settings = await readModelSettings();
-  const activeId = modelConfigId || settings.activeId;
+  const settings = await readFeatureSettings();
+  const activeId = modelConfigId || resolveOrganizeModelId(settings) || settings.activeId;
   const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
   if (!cfg) throw new Error("未配置模型");
 
@@ -1503,6 +1515,8 @@ app.put("/api/settings/model-configs", async (req) => {
           testUrl: z.string(),
           model: z.string().optional(),
           extraHeadersJson: z.string().optional(),
+          lastTestOk: z.boolean().optional(),
+          lastModels: z.array(z.string()).optional()
         })
       )
       .default([])
@@ -2295,7 +2309,21 @@ app.post("/api/books/:bookId/chapters/:filename/versions", async (req, reply) =>
     const version = await createChapterVersion(getDataDir(), params.bookId, params.filename, {
       label: body.label
     });
-    return { version };
+    let readerCommentsQueued = false;
+    const featureSettings = await readFeatureSettings();
+    if (featureSettings.features?.readerCommentsEnabled) {
+      const ready = assertReaderCommentsReady(featureSettings);
+      if (!("error" in ready)) {
+        readerCommentsQueued = true;
+        queueReaderCommentsOnSave({
+          dataDir: getDataDir(),
+          bookId: params.bookId,
+          chapterFilename: params.filename,
+          createAiSdkModel: (cfg) => createAiSdkModel(cfg as ModelConfig)
+        });
+      }
+    }
+    return { version, readerCommentsQueued };
   } catch (e: any) {
     if (e instanceof ChapterVersionError) return reply.code(e.statusCode).send({ message: e.message });
     return reply.code(400).send({ message: e?.message || String(e) });
@@ -4387,6 +4415,16 @@ registerOutlineStageChatRoutes(app, {
   readModelSettings,
   createAiSdkModel: (cfg) => createAiSdkModel(cfg as ModelConfig),
   sseWrite
+});
+
+registerReaderCommentsRoutes(app, {
+  getDataDir,
+  createAiSdkModel: (cfg) => createAiSdkModel(cfg as ModelConfig)
+});
+
+registerReaderPersonaRoutes(app, {
+  getDataDir,
+  createAiSdkModel: (cfg) => createAiSdkModel(cfg as ModelConfig)
 });
 
 await app.listen({ port: PORT, host: "127.0.0.1" });
