@@ -14,6 +14,7 @@ import {
   stageRoots,
   updateStageNode
 } from "../../utils/outlineStageTree";
+import { StagePreviewModal } from "./StagePreviewModal";
 
 const LONG_PRESS_MS = 450;
 const MOVE_CANCEL_PX = 8;
@@ -83,6 +84,7 @@ export function OutlineStageTree({
     [setExpandedIds]
   );
 
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -469,11 +471,20 @@ export function OutlineStageTree({
           >
             {allExpanded ? "收起" : "展开"}
           </button>
+          <button
+            type="button"
+            className="btnSort btnSortCompact"
+            disabled={disabled || roots.length === 0}
+            onClick={() => setPreviewOpen(true)}
+          >
+            预览
+          </button>
           <button type="button" className="btnSort btnSortCompact" disabled={disabled} onClick={handleAddRoot}>
             + 根阶段
           </button>
         </div>
       </div>
+      <StagePreviewModal open={previewOpen} stages={stagesProp} onClose={() => setPreviewOpen(false)} />
       {roots.length ? (
         <div className="outlineStageTreeScroll" role="tree">
           {roots.map((node, i) => renderNode(node, 0, i, roots.length))}
