@@ -4181,6 +4181,7 @@ export function App() {
           readerCommentsModelOk={readerCommentsModelOk}
           readerCommentsRefreshKey={readerCommentsRefreshKey}
           readerCommentsGenerating={readerCommentsGenerating}
+          onReaderCommentsGenerateStarted={() => setReaderCommentsGenerating(true)}
           writingPack={writingPack}
           writingPackBusy={writingPackBusy}
           writingPackErr={writingPackErr}

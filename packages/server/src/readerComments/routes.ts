@@ -12,10 +12,10 @@ import { validateCommentsPerChapterRange } from "../readerPersonas/commentsRange
 import { inviteNewReaders } from "../readerPersonas/invite.js";
 import { getReaderPersonaPoolStats } from "../readerPersonas/poolStats.js";
 import { loadEffectivePersonas, readCustomPersonas } from "../readerPersonas/store.js";
-import { generateChapterReaderComments, nicknameMap } from "./generate.js";
+import { isReaderCommentsGenerationInFlight, queueReaderCommentsOnSave } from "./background.js";
+import { nicknameMap } from "./generate.js";
 import { addAuthorReply, maybeNpcFollowUp, maybeReaderToReaderReply } from "./reply.js";
 import { readChapterComments, writeChapterComments } from "./store.js";
-import { isReaderCommentsGenerationInFlight } from "./background.js";
 import { deleteThread, normalizeCommentsFile, setThreadPinned } from "./threadOps.js";
 
 export type ReaderCommentsRouteDeps = {
@@ -161,28 +161,29 @@ export function registerReaderCommentsRoutes(app: FastifyInstance, deps: ReaderC
     const params = bookIdParam
       .extend({ filename: z.string().min(1) })
       .parse((req as { params: unknown }).params);
-    const body = z.object({ force: z.boolean().optional() }).parse((req as { body?: unknown }).body ?? {});
 
     const settings = await readFeatureSettings();
     const ready = assertReaderCommentsReady(settings);
     if ("error" in ready) return reply.code(400).send({ message: ready.error });
 
     const dataDir = deps.getDataDir();
-    const pool = await loadEffectivePersonas(dataDir);
-    const existing = await readChapterComments(dataDir, params.bookId, params.filename);
-    const comments = await generateChapterReaderComments({
+    const raw = await readChapterComments(dataDir, params.bookId, params.filename);
+    const existing = raw ? normalizeCommentsFile(raw) : null;
+    if (existing?.threads.length) {
+      return reply.code(400).send({ message: "本章已有评论，请通过存稿追加" });
+    }
+
+    if (isReaderCommentsGenerationInFlight(params.bookId, params.filename)) {
+      return reply.code(409).send({ message: "生成进行中" });
+    }
+
+    queueReaderCommentsOnSave({
       dataDir,
       bookId: params.bookId,
       chapterFilename: params.filename,
-      pool,
-      options: normalizeReaderCommentsOptions(settings.readerComments),
-      cfg: ready.cfg,
-      createAiSdkModel: deps.createAiSdkModel,
-      force: body.force ?? false,
-      existing
+      createAiSdkModel: deps.createAiSdkModel
     });
-    await writeChapterComments(dataDir, params.bookId, params.filename, comments);
-    return { comments, nicknames: nicknameMap(pool) };
+    return { queued: true };
   });
 
   app.post("/api/books/:bookId/chapters/:filename/reader-comments/reply", async (req, reply) => {

@@ -22,6 +22,7 @@ export type RightPanelProps = {
   readerCommentsModelOk: boolean;
   readerCommentsRefreshKey?: number;
   readerCommentsGenerating?: boolean;
+  onReaderCommentsGenerateStarted?: () => void;
   writingPack: WritingPack | null;
   writingPackBusy: boolean;
   writingPackErr: string;
@@ -67,6 +68,7 @@ export function RightPanel({
   readerCommentsModelOk,
   readerCommentsRefreshKey = 0,
   readerCommentsGenerating = false,
+  onReaderCommentsGenerateStarted,
   writingPack,
   writingPackBusy,
   writingPackErr,
@@ -725,6 +727,7 @@ export function RightPanel({
               refreshToken={readerCommentsRefreshKey}
               generating={readerCommentsGenerating}
               onGoSettings={() => onGoFeaturesSettings()}
+              onGenerateStarted={onReaderCommentsGenerateStarted}
               setStatus={setStatus}
             />
           ) : (

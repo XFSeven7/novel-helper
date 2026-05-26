@@ -1455,14 +1455,10 @@ export async function getChapterReaderComments(bookId: string, filename: string)
   );
 }
 
-export async function generateChapterReaderComments(
-  bookId: string,
-  filename: string,
-  force?: boolean
-) {
-  return await http<{ comments: ChapterReaderComments; nicknames: Record<string, string> }>(
+export async function generateChapterReaderComments(bookId: string, filename: string) {
+  return await http<{ queued: true }>(
     `/api/books/${encodeURIComponent(bookId)}/chapters/${encodeURIComponent(filename)}/reader-comments/generate`,
-    { method: "POST", body: JSON.stringify({ force: force ?? false }) }
+    { method: "POST", body: JSON.stringify({}) }
   );
 }
 

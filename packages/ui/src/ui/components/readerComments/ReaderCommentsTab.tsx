@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { ChapterReaderComments } from "../../api";
 import {
   deleteReaderCommentThread,
+  generateChapterReaderComments,
   getChapterReaderComments,
   patchReaderCommentThread,
   replyChapterReaderComment
@@ -17,6 +18,7 @@ export type ReaderCommentsTabProps = {
   refreshToken?: number;
   generating?: boolean;
   onGoSettings: () => void;
+  onGenerateStarted?: () => void;
   setStatus: (msg: string) => void;
 };
 
@@ -57,8 +59,10 @@ export function ReaderCommentsTab({
   refreshToken = 0,
   generating = false,
   onGoSettings,
+  onGenerateStarted,
   setStatus
 }: ReaderCommentsTabProps) {
+  const [generateBusy, setGenerateBusy] = useState(false);
   const [comments, setComments] = useState<ChapterReaderComments | null>(null);
   const [nicknames, setNicknames] = useState<Record<string, string>>({});
   const [loadBusy, setLoadBusy] = useState(false);
@@ -151,6 +155,20 @@ export function ReaderCommentsTab({
     }
   };
 
+  const onManualGenerate = async () => {
+    if (!chapterFilename || generateBusy || generating) return;
+    setGenerateBusy(true);
+    try {
+      await generateChapterReaderComments(bookId, chapterFilename);
+      onGenerateStarted?.();
+      setStatus("模拟评论生成中…");
+    } catch (e: unknown) {
+      setStatus(e instanceof Error ? e.message : String(e));
+    } finally {
+      setGenerateBusy(false);
+    }
+  };
+
   const onDelete = async (threadId: string) => {
     if (!chapterFilename) return;
     try {
@@ -205,8 +223,18 @@ export function ReaderCommentsTab({
         <div className="muted auditPanelEmpty">模拟评论后台生成中…</div>
       ) : null}
 
-      {!loadBusy && !generating && !comments?.threads?.length ? (
-        <div className="muted auditPanelEmpty">存稿后将自动追加新的模拟评论，已有评论会保留。</div>
+      {!loadBusy && !generating && !generateBusy && !comments?.threads?.length ? (
+        <div className="auditPanelEmpty readerCommentsEmpty">
+          <p className="muted">存稿后将自动追加新的模拟评论；本章尚无评论时可手动生成。</p>
+          <button
+            type="button"
+            className="btnSquare"
+            disabled={busy || generateBusy}
+            onClick={() => void onManualGenerate()}
+          >
+            生成本章评论
+          </button>
+        </div>
       ) : null}
 
       <div className="readerCommentsThreads">
