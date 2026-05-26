@@ -49,6 +49,14 @@ novelHelper 的定位是：
 
 ![纠错对照](docs/assets/polish.png)
 
+### 大纲 · 阶段细纲
+
+![大纲阶段细纲](docs/assets/step.png)
+
+### 写作指导
+
+![写作指导](docs/assets/teach.png)
+
 ### 写作统计 · 热力图
 
 ![写作热力图](docs/assets/activity.png)
