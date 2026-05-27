@@ -209,13 +209,15 @@ async function readModelSettings(): Promise<{ configs: ModelConfig[]; activeId: 
 
 async function writeModelSettings(v: { configs: ModelConfig[]; activeId: string | null }) {
   const current = await readFeatureSettings();
+  // 注意：`activeId` 是「全局活动配置」概念；而 `featureModels.organize` 允许用户在功能页选择到具体模型（configId::modelName）。
+  // 若这里强行把 `organize` 覆盖成 `activeId`（通常仅 configId），会导致刷新后回退为配置默认模型。
   await writeFeatureSettings({
     ...current,
     configs: v.configs as FeatureSettingsFile["configs"],
     activeId: v.activeId,
     featureModels: {
       ...current.featureModels,
-      organize: v.activeId ?? current.featureModels?.organize ?? null
+      organize: current.featureModels?.organize ?? v.activeId ?? null
     }
   });
 }
