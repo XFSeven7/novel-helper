@@ -103,3 +103,27 @@ export async function appendModelBenchmarkRecord(record: ModelBenchmarkRecord, o
   await writeModelBenchmarkFile({ ...f, items });
 }
 
+export async function clearModelBenchmarkHistory(): Promise<void> {
+  await writeModelBenchmarkFile({ version: 1, updatedAt: new Date().toISOString(), items: [] });
+}
+
+export async function patchModelBenchmarkRecordClient(
+  id: string,
+  client: Partial<
+    Pick<ModelBenchmarkTimeline, "client_wait_first_byte_ms" | "client_download_parse_ms" | "client_total_ms">
+  >
+): Promise<ModelBenchmarkRecord | null> {
+  const rid = String(id || "").trim();
+  if (!rid) return null;
+  const f = await readModelBenchmarkFile();
+  const idx = (f.items || []).findIndex((x) => x.id === rid);
+  if (idx < 0) return null;
+  const item = f.items[idx];
+  const timeline: ModelBenchmarkTimeline = { ...item.timeline, ...client };
+  const updated: ModelBenchmarkRecord = { ...item, timeline };
+  const items = [...f.items];
+  items[idx] = updated;
+  await writeModelBenchmarkFile({ ...f, items });
+  return updated;
+}
+

@@ -251,6 +251,22 @@ export async function getModelBenchmarkHistory(limit = 200) {
   );
 }
 
+export async function clearModelBenchmarkHistory() {
+  return await http<{ ok: true }>(`/api/settings/model-benchmark/history`, {
+    method: "DELETE"
+  });
+}
+
+export async function patchModelBenchmarkRecordClient(
+  id: string,
+  client: NonNullable<Parameters<typeof runModelBenchmark>[0]["client"]>
+) {
+  return await http<{ ok: true; record: ModelBenchmarkRecord }>(
+    `/api/settings/model-benchmark/history/${encodeURIComponent(id)}`,
+    { method: "PATCH", body: JSON.stringify({ client }) }
+  );
+}
+
 export type AppSettings = {
   effectiveDataDir: string;
   source: "env" | "file" | "default";

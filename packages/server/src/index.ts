@@ -118,7 +118,9 @@ import {
 } from "./featureSettings.js";
 import {
   appendModelBenchmarkRecord,
+  clearModelBenchmarkHistory,
   computeDurations,
+  patchModelBenchmarkRecordClient,
   readModelBenchmarkFile,
   type ModelBenchmarkRecord,
   type ModelBenchmarkTimeline
@@ -1635,6 +1637,27 @@ app.get("/api/settings/model-benchmark/history", async (req) => {
   return { ok: true, items: (f.items || []).slice(0, limit) };
 });
 
+app.delete("/api/settings/model-benchmark/history", async () => {
+  await clearModelBenchmarkHistory();
+  return { ok: true };
+});
+
+app.patch("/api/settings/model-benchmark/history/:id", async (req, reply) => {
+  const params = z.object({ id: z.string().min(1) }).parse((req as any).params ?? {});
+  const body = z
+    .object({
+      client: z.object({
+        client_wait_first_byte_ms: z.number().nonnegative().optional(),
+        client_download_parse_ms: z.number().nonnegative().optional(),
+        client_total_ms: z.number().nonnegative().optional()
+      })
+    })
+    .parse((req as any).body ?? {});
+  const updated = await patchModelBenchmarkRecordClient(params.id, body.client);
+  if (!updated) return reply.code(404).send({ message: "记录不存在。" });
+  return { ok: true, record: updated };
+});
+
 app.post("/api/settings/model-benchmark/run", async (req, reply) => {
   const body = z
     .object({
@@ -1662,8 +1685,9 @@ app.post("/api/settings/model-benchmark/run", async (req, reply) => {
       userInput,
       maxOutputChars: body.maxOutputChars ?? 4000
     });
-    if (body.client) {
+    if (body.client && Object.keys(body.client).length > 0) {
       record.timeline = { ...record.timeline, ...body.client };
+      await patchModelBenchmarkRecordClient(record.id, body.client).catch(() => {});
     }
     return { ok: true, record, outputText };
   } catch (e: any) {

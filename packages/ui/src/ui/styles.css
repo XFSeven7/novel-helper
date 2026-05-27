@@ -5739,6 +5739,26 @@ code {
   max-height: min(92vh, 860px);
 }
 
+/* 允许弹窗内容溢出（用于下拉菜单不被裁切）。配合 modalBackdropScroll 使用。 */
+.modalBackdropScroll {
+  align-items: flex-start;
+  overflow-y: auto;
+  padding-top: 28px;
+  padding-bottom: 28px;
+}
+
+.modalPanelNoClip {
+  max-height: none;
+  overflow: visible;
+}
+
+/* 弹窗内部：头部固定，主体滚动（避免 AppSelect 下拉被裁切） */
+.modalScrollBody {
+  max-height: min(72vh, 620px);
+  overflow: auto;
+  padding-right: 2px; /* 让滚动条不压到内容 */
+}
+
 /* 编辑角色：内容区随高度展开，不用弹窗内滚动条 */
 .modalBackdropEditChar {
   align-items: flex-start;

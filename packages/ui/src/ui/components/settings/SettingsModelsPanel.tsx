@@ -1,6 +1,19 @@
 import React, { useMemo, useState } from "react";
-import { getModelBenchmarkHistory, runModelBenchmark, type ModelBenchmarkRecord, type ModelConfig } from "../../api";
+import {
+  clearModelBenchmarkHistory,
+  getModelBenchmarkHistory,
+  patchModelBenchmarkRecordClient,
+  runModelBenchmark,
+  type ModelBenchmarkRecord,
+  type ModelConfig
+} from "../../api";
+import { AppSelect } from "../common/AppSelect";
 import { BUILTIN_MODEL_PROVIDERS_NO_CUSTOM, defaultConfigFor } from "../../utils/modelConfigStorage";
+import {
+  buildModelSelectOptions,
+  parseModelConfigId,
+  resolveModelSelectLabel
+} from "../../utils/modelSelectOptions";
 
 export type SettingsModelsPanelProps = {
   busy: boolean;
@@ -41,14 +54,36 @@ export function SettingsModelsPanel(props: SettingsModelsPanelProps) {
   const okConfigs = useMemo(() => modelConfigs.filter((c) => c.lastTestOk), [modelConfigs]);
 
   const [benchOpen, setBenchOpen] = useState(false);
-  const [benchModelId, setBenchModelId] = useState<string>("");
-  const [benchModelOverride, setBenchModelOverride] = useState<string>("");
+  const [benchModelSelectValue, setBenchModelSelectValue] = useState<string>("");
+  const benchModelOptions = useMemo(() => buildModelSelectOptions(okConfigs), [okConfigs]);
+  const benchModelLabel = useMemo(
+    () => resolveModelSelectLabel(okConfigs, benchModelSelectValue),
+    [okConfigs, benchModelSelectValue]
+  );
   const [benchInput, setBenchInput] = useState<string>("");
   const [benchBusy, setBenchBusy] = useState(false);
   const [benchErr, setBenchErr] = useState<string>("");
   const [benchOutput, setBenchOutput] = useState<string>("");
   const [benchRecord, setBenchRecord] = useState<ModelBenchmarkRecord | null>(null);
   const [benchHistory, setBenchHistory] = useState<ModelBenchmarkRecord[]>([]);
+
+  function recordTotalMs(r: ModelBenchmarkRecord): number | undefined {
+    const client = r.timeline?.client_total_ms;
+    if (typeof client === "number" && Number.isFinite(client)) return Math.max(0, client);
+    const server = r.durations?.server_total_ms;
+    if (typeof server === "number" && Number.isFinite(server)) return Math.max(0, server);
+    const tl = r.timeline;
+    if (typeof tl?.t_srv_respond_done_ms === "number" && typeof tl?.t_srv_received_ms === "number") {
+      return Math.max(0, tl.t_srv_respond_done_ms - tl.t_srv_received_ms);
+    }
+    return undefined;
+  }
+
+  function fmtSeconds(ms: number | null | undefined): string {
+    if (typeof ms !== "number" || !Number.isFinite(ms)) return "-";
+    const v = Math.max(0, ms);
+    return `${(v / 1000).toFixed(2)}s`;
+  }
 
   async function openBenchmarkModal() {
     if (busy) return;
@@ -58,12 +93,11 @@ export function SettingsModelsPanel(props: SettingsModelsPanelProps) {
     setBenchBusy(false);
     setBenchOpen(true);
 
-    const defaultId = (okConfigs[0]?.id || modelConfigs[0]?.id || "").trim();
-    if (!benchModelId && defaultId) {
-      setBenchModelId(defaultId);
-      const cfg = modelConfigs.find((c) => c.id === defaultId);
-      setBenchModelOverride(cfg?.model?.trim() || "");
-    }
+    const options = buildModelSelectOptions(okConfigs);
+    setBenchModelSelectValue((prev) => {
+      if (prev && options.some((o) => o.value === prev)) return prev;
+      return options[0]?.value ?? "";
+    });
     try {
       const res = await getModelBenchmarkHistory(50);
       setBenchHistory(res.items || []);
@@ -74,10 +108,15 @@ export function SettingsModelsPanel(props: SettingsModelsPanelProps) {
 
   async function runBenchmarkNow() {
     if (benchBusy || busy) return;
-    const modelConfigId = benchModelId.trim();
+    if (!okConfigs.length) {
+      setBenchErr("没有可用模型，请先在设置中配置并测试连接。");
+      return;
+    }
+    const parsed = parseModelConfigId(benchModelSelectValue);
+    const modelConfigId = parsed?.configId?.trim() ?? "";
     const input = benchInput.trim();
     if (!modelConfigId) {
-      setBenchErr("请选择模型配置。");
+      setBenchErr("请选择模型。");
       return;
     }
     if (!input) {
@@ -92,16 +131,18 @@ export function SettingsModelsPanel(props: SettingsModelsPanelProps) {
     try {
       const res = await runModelBenchmark({
         modelConfigId,
-        model: benchModelOverride.trim() || undefined,
+        model: parsed?.modelName,
         input,
         client: {}
       });
       const tDone = performance.now();
+      const clientTotalMs = Math.max(0, tDone - tStart);
       const record = res.record;
       record.timeline = {
         ...record.timeline,
-        client_total_ms: Math.max(0, tDone - tStart)
+        client_total_ms: clientTotalMs
       };
+      void patchModelBenchmarkRecordClient(record.id, { client_total_ms: clientTotalMs }).catch(() => {});
       setBenchRecord(record);
       setBenchOutput(res.outputText || "");
       setBenchHistory((prev) => [record, ...prev].slice(0, 50));
@@ -365,7 +406,7 @@ export function SettingsModelsPanel(props: SettingsModelsPanelProps) {
           }}
         >
           <div
-            className="modalPanel modalPanelOpaque"
+            className="modalPanel modalPanelOpaque modalPanelLarge modalPanelNoClip"
             role="dialog"
             aria-modal="true"
             aria-label="模型测速"
@@ -375,129 +416,142 @@ export function SettingsModelsPanel(props: SettingsModelsPanelProps) {
 
             <div className="modalField">
               <label className="modalLabel">
-                模型配置<span className="modalReq">*</span>
+                模型<span className="modalReq">*</span>
               </label>
-              <select
-                className="modalInput"
-                value={benchModelId}
-                onChange={(e) => {
-                  const id = e.target.value;
-                  setBenchModelId(id);
-                  const cfg = modelConfigs.find((c) => c.id === id);
-                  setBenchModelOverride(cfg?.model?.trim() || "");
-                }}
+              <AppSelect
+                value={benchModelSelectValue}
+                displayLabel={benchModelLabel}
+                options={benchModelOptions}
                 disabled={benchBusy || busy}
-              >
-                {modelConfigs.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label || c.id}
-                    {c.lastTestOk ? "" : "（未测试/未连接）"}
-                  </option>
-                ))}
-              </select>
+                emptyText="没有可用模型，请先测试连接"
+                onChange={setBenchModelSelectValue}
+              />
               <div className="muted" style={{ marginTop: 6 }}>
-                建议先在该配置里点“测试连接”，便于快速定位配置问题。
+                仅显示已连接的配置；与「功能」页模型列表一致。请先在该配置里点「测试连接」。
               </div>
             </div>
 
-            <div className="modalField">
-              <label className="modalLabel">
-                模型名<span className="modalOptional">（可选，覆盖配置默认）</span>
-              </label>
-              <input
-                className="modalInput"
-                value={benchModelOverride}
-                onChange={(e) => setBenchModelOverride(e.target.value)}
-                placeholder="例如 gpt-4.1-mini / deepseek-chat / qwen-2.5-72b-instruct"
-                disabled={benchBusy || busy}
-              />
-            </div>
-
-            <div className="modalField">
-              <label className="modalLabel">
-                输入文本<span className="modalReq">*</span>
-              </label>
-              <textarea
-                className="modalTextarea"
-                value={benchInput}
-                onChange={(e) => setBenchInput(e.target.value)}
-                placeholder="随便输入一些内容，点击开始测速…"
-                disabled={benchBusy || busy}
-              />
-            </div>
-
-            {benchErr ? (
-              <div className="muted" style={{ color: "var(--danger)", marginBottom: 10, whiteSpace: "pre-wrap" }}>
-                {benchErr}
+            <div className="modalScrollBody">
+              <div className="modalField">
+                <label className="modalLabel">
+                  输入文本<span className="modalReq">*</span>
+                </label>
+                <textarea
+                  className="modalTextarea"
+                  value={benchInput}
+                  onChange={(e) => setBenchInput(e.target.value)}
+                  placeholder="随便输入一些内容，点击开始测速…"
+                  disabled={benchBusy || busy}
+                />
               </div>
-            ) : null}
 
-            <div className="modalActions modalActionsWrap">
-              <button type="button" className="btnModalSecondary" disabled={benchBusy || busy} onClick={() => setBenchOpen(false)}>
-                关闭
-              </button>
-              <button type="button" className="btnModalPrimary" disabled={benchBusy || busy} onClick={() => void runBenchmarkNow()}>
-                {benchBusy ? "测速中..." : "开始测速"}
-              </button>
-            </div>
-
-            {benchRecord ? (
-              <div style={{ marginTop: 14 }}>
-                <div className="navSubtitle">耗时流水线（ms）</div>
-                <div className="muted" style={{ marginTop: 6, fontVariantNumeric: "tabular-nums" }}>
-                  <div>端到端总耗时：{Math.round(benchRecord.timeline.client_total_ms ?? 0)}</div>
-                  <div>本地接口总耗时：{Math.round(benchRecord.durations?.server_total_ms ?? 0)}</div>
-                  <div>本地接口内部开销：{Math.round(benchRecord.durations?.server_overhead_ms ?? 0)}</div>
-                  <div>上游模型首 token：{Math.round(benchRecord.durations?.model_ttfb_ms ?? 0)}</div>
-                  <div>上游模型完整生成：{Math.round(benchRecord.durations?.model_total_ms ?? 0)}</div>
-                  <div>本地接口后处理：{Math.round(benchRecord.durations?.server_postprocess_ms ?? 0)}</div>
-                  <div>本地接口写回：{Math.round(benchRecord.durations?.server_respond_ms ?? 0)}</div>
+              {benchErr ? (
+                <div className="muted" style={{ color: "var(--danger)", marginBottom: 10, whiteSpace: "pre-wrap" }}>
+                  {benchErr}
                 </div>
+              ) : null}
 
-                <div className="navSubtitle" style={{ marginTop: 12 }}>
-                  模型输出
-                </div>
-                <pre
-                  style={{
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                    margin: "8px 0 0",
-                    padding: "10px 12px",
-                    border: "1px solid var(--border)",
-                    background: "var(--panel2, var(--panel))",
-                    maxHeight: 240,
-                    overflow: "auto"
-                  }}
+              <div className="modalActions modalActionsWrap">
+                <button
+                  type="button"
+                  className="btnModalSecondary"
+                  disabled={benchBusy || busy}
+                  onClick={() => setBenchOpen(false)}
                 >
-                  {benchOutput || "(空)"}
-                </pre>
+                  关闭
+                </button>
+                <button
+                  type="button"
+                  className="btnModalPrimary"
+                  disabled={benchBusy || busy}
+                  onClick={() => void runBenchmarkNow()}
+                >
+                  {benchBusy ? "测速中..." : "开始测速"}
+                </button>
               </div>
-            ) : null}
 
-            {benchHistory.length ? (
-              <div style={{ marginTop: 16 }}>
-                <div className="navSubtitle">最近记录（最多 50 条）</div>
-                <ul className="modelTestModelList" role="list" style={{ marginTop: 8 }}>
-                  {benchHistory.slice(0, 10).map((r) => (
-                    <li key={r.id}>
-                      <button
-                        type="button"
-                        className="modelTestModelItem"
-                        disabled={benchBusy || busy}
-                        title="点击查看该次结果"
-                        onClick={() => {
-                          setBenchRecord(r);
-                          setBenchOutput(r.outputPreview || "");
-                        }}
-                      >
-                        {r.ok ? "✅" : "❌"} {r.modelLabel} · {new Date(r.createdAt).toLocaleString()} ·{" "}
-                        {Math.round(r.timeline.client_total_ms ?? 0)}ms
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
+              {benchRecord ? (
+                <div style={{ marginTop: 14 }}>
+                <div className="navSubtitle">耗时流水线（s）</div>
+                  <div className="muted" style={{ marginTop: 6, fontVariantNumeric: "tabular-nums" }}>
+                  <div>端到端总耗时：{fmtSeconds(recordTotalMs(benchRecord))}</div>
+                  <div>本地接口总耗时：{fmtSeconds(benchRecord.durations?.server_total_ms)}</div>
+                  <div>本地接口内部开销：{fmtSeconds(benchRecord.durations?.server_overhead_ms)}</div>
+                  <div>上游模型首 token：{fmtSeconds(benchRecord.durations?.model_ttfb_ms)}</div>
+                  <div>上游模型完整生成：{fmtSeconds(benchRecord.durations?.model_total_ms)}</div>
+                  <div>本地接口后处理：{fmtSeconds(benchRecord.durations?.server_postprocess_ms)}</div>
+                  <div>本地接口写回：{fmtSeconds(benchRecord.durations?.server_respond_ms)}</div>
+                  </div>
+
+                  <div className="navSubtitle" style={{ marginTop: 12 }}>
+                    模型输出
+                  </div>
+                  <pre
+                    style={{
+                      whiteSpace: "pre-wrap",
+                      wordBreak: "break-word",
+                      margin: "8px 0 0",
+                      padding: "10px 12px",
+                      border: "1px solid var(--border)",
+                      background: "var(--panel2, var(--panel))",
+                      maxHeight: 240,
+                      overflow: "auto"
+                    }}
+                  >
+                    {benchOutput || "(空)"}
+                  </pre>
+                </div>
+              ) : null}
+
+              {benchHistory.length ? (
+                <div style={{ marginTop: 16 }}>
+                  <div className="row" style={{ justifyContent: "space-between", alignItems: "center" }}>
+                    <div className="navSubtitle">最近记录（最多 50 条）</div>
+                    <button
+                      type="button"
+                      className="btnSort btnSortCompact"
+                      disabled={benchBusy || busy}
+                    onClick={async () => {
+                      if (benchBusy || busy) return;
+                      try {
+                        await clearModelBenchmarkHistory();
+                      } catch {
+                        // ignore: still clear locally for UX
+                      }
+                      setBenchHistory([]);
+                        if (benchRecord) {
+                          setBenchRecord(null);
+                          setBenchOutput("");
+                        }
+                      }}
+                    title="删除测速记录"
+                    >
+                      清空记录
+                    </button>
+                  </div>
+                  <ul className="modelTestModelList" role="list" style={{ marginTop: 8 }}>
+                    {benchHistory.slice(0, 10).map((r) => (
+                      <li key={r.id}>
+                        <button
+                          type="button"
+                          className="modelTestModelItem"
+                          disabled={benchBusy || busy}
+                          title="点击查看该次结果"
+                          onClick={() => {
+                            setBenchRecord(r);
+                            setBenchOutput(r.outputPreview || "");
+                          }}
+                        >
+                        {r.ok ? "✅" : "❌"} {r.modelLabel}
+                        {r.modelName ? ` · ${r.modelName}` : ""} · {new Date(r.createdAt).toLocaleString()} ·{" "}
+                        {fmtSeconds(recordTotalMs(r))}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}
