@@ -9388,3 +9388,542 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   box-shadow: 0 0 0 2px var(--panel);
 }
 
+/* --- Writing Block Rescue --- */
+.writingBlockRescuePage {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+  padding: 12px 16px 20px;
+  overflow: auto;
+}
+
+.writingBlockRescueHeader {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 12px;
+}
+
+.writingBlockRescueHeaderMain {
+  flex: 1 1 360px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.writingBlockRescueTitle {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.writingBlockRescueSubtitle {
+  font-size: 13px;
+}
+
+.writingBlockRescueControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: flex-end;
+}
+
+.writingBlockRescueField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.writingBlockRescueField select,
+.writingBlockRescueHintField input {
+  min-width: 140px;
+  max-width: 280px;
+}
+
+.writingBlockRescueCheck {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  padding-bottom: 2px;
+}
+
+.writingBlockRescueHintField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.writingBlockRescueHintField input {
+  width: 100%;
+  max-width: 520px;
+}
+
+.writingBlockRescueContextMeta {
+  font-size: 12px;
+}
+
+.writingBlockRescueError {
+  color: var(--danger, #e55);
+  font-size: 13px;
+}
+
+.writingBlockRescueEmpty {
+  padding: 24px 8px;
+  font-size: 14px;
+}
+
+.writingBlockRescueCards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.rescueCard {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.rescueCardHead {
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.rescueCardHead h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.rescueVariantTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.rescueVariantTabs button {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.rescueVariantTabs button.active {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.rescueCardBody {
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.rescueFieldLabel {
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+
+.rescueCitations {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.rescueDraftText {
+  margin: 4px 0 0;
+  padding: 10px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg) 80%, var(--panel));
+  border: 1px solid var(--border);
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.rescueCardActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.entropyTarotMini {
+  flex: 0 0 220px;
+  max-width: 240px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.entropyTarotMiniTitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.entropyTarotMiniCardTitle {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.entropyTarotMiniCardEffect,
+.entropyTarotMiniCardHook,
+.entropyTarotMiniEmpty {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.entropyTarotMiniActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.entropyTarotMiniActions button {
+  font-size: 12px;
+  padding: 4px 8px;
+}
+
+.entropyTarotMiniInject {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+/* --- Writing Block Rescue Workbench (guidance-like) --- */
+.writingBlockRescueWorkbench {
+  display: grid;
+  grid-template-columns: 260px minmax(280px, 360px) 1fr;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+  padding: 12px 12px 16px;
+}
+
+.writingBlockRescueSessions,
+.writingBlockRescueInfo,
+.writingBlockRescueResults {
+  min-height: 0;
+  overflow: auto;
+}
+
+.writingBlockRescueSessions {
+  border-right: 1px solid var(--border);
+  padding-right: 10px;
+}
+
+.writingBlockRescueSessionsHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.writingBlockRescueSessionsTitle {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.writingBlockRescueSessionsMeta {
+  font-size: 12px;
+  margin-bottom: 10px;
+}
+
+.writingBlockRescueSessionsList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.writingBlockRescueSessionRow {
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.writingBlockRescueSessionRow.active {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.writingBlockRescueSessionRowTitle {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.writingBlockRescueSessionRowMeta {
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.writingBlockRescueSessionRowNote {
+  font-size: 12px;
+  margin-top: 6px;
+  line-height: 1.35;
+}
+
+.writingBlockRescueInfo {
+  border-right: 1px solid var(--border);
+  padding-right: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.writingBlockRescueInfoHead .writingBlockRescueTitle {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.writingBlockRescueHintField textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 96px;
+}
+
+.writingBlockRescueResults {
+  padding-right: 2px;
+}
+
+.rescueBeats {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+
+.rescueSceneCard {
+  display: grid;
+  gap: 4px;
+}
+
+.rescueDecisions {
+  display: grid;
+  gap: 8px;
+}
+
+.rescueDecision {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.rescueNavTreeRootTitle {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.rescueNavTreeRootMeta {
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.rescueNavTreeChildren {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rescueNavPredictBtn {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.rescueNavTreeScrollable {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+  min-height: 0;
+  padding-right: 2px;
+}
+
+.rescueNavTreeScrollable > .outlineStageTreeScroll {
+  flex: 1;
+  min-height: 0;
+}
+
+.rescueNavTreeNode {
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.rescueNavTreeNode.active {
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.rescueNavTreeNodeTitle {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.rescueNavTreeNodeMeta {
+  font-size: 11px;
+  margin-top: 2px;
+}
+
+.rescueOps {
+  padding: 12px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.outlineStageTreeAct svg {
+  display: block;
+}
+
+.rescueOpsTitle {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.rescueOpsMeta {
+  font-size: 12px;
+}
+
+.rescueOpsControls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: flex-end;
+}
+
+.rescueOpsTabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.rescueOpsTab {
+  font-size: 12px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.rescueOpsTab.active {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border));
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.rescueOpsResult {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.rescueOpsField {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.rescueOpsField textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 110px;
+}
+
+.rescueOpsCheck {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  padding-bottom: 2px;
+}
+
+.rescueOpsBtn {
+  width: 100%;
+}
+
+.rescueOpsErr {
+  color: var(--danger, #e55);
+  font-size: 13px;
+}
+
+.rescueOpsHint {
+  font-size: 12px;
+}
+
+.rescueRight {
+  padding: 10px 10px 14px;
+  overflow: auto;
+  height: 100%;
+  min-height: 0;
+}
+
+.rescueRightHead {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+}
+
+.rescueRightTitle {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.rescueRightMeta,
+.rescueRightNote {
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+@media (max-width: 1080px) {
+  .writingBlockRescueWorkbench {
+    grid-template-columns: 1fr;
+  }
+  .writingBlockRescueSessions,
+  .writingBlockRescueInfo {
+    border-right: 0;
+    padding-right: 0;
+  }
+}
+

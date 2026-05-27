@@ -1500,3 +1500,44 @@ export async function inviteReaderPersonas(bookId: string, count = 20) {
   );
 }
 
+export type WritingBlockRescueResult = {
+  event: Record<"A" | "B" | "C", {
+    oneLinePlan: string;
+    readerHook: string;
+    risk: string;
+    beats: string[];
+    sceneCard: {
+      goal: string;
+      conflict: string;
+      turningPoint: string;
+      cost: string;
+      reveal: string;
+      hook: string;
+    };
+    decisions: { choice: string; consequence: string; risk: string; whenToUse: string }[];
+    citations: string[];
+    newInfo?: boolean;
+    oocEdgeTest?: boolean;
+  }>;
+  emotion: WritingBlockRescueResult["event"];
+  info: WritingBlockRescueResult["event"];
+};
+
+export async function postWritingBlockRescue(body: {
+  bookId: string;
+  chapterFilename: string;
+  length: "short" | "mid" | "long";
+  moreChaos?: boolean;
+  cursorHint?: string;
+  entropyCardId?: string;
+  injectEntropy?: boolean;
+}) {
+  return await http<{
+    result: WritingBlockRescueResult;
+    context?: { memoryChars: number; chapterChars: number };
+  }>("/api/writing-block/rescue", {
+    method: "POST",
+    body: JSON.stringify(body)
+  });
+}
+

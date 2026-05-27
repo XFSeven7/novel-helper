@@ -54,6 +54,7 @@ export type RightPanelProps = {
   currentChapterContent?: string;
   onSelectHistoryVersion?: (versionId: string) => void;
   onRestoreHistoryVersion?: (versionId: string) => void | Promise<void>;
+  overrideContent?: React.ReactNode;
 };
 
 export function RightPanel({
@@ -97,8 +98,12 @@ export function RightPanel({
   versionContentCache = {},
   currentChapterContent = "",
   onSelectHistoryVersion,
-  onRestoreHistoryVersion
+  onRestoreHistoryVersion,
+  overrideContent = null
 }: RightPanelProps) {
+  if (overrideContent) {
+    return <div className="panel">{overrideContent}</div>;
+  }
   const auditDirtyBar =
     auditDirty ? (
       <div className="auditDirtyBar" role="status" aria-label="分析可能过期提示">

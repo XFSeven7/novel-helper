@@ -87,6 +87,10 @@ import { BookNotesPanel } from "./components/notes/BookNotesPanel";
 import { WritingGuidanceProvider } from "./components/writingGuidance/WritingGuidanceContext";
 import { WritingGuidanceNavPanel } from "./components/writingGuidance/WritingGuidanceNavPanel";
 import { WritingGuidanceChatPanel } from "./components/writingGuidance/WritingGuidanceChatPanel";
+import { WritingBlockRescueNavTree } from "./components/writingBlockRescue/WritingBlockRescueNavTree";
+import type { RescuePrediction } from "./components/writingBlockRescue/WritingBlockRescueOpsPanel";
+import { WritingBlockRescueOpsPanel } from "./components/writingBlockRescue/WritingBlockRescueOpsPanel";
+import { postWritingBlockRescue } from "./api";
 import { appConfirm } from "./dialog/dialog";
 import { useLayout3Splitters } from "./hooks/useLayout3Splitters";
 import { useLocalStorageState } from "./hooks/useLocalStorageState";
@@ -186,7 +190,14 @@ const CHARACTER_TAG_OPTIONS = ["盟友", "敌对", "家人", "同事", "组织",
 
 export function App() {
   const [leftTab, setLeftTab] = useState<
-    "chapters" | "outline" | "global" | "progress" | "inspiration" | "notes" | "writingGuidance"
+    | "chapters"
+    | "outline"
+    | "writingBlockRescue"
+    | "global"
+    | "progress"
+    | "inspiration"
+    | "notes"
+    | "writingGuidance"
   >("chapters");
   const [notesFocusRequest, setNotesFocusRequest] = useState(0);
   const [globalTab, setGlobalTab] = useState<GlobalTabId>("auditCharacters");
@@ -353,6 +364,8 @@ export function App() {
   const showWritingGuidancePane = Boolean(
     activeBook && leftTab === "writingGuidance" && !navCollapsed
   );
+  const showWritingBlockRescuePane = Boolean(activeBook && leftTab === "writingBlockRescue" && !navCollapsed);
+  const showAuxPane = showWritingGuidancePane || showWritingBlockRescuePane;
   const pinchRightForGuidance = Boolean(activeBook && leftTab === "writingGuidance");
   const layout3EffectiveRightW =
     pinchRightForGuidance && !rightCollapsed
@@ -563,6 +576,7 @@ export function App() {
   const showBookOverview = Boolean(activeBook && !selectedChapter);
   const showRelationsCenter = Boolean(activeBook && leftTab === "global" && globalTab === "relations");
   const showStageOutlineCenter = Boolean(activeBook && leftTab === "outline" && outlineSubTab === "stages");
+  const showWritingBlockRescueCenter = Boolean(activeBook && leftTab === "writingBlockRescue");
 
   function clearChapterTimer() {
     if (chapterTimerRef.current !== null) {
@@ -584,6 +598,202 @@ export function App() {
       synopsisTimerRef.current = null;
     }
   }
+
+  const latestChapter = useMemo(() => {
+    const scored = chapters
+      .map((c) => ({ c, n: Number.parseInt(String((c as any)?.id ?? "").trim(), 10) }))
+      .filter((x) => Number.isFinite(x.n));
+    if (scored.length) return scored.sort((a, b) => b.n - a.n)[0].c;
+    return chapters.length
+      ? [...chapters].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))[0]
+      : null;
+  }, [chapters]);
+
+  const rescueStorageKey = activeBook ? `novel-helper-writing-block-rescue-predictions-${activeBook}` : "";
+  const rescueSelectedKey = activeBook ? `novel-helper-writing-block-rescue-selected-${activeBook}` : "";
+  type RescueTreeStore = {
+    version: 2;
+    predictionsByChapter: Record<string, RescuePrediction[]>;
+    expandedChapterIds: number[];
+    selected: { chapterId: number; predictionId: string } | null;
+  };
+  const [rescueTree, setRescueTree] = useState<RescueTreeStore>({
+    version: 2,
+    predictionsByChapter: {},
+    expandedChapterIds: [],
+    selected: null
+  });
+  const [rescueGenerating, setRescueGenerating] = useState(false);
+  const [rescueErr, setRescueErr] = useState("");
+  const [rescueStatus, setRescueStatus] = useState("");
+
+  const rescueSelected = rescueTree.selected;
+  const selectedRescuePrediction = useMemo(() => {
+    if (!rescueSelected) return null;
+    const arr = rescueTree.predictionsByChapter[String(rescueSelected.chapterId)] ?? [];
+    return arr.find((p) => p.id === rescueSelected.predictionId) ?? null;
+  }, [rescueSelected, rescueTree.predictionsByChapter]);
+
+  const rescueHasPending = useMemo(() => {
+    const groups = Object.values(rescueTree.predictionsByChapter);
+    for (const arr of groups) {
+      if (Array.isArray(arr) && arr.some((p) => Boolean((p as any)?.pending))) return true;
+    }
+    return false;
+  }, [rescueTree.predictionsByChapter]);
+
+  useEffect(() => {
+    if (!activeBook) {
+      setRescueTree({ version: 2, predictionsByChapter: {}, expandedChapterIds: [], selected: null });
+      setRescueGenerating(false);
+      setRescueErr("");
+      setRescueStatus("");
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(rescueStorageKey);
+      const v = raw ? (JSON.parse(raw) as unknown) : null;
+      // migrate v1 (array) -> v2 (tree store) under current latest chapter
+      if (Array.isArray(v)) {
+        const chapId = latestChapter ? Number.parseInt(String((latestChapter as any)?.id ?? "").trim(), 10) : NaN;
+        const chapTitle = latestChapter ? String((latestChapter as any)?.title ?? "") : "";
+        const arr = v as RescuePrediction[];
+        const normalized = chapId && Number.isFinite(chapId) ? arr.map((p, i) => ({
+          ...p,
+          chapterId: chapId,
+          chapterTitle: chapTitle,
+          title: p.title || (p.pending ? "生成中…" : `剧情推测${arr.length - i}`),
+        })) : [];
+        setRescueTree({
+          version: 2,
+          predictionsByChapter: chapId && Number.isFinite(chapId) ? { [String(chapId)]: normalized } : {},
+          expandedChapterIds: chapId && Number.isFinite(chapId) ? [chapId] : [],
+          selected: null
+        });
+      } else if (v && typeof v === "object" && (v as any).version === 2) {
+        setRescueTree(v as RescueTreeStore);
+      } else {
+        setRescueTree({ version: 2, predictionsByChapter: {}, expandedChapterIds: [], selected: null });
+      }
+    } catch {
+      setRescueTree({ version: 2, predictionsByChapter: {}, expandedChapterIds: [], selected: null });
+    }
+    // selected is stored inside tree store; ignore old selected key
+    setRescueGenerating(false);
+    setRescueErr("");
+    setRescueStatus("");
+  }, [activeBook, rescueStorageKey, latestChapter]);
+
+  useEffect(() => {
+    if (!activeBook) return;
+    try {
+      localStorage.setItem(rescueStorageKey, JSON.stringify(rescueTree));
+    } catch {
+      // ignore
+    }
+  }, [activeBook, rescueTree, rescueStorageKey]);
+
+  useEffect(() => {
+    if (!activeBook || leftTab !== "writingBlockRescue") return;
+    if (!latestChapter) return;
+    if (selectedChapter?.filename !== latestChapter.filename) {
+      void onOpenChapter(latestChapter);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeBook, leftTab, latestChapter?.filename]);
+
+  useEffect(() => {
+    if (!activeBook || leftTab !== "writingBlockRescue") return;
+    // keep selection stable; do not auto-switch on new predictions
+  }, [activeBook, leftTab]);
+
+  const doRescuePredict = useCallback(async () => {
+    if (!activeBook) return;
+    if (rescueHasPending || rescueGenerating) {
+      setRescueStatus("已有生成中的推测，请等待完成后再生成。");
+      return;
+    }
+    if (!latestChapter?.filename) {
+      setRescueErr("未找到最新章节");
+      return;
+    }
+    const chapId = Number.parseInt(String((latestChapter as any)?.id ?? "").trim(), 10);
+    if (!Number.isFinite(chapId)) {
+      setRescueErr("最新章节序号无效");
+      return;
+    }
+    const chapTitle = String((latestChapter as any)?.title ?? "");
+    const pendingId = `pending-${Date.now()}`;
+    setRescueTree((prev) => {
+      const existing = prev.predictionsByChapter[String(chapId)] ?? [];
+      const nextPred: RescuePrediction = {
+        id: pendingId,
+        createdAt: new Date().toISOString(),
+        length: "mid",
+        moreChaos: false,
+        blockNote: "",
+        result: null,
+        variantByRoute: { event: "A", emotion: "A", info: "A" },
+        chapterId: chapId,
+        chapterTitle: chapTitle,
+        title: "生成中…",
+        pending: true
+      };
+      return {
+        ...prev,
+        expandedChapterIds: prev.expandedChapterIds.includes(chapId)
+          ? prev.expandedChapterIds
+          : [chapId, ...prev.expandedChapterIds],
+        predictionsByChapter: { ...prev.predictionsByChapter, [String(chapId)]: [nextPred, ...existing] }
+      };
+    });
+    setRescueGenerating(true);
+    setRescueErr("");
+    setRescueStatus("正在生成后续剧情推测…");
+    try {
+      const res = await postWritingBlockRescue({
+        bookId: activeBook,
+        chapterFilename: latestChapter.filename,
+        length: "mid",
+        moreChaos: false,
+        cursorHint: undefined,
+        injectEntropy: false
+      });
+      setRescueTree((prev) => {
+        const list = prev.predictionsByChapter[String(chapId)] ?? [];
+        const nextIndex = list.filter((p) => !p.pending).length + 1;
+        const finalPred: RescuePrediction = {
+          id: String(Date.now()),
+          createdAt: new Date().toISOString(),
+          length: "mid",
+          moreChaos: false,
+          blockNote: "",
+          result: res.result,
+          variantByRoute: { event: "A", emotion: "A", info: "A" },
+          chapterId: chapId,
+          chapterTitle: chapTitle,
+          title: `剧情推测${nextIndex}`
+        };
+        const replaced = list.map((p) => (p.id === pendingId ? finalPred : p)).filter(Boolean) as RescuePrediction[];
+        return { ...prev, predictionsByChapter: { ...prev.predictionsByChapter, [String(chapId)]: replaced } };
+      });
+      setRescueStatus("剧情推测生成完成（仅走向/决策，不含正文）");
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setRescueErr(msg);
+      setRescueStatus(msg);
+      // keep pending node but mark error title
+      setRescueTree((prev) => {
+        const list = prev.predictionsByChapter[String(chapId)] ?? [];
+        const replaced = list.map((p) =>
+          p.id === pendingId ? { ...p, title: "生成失败", pending: false } : p
+        );
+        return { ...prev, predictionsByChapter: { ...prev.predictionsByChapter, [String(chapId)]: replaced } };
+      });
+    } finally {
+      setRescueGenerating(false);
+    }
+  }, [activeBook, latestChapter?.filename, rescueGenerating, rescueHasPending]);
 
   async function persistChapterNow(): Promise<boolean> {
     const sel = selectedChapterRef.current;
@@ -3335,7 +3545,7 @@ export function App() {
         onStatus={setStatus}
       >
       <div
-        className={`layout3 ${navCollapsed ? "layout3NavCollapsed" : ""} ${rightCollapsed ? "layout3RightCollapsed" : ""} ${showWritingGuidancePane ? "layout3WritingGuidance" : ""}`}
+        className={`layout3 ${navCollapsed ? "layout3NavCollapsed" : ""} ${rightCollapsed ? "layout3RightCollapsed" : ""} ${showAuxPane ? "layout3WritingGuidance" : ""}`}
         style={
           {
             ["--layout3-nav" as any]: navCollapsed ? "0px" : `${layout3NavW}px`,
@@ -3420,6 +3630,19 @@ export function App() {
                       >
                         大纲
                       </button>
+                      {activeBook ? (
+                        <button
+                          type="button"
+                          role="tab"
+                          className={`browserTab ${leftTab === "writingBlockRescue" ? "active" : ""}`}
+                          aria-selected={leftTab === "writingBlockRescue"}
+                          onClick={() => setLeftTab("writingBlockRescue")}
+                          disabled={busy}
+                          title="卡文急救：三路推进 × 三类型 + 变量抽卡"
+                        >
+                          卡文急救
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         role="tab"
@@ -3501,6 +3724,55 @@ export function App() {
                       onChapterTitleChange={setChapterTitle}
                       onOpenChapter={(c) => void onOpenChapter(c)}
                       onCreateChapter={() => void onCreateChapter()}
+                    />
+                  ) : leftTab === "writingBlockRescue" && activeBook ? (
+                    <WritingBlockRescueNavTree
+                      latestChapter={latestChapter}
+                      generating={rescueGenerating || rescueHasPending}
+                      onPredict={() => void doRescuePredict()}
+                      tree={rescueTree}
+                      onToggleChapter={(chapterId) => {
+                        setRescueTree((prev) => {
+                          const open = prev.expandedChapterIds.includes(chapterId);
+                          return {
+                            ...prev,
+                            expandedChapterIds: open
+                              ? prev.expandedChapterIds.filter((x) => x !== chapterId)
+                              : [chapterId, ...prev.expandedChapterIds]
+                          };
+                        });
+                      }}
+                      onSelect={(chapterId, predictionId) => {
+                        setRescueTree((prev) => ({ ...prev, selected: { chapterId, predictionId } }));
+                      }}
+                      onDeletePrediction={(chapterId, predictionId) => {
+                        setRescueTree((prev) => {
+                          const key = String(chapterId);
+                          const list = prev.predictionsByChapter[key] ?? [];
+                          const nextList = list.filter((p) => p.id !== predictionId);
+                          const nextMap = { ...prev.predictionsByChapter };
+                          if (nextList.length) nextMap[key] = nextList;
+                          else delete nextMap[key];
+
+                          const selected =
+                            prev.selected &&
+                            prev.selected.chapterId === chapterId &&
+                            prev.selected.predictionId === predictionId
+                              ? null
+                              : prev.selected;
+
+                          const expandedChapterIds = nextMap[key]
+                            ? prev.expandedChapterIds
+                            : prev.expandedChapterIds.filter((x) => x !== chapterId);
+
+                          return {
+                            ...prev,
+                            predictionsByChapter: nextMap,
+                            expandedChapterIds,
+                            selected
+                          };
+                        });
+                      }}
                     />
                   ) : leftTab === "outline" && activeBook ? (
                     <OutlineWorkspace
@@ -3699,10 +3971,36 @@ export function App() {
           }}
         />
 
-        {showWritingGuidancePane ? (
+        {showAuxPane ? (
           <>
-            <aside className="guidancePane" aria-label="写作指导对话">
-              <WritingGuidanceChatPanel />
+            <aside className="guidancePane" aria-label="辅助侧栏">
+              {showWritingGuidancePane ? (
+                <WritingGuidanceChatPanel />
+              ) : showWritingBlockRescuePane ? (
+                <WritingBlockRescueOpsPanel
+                  latestChapter={latestChapter}
+                  busy={busy}
+                  status={rescueStatus}
+                  error={rescueErr}
+                  prediction={selectedRescuePrediction}
+                  onSelectRouteVariant={(route, variant) => {
+                    if (!selectedRescuePrediction) return;
+                    setRescueTree((prev) => {
+                      const chapId = selectedRescuePrediction.chapterId;
+                      const list = prev.predictionsByChapter[String(chapId)] ?? [];
+                      const next = list.map((p) =>
+                        p.id === selectedRescuePrediction.id
+                          ? { ...p, variantByRoute: { ...p.variantByRoute, [route]: variant } }
+                          : p
+                      );
+                      return {
+                        ...prev,
+                        predictionsByChapter: { ...prev.predictionsByChapter, [String(chapId)]: next }
+                      };
+                    });
+                  }}
+                />
+              ) : null}
             </aside>
             <div
               className={`layoutDivider ${layout3Dragging === "guidance" ? "dragging" : ""}`}
@@ -3749,6 +4047,13 @@ export function App() {
                       busy={busy}
                       bookTitle={activeBookMeta?.title ?? activeBook}
                     />
+                  </>
+                ) : showWritingBlockRescueCenter ? (
+                  <>
+                    <div className="centerTitle">
+                      《{activeBookMeta?.title ?? activeBook}》· 卡文急救
+                    </div>
+                    <span className="titleAutosave autosaveHint" />
                   </>
                 ) : showBookOverview ? (
                   <>
