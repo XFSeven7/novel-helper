@@ -13,6 +13,7 @@ import {
   redesignMainlineFromChat,
   suggestBookSetupTitle
 } from "./ai.js";
+import { findModelConfig } from "../featureSettings.js";
 import { discardPlan, listPlans, registerPlan, removePlan } from "./planIndex.js";
 import {
   applyBookSetupSuggestionToDraft,
@@ -153,7 +154,7 @@ export function registerBookSetupRoutes(app: FastifyInstance, deps: BookSetupRou
     if (!activeId) {
       return reply.code(400).send({ message: "请先在设置中配置并选择 AI 模型" });
     }
-    const cfg = settings.configs.find((c) => c.id === activeId);
+    const cfg = findModelConfig(settings, activeId);
     if (!cfg) return reply.code(400).send({ message: "模型配置不存在" });
 
     const { title } = await suggestBookSetupTitle({
@@ -189,7 +190,7 @@ export function registerBookSetupRoutes(app: FastifyInstance, deps: BookSetupRou
     if (!activeId) {
       return reply.code(400).send({ message: "请先在设置中配置并选择 AI 模型" });
     }
-    const cfg = settings.configs.find((c) => c.id === activeId);
+    const cfg = findModelConfig(settings, activeId);
     if (!cfg) return reply.code(400).send({ message: "模型配置不存在" });
 
     const chat = await chatBookSetupStep({
@@ -244,7 +245,7 @@ export function registerBookSetupRoutes(app: FastifyInstance, deps: BookSetupRou
     if (!activeId) {
       return reply.code(400).send({ message: "请先在设置中配置并选择 AI 模型" });
     }
-    const cfg = settings.configs.find((c) => c.id === activeId);
+    const cfg = findModelConfig(settings, activeId);
     if (!cfg) return reply.code(400).send({ message: "模型配置不存在" });
 
     let result = await applyBookSetupFromChat({
@@ -284,7 +285,7 @@ export function registerBookSetupRoutes(app: FastifyInstance, deps: BookSetupRou
     if (!activeId) {
       return reply.code(400).send({ message: "请先在设置中配置并选择 AI 模型" });
     }
-    const cfg = settings.configs.find((c) => c.id === activeId);
+    const cfg = findModelConfig(settings, activeId);
     if (!cfg) return reply.code(400).send({ message: "模型配置不存在" });
 
     let result = await redesignMainlineFromChat({

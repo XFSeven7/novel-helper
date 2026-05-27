@@ -108,6 +108,8 @@ import { registerReaderPersonaRoutes } from "./readerPersonas/routes.js";
 import { queueReaderCommentsOnSave } from "./readerComments/background.js";
 import {
   assertReaderCommentsReady,
+  findModelConfig,
+  normalizeModelConfigs,
   readFeatureSettings,
   resolveOrganizeModelId,
   writeFeatureSettings,
@@ -216,6 +218,15 @@ async function writeModelSettings(v: { configs: ModelConfig[]; activeId: string 
       organize: v.activeId ?? current.featureModels?.organize ?? null
     }
   });
+}
+
+function pickModelCfg(settings: { configs: ModelConfig[] }, rawId: string | null | undefined): ModelConfig {
+  const stub = { configs: settings.configs, activeId: null } as FeatureSettingsFile;
+  const cfg = findModelConfig(stub, rawId);
+  if (cfg) return cfg;
+  const first = settings.configs[0];
+  if (!first) throw new Error("未配置模型");
+  return first;
 }
 
 function stripJsonFence(s: string): string {
@@ -1195,7 +1206,7 @@ async function performAuditWithAiSdk(input: {
   emitPhase(1, "准备输入（读取章节/角色/索引）");
   const settings = await readFeatureSettings();
   const activeId = modelConfigId || resolveOrganizeModelId(settings) || settings.activeId;
-  const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+  const cfg = pickModelCfg(settings, activeId);
   if (!cfg) throw new Error("未配置模型");
 
   const chapter = await readChapter(getDataDir(), slug, filename);
@@ -1261,7 +1272,7 @@ async function performPolishWithAiSdk(input: {
   const { slug, filename, modelConfigId, onDelta, original } = input;
   const settings = await readModelSettings();
   const activeId = modelConfigId || settings.activeId;
-  const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+  const cfg = pickModelCfg(settings, activeId);
   if (!cfg) throw new Error("未配置模型");
 
   const { model, providerOptions } = createAiSdkModel(cfg);
@@ -1291,7 +1302,7 @@ async function performMobileLayoutWithAiSdk(input: {
   const { slug, filename, modelConfigId, onDelta, original } = input;
   const settings = await readModelSettings();
   const activeId = modelConfigId || settings.activeId;
-  const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+  const cfg = pickModelCfg(settings, activeId);
   if (!cfg) throw new Error("未配置模型");
 
   const { model, providerOptions } = createAiSdkModel(cfg);
@@ -1438,7 +1449,7 @@ async function performExpandWithAiSdk(input: {
   const { slug, modelConfigId, onDelta, original, targetWords, extraContext } = input;
   const settings = await readModelSettings();
   const activeId = modelConfigId || settings.activeId;
-  const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+  const cfg = pickModelCfg(settings, activeId);
   if (!cfg) throw new Error("未配置模型");
 
   const idx = normalizeTimelineIndex(await readTimelineIndex(getDataDir(), slug));
@@ -1474,7 +1485,7 @@ async function performExpandWithAiSdk(input: {
 async function performAudit(slug: string, filename: string, modelConfigId: string | null | undefined) {
   const settings = await readModelSettings();
   const activeId = modelConfigId || settings.activeId;
-  const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+  const cfg = pickModelCfg(settings, activeId);
   if (!cfg) throw new Error("未配置模型");
 
   const chapter = await readChapter(getDataDir(), slug, filename);
@@ -1522,7 +1533,10 @@ app.put("/api/settings/model-configs", async (req) => {
       .default([])
   });
   const body = bodySchema.parse((req as any).body);
-  await writeModelSettings({ configs: body.configs as any, activeId: body.activeId });
+  await writeModelSettings({
+    configs: normalizeModelConfigs(body.configs as ModelConfig[]) as any,
+    activeId: body.activeId
+  });
   return { ok: true };
 });
 
@@ -1856,7 +1870,7 @@ app.post("/api/books/:bookId/outline/ai", async (req, reply) => {
   try {
     const settings = await readModelSettings();
     const activeId = body.modelConfigId || settings.activeId;
-    const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+    const cfg = pickModelCfg(settings, activeId);
     if (!cfg) return reply.code(400).send({ message: "未配置模型" });
 
     const chapters = await listChapters(getDataDir(), params.bookId);
@@ -2005,7 +2019,7 @@ app.post("/api/books/:bookId/story/characters/merge", async (req, reply) => {
     // 读取模型配置（用活动模型）
     const settings = await readModelSettings();
     const activeId = body.modelConfigId ?? settings.activeId;
-    const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+    const cfg = pickModelCfg(settings, activeId);
     if (!cfg) throw new Error("未配置模型");
 
     // 先读全量内容（失败则不做任何写入）
@@ -2830,7 +2844,7 @@ app.post("/api/books/:bookId/audit/characters/merge/preview", async (req, reply)
   try {
     const settings = await readModelSettings();
     const activeId = body.modelConfigId ?? settings.activeId;
-    const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+    const cfg = pickModelCfg(settings, activeId);
     if (!cfg) throw new Error("未配置模型");
 
     const idx = await readAuditCharactersIndex(getDataDir(), params.bookId);
@@ -3019,7 +3033,7 @@ app.post("/api/books/:bookId/audit/places/merge/preview", async (req, reply) => 
   try {
     const settings = await readModelSettings();
     const activeId = body.modelConfigId ?? settings.activeId;
-    const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+    const cfg = pickModelCfg(settings, activeId);
     if (!cfg) throw new Error("未配置模型");
 
     const idx = await readAuditPlacesIndex(getDataDir(), params.bookId);
@@ -3253,7 +3267,7 @@ app.post("/api/books/:bookId/writing-pack/generate", async (req, reply) => {
 
     const settings = await readModelSettings();
     const activeId = body.modelConfigId ?? settings.activeId;
-    const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+    const cfg = pickModelCfg(settings, activeId);
     if (!cfg) throw new Error("未配置模型");
 
     const N = 3;
@@ -3494,7 +3508,7 @@ app.post("/api/books/:bookId/chapters/:filename/title/suggest", async (req, repl
   try {
     const settings = await readModelSettings();
     const activeId = body.modelConfigId ?? settings.activeId;
-    const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+    const cfg = pickModelCfg(settings, activeId);
     if (!cfg) throw new Error("未配置模型");
 
     const raw = await readChapter(getDataDir(), params.bookId, params.filename);
@@ -3562,7 +3576,7 @@ app.post("/api/books/:bookId/chapters/:filename/title/suggest/batch", async (req
   try {
     const settings = await readModelSettings();
     const activeId = body.modelConfigId ?? settings.activeId;
-    const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+    const cfg = pickModelCfg(settings, activeId);
     if (!cfg) throw new Error("未配置模型");
 
     const raw = await readChapter(getDataDir(), params.bookId, params.filename);
@@ -3822,7 +3836,7 @@ app.post("/api/books/:bookId/timeline/compress", async (req, reply) => {
 
   const settings = await readModelSettings();
   const activeId = body.modelConfigId || settings.activeId;
-  const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+  const cfg = pickModelCfg(settings, activeId);
   if (!cfg) return reply.code(400).send({ message: "未配置模型" });
 
   const a = Math.min(body.startChapter, body.endChapter);
@@ -3975,7 +3989,7 @@ app.post("/api/books/:bookId/inspiration/generate", async (req, reply) => {
 
   const settings = await readModelSettings();
   const activeId = body.modelConfigId || settings.activeId;
-  const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+  const cfg = pickModelCfg(settings, activeId);
   if (!cfg) return reply.code(400).send({ message: "未配置模型" });
 
   const count = body.count ?? 3;
@@ -4106,7 +4120,7 @@ app.post("/api/books/:bookId/inspiration/generate-preview", async (req, reply) =
 
   const settings = await readModelSettings();
   const activeId = body.modelConfigId || settings.activeId;
-  const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+  const cfg = pickModelCfg(settings, activeId);
   if (!cfg) return reply.code(400).send({ message: "未配置模型" });
 
   const count = body.count ?? 3;
@@ -4231,7 +4245,7 @@ app.post("/api/books/:bookId/inspiration/variant", async (req, reply) => {
 
   const settings = await readModelSettings();
   const activeId = body.modelConfigId || settings.activeId;
-  const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+  const cfg = pickModelCfg(settings, activeId);
   if (!cfg) return reply.code(400).send({ message: "未配置模型" });
 
   const idx = normalizeInspirationIndex(await readInspirationIndex(getDataDir(), params.bookId));

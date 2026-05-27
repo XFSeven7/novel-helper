@@ -1,6 +1,7 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import type { FeatureModelsResponse, ModelConfig } from "../../api";
 import { generateReaderPersonas } from "../../api";
+import { buildModelSelectOptions } from "../../utils/modelSelectOptions";
 import { ReaderPersonasModal } from "./ReaderPersonasModal";
 
 function ModelSelect(props: {
@@ -9,6 +10,22 @@ function ModelSelect(props: {
   configs: ModelConfig[];
   onChange: (id: string) => void;
 }) {
+  const options = useMemo(() => buildModelSelectOptions(props.configs), [props.configs]);
+  const { grouped, ungrouped } = useMemo(() => {
+    const grouped = new Map<string, typeof options>();
+    const ungrouped: typeof options = [];
+    for (const o of options) {
+      if (o.group) {
+        const arr = grouped.get(o.group) ?? [];
+        arr.push(o);
+        grouped.set(o.group, arr);
+      } else {
+        ungrouped.push(o);
+      }
+    }
+    return { grouped, ungrouped };
+  }, [options]);
+
   return (
     <select
       className="settingsFeatureSelect"
@@ -17,11 +34,19 @@ function ModelSelect(props: {
       onChange={(e) => props.onChange(e.target.value)}
     >
       <option value="">（未选择）</option>
-      {props.configs.map((c) => (
-        <option key={c.id} value={c.id}>
-          {c.label}
-          {c.model ? ` · ${c.model}` : ""}
+      {ungrouped.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
         </option>
+      ))}
+      {[...grouped.entries()].map(([group, items]) => (
+        <optgroup key={group} label={group}>
+          {items.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </optgroup>
       ))}
     </select>
   );

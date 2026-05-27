@@ -28,6 +28,13 @@ import {
   defaultConfigFor,
   loadModelConfigs
 } from "./utils/modelConfigStorage";
+import { normalizeModelConfig } from "./utils/modelConfigNormalize";
+import {
+  buildModelSelectOptions,
+  modelConfigIdMatches,
+  parseModelConfigId,
+  resolveModelSelectLabel
+} from "./utils/modelSelectOptions";
 import { applyThemeToDocument, loadThemeId, saveThemeId } from "./utils/themeStorage";
 import { clamp } from "./utils/math";
 import {
@@ -1189,6 +1196,7 @@ export function App() {
   const [auditModelSearch, setAuditModelSearch] = useState("");
   type AuditStreamPhase = "idle" | "running" | "done" | "error";
   const [auditStreamPhase, setAuditStreamPhase] = useState<AuditStreamPhase>("idle");
+  const [auditStreamError, setAuditStreamError] = useState("");
   const [auditStreamText, setAuditStreamText] = useState("");
   const [auditRunningChapter, setAuditRunningChapter] = useState<{ bookSlug: string; filename: string } | null>(null);
   const [auditProgress, setAuditProgress] = useState<{ step: number; total: number; label: string } | null>(null);
@@ -1313,12 +1321,10 @@ export function App() {
     featureSettings?.activeId ??
     activeModelId;
 
-  const organizeModelLabel = useMemo(() => {
-    const c = okModelConfigs.find((x) => x.id === organizeModelId) ?? okModelConfigs[0];
-    if (!c) return "暂无可用模型";
-    const name = (c.model ?? "").trim();
-    return name ? `${c.label} · ${name}` : c.label;
-  }, [okModelConfigs, organizeModelId]);
+  const organizeModelLabel = useMemo(
+    () => resolveModelSelectLabel(okModelConfigs, organizeModelId),
+    [okModelConfigs, organizeModelId]
+  );
 
   const readerCommentsEnabled = Boolean(
     featureSettingsDraft?.features?.readerCommentsEnabled ?? featureSettings?.features?.readerCommentsEnabled
@@ -1328,7 +1334,7 @@ export function App() {
   const readerCommentsModelOk =
     readerCommentsEnabled &&
     Boolean(readerCommentsModelId) &&
-    okModelConfigs.some((c) => c.id === readerCommentsModelId);
+    okModelConfigs.some((c) => modelConfigIdMatches(c.id, readerCommentsModelId));
 
   const contentOrganizeModelId = organizeModelId ?? activeModelId;
 
@@ -1372,26 +1378,21 @@ export function App() {
   }, [readerCommentsGenerating, activeBook, selectedChapter?.filename]);
 
   const okModelGroups = useMemo(() => {
-    type Item =
-      | { kind: "config"; id: string; configId: string; label: string }
-      | { kind: "ollamaModel"; id: string; configId: string; label: string; modelName: string };
-
+    type Item = { kind: "config" | "listedModel"; id: string; configId: string; label: string; modelName?: string };
     const toItems = (c: ModelConfig): Item[] => {
-      if (c.provider === "ollama" && Array.isArray(c.lastModels) && c.lastModels.length) {
-        const uniq = [...new Set(c.lastModels.map((x) => String(x).trim()).filter(Boolean))].slice(0, 200);
-        uniq.sort((a, b) => a.localeCompare(b, "zh-Hans-CN"));
-        return uniq.map((name) => ({
-          kind: "ollamaModel",
-          id: `${c.id}::${name}`,
+      const opts = buildModelSelectOptions([c]);
+      if (opts.some((o) => o.group)) {
+        return opts.map((o) => ({
+          kind: "listedModel" as const,
+          id: o.value,
           configId: c.id,
-          label: name,
-          modelName: name
+          label: o.label,
+          modelName: parseModelConfigId(o.value)?.modelName
         }));
       }
       const label = (c.model ?? "").trim() || c.label;
       return [{ kind: "config", id: c.id, configId: c.id, label }];
     };
-
     const byProvider = new Map<ModelProviderId, Item[]>();
     for (const c of okModelConfigs) {
       const arr = byProvider.get(c.provider) ?? [];
@@ -2723,6 +2724,7 @@ export function App() {
     }
     setAuditBusy(true);
     setStatus("");
+    setAuditStreamError("");
     setAuditStreamPhase("running");
     setAuditProgress({ step: 1, total: 5, label: "准备输入(读取章节/角色/索引)" });
     const runningBookSlug = activeBook;
@@ -2732,7 +2734,8 @@ export function App() {
     try {
       const debugKey = `${runningBookSlug}/${runningChapterFilename}/${Date.now()}`;
       // 先尽力同步一次(避免服务端没有最新配置)
-      await putModelConfigs({ configs: modelConfigs as any, activeId: activeModelId ?? null }).catch(() => {});
+      const syncedConfigs = modelConfigs.map((c) => normalizeModelConfig(c));
+      await putModelConfigs({ configs: syncedConfigs as any, activeId: activeModelId ?? null }).catch(() => {});
 
       const res = await fetch(
         `${(import.meta as any).env?.VITE_API_BASE || "http://127.0.0.1:3177"}/api/books/${encodeURIComponent(
@@ -2825,8 +2828,10 @@ export function App() {
         }
       }
     } catch (e: any) {
+      const msg = e?.message || String(e);
       setAuditStreamPhase("error");
-      setStatus(e?.message || String(e));
+      setAuditStreamError(msg);
+      setStatus(msg);
       setAuditRunningChapter(null);
       setAuditProgress(null);
     } finally {
@@ -3200,24 +3205,31 @@ export function App() {
 
   function saveModelConfigDraft() {
     if (!modelEditorDraft) return;
+    const normalized = normalizeModelConfig(modelEditorDraft);
+    setModelEditorDraft(normalized);
     setModelState((prev) => ({
       ...prev,
-      configs: prev.configs.map((c) => (c.id === modelEditorDraft.id ? modelEditorDraft : c))
+      configs: prev.configs.map((c) => (c.id === normalized.id ? normalized : c))
     }));
     setStatus("已保存模型设置。");
   }
 
   async function testModelConfigDraft() {
     if (!modelEditorDraft) return;
-    const cfg = modelEditorDraft;
+    let cfg = normalizeModelConfig(modelEditorDraft);
+    setModelEditorDraft(cfg);
     if (!cfg.testUrl.trim()) {
       setModelTestStatus("请先填写测试地址。");
+      return;
+    }
+    if (cfg.provider === "custom" && !cfg.baseUrl.trim()) {
+      setModelTestStatus("请先填写 API 基址（例如 https://openrouter.ai/api/v1）。");
       return;
     }
     setModelTestStatus("测试中...");
     try {
       const headers: Record<string, string> = {};
-      if (cfg.provider === "openai" || cfg.provider === "deepseek" || cfg.provider === "qwen") {
+      if (cfg.provider === "openai" || cfg.provider === "deepseek" || cfg.provider === "qwen" || cfg.provider === "custom") {
         if (cfg.apiKey.trim()) headers.Authorization = `Bearer ${cfg.apiKey.trim()}`;
       }
       if (cfg.provider === "gemini") {
@@ -3241,29 +3253,48 @@ export function App() {
       }
       const res = await fetch(cfg.testUrl, { method: "GET", headers });
       const text = await res.text().catch(() => "");
-      let suffix = text ? ` · ${text.slice(0, 120)}` : "";
       let lastModels: string[] | undefined = undefined;
-      if (cfg.provider === "ollama" || cfg.testUrl.includes("/api/tags")) {
+      const parseModelNames = (raw: string): string[] => {
         try {
-          const j = JSON.parse(text) as any;
-          const names: string[] = Array.isArray(j?.models)
-            ? j.models.map((m: any) => String(m?.name || m?.model || "")).filter(Boolean)
-            : [];
-          if (names.length) {
-            const preview = names.slice(0, 6).join("、");
-            suffix = ` · 共 ${names.length} 个模型:${preview}${names.length > 6 ? "..." : ""}`;
+          const j = JSON.parse(raw) as any;
+          if (Array.isArray(j?.data)) {
+            return j.data.map((m: any) => String(m?.id || m?.name || "")).filter(Boolean);
           }
-          // 存一份供"当前模型选择器"使用
-          setModelEditorDraft((prev) => (prev ? { ...prev, lastModels: names } : prev));
-          lastModels = names;
+          if (Array.isArray(j?.models)) {
+            return j.models
+              .map((m: any) => String(m?.id || m?.name || m?.model || ""))
+              .filter(Boolean);
+          }
         } catch {
           // ignore
         }
+        return [];
+      };
+      if (cfg.provider === "ollama" || cfg.testUrl.includes("/api/tags")) {
+        lastModels = parseModelNames(text);
+        if (lastModels.length) {
+          setModelEditorDraft((prev) =>
+            prev ? { ...prev, lastModels, baseUrl: cfg.baseUrl, testUrl: cfg.testUrl } : prev
+          );
+        }
+      } else if (cfg.provider === "custom" || cfg.testUrl.includes("/models")) {
+        lastModels = parseModelNames(text);
+        if (lastModels.length) {
+          setModelEditorDraft((prev) =>
+            prev ? { ...prev, lastModels, baseUrl: cfg.baseUrl, testUrl: cfg.testUrl } : prev
+          );
+        }
       }
       const ok = res.status >= 200 && res.status < 300;
-      setModelEditorDraft((prev) => (prev ? { ...prev, lastTestOk: ok } : prev));
+      let statusLine = `HTTP ${res.status}`;
+      if (lastModels?.length) {
+        statusLine += ` · 共 ${lastModels.length} 个模型（见下方列表，点击可填入模型名）`;
+      } else if (text && !ok) {
+        statusLine += ` · ${text.slice(0, 200)}`;
+      }
+      setModelEditorDraft((prev) => (prev ? { ...prev, lastTestOk: ok, baseUrl: cfg.baseUrl, testUrl: cfg.testUrl } : prev));
       const nextConfigs = modelConfigs.map((c) =>
-        c.id === cfg.id ? { ...c, lastTestOk: ok, lastModels: lastModels ?? c.lastModels } : c
+        c.id === cfg.id ? { ...cfg, lastTestOk: ok, lastModels: lastModels ?? c.lastModels } : c
       );
       setModelState((prev) => ({
         ...prev,
@@ -3272,7 +3303,7 @@ export function App() {
         )
       }));
       void putModelConfigs({ configs: nextConfigs as any, activeId: activeModelId ?? null }).catch(() => {});
-      setModelTestStatus(`HTTP ${res.status}${suffix}`);
+      setModelTestStatus(statusLine);
     } catch (e: any) {
       setModelTestStatus(e?.message || String(e));
     }
@@ -3977,8 +4008,10 @@ export function App() {
                         const next = await getFeatureModels();
                         setFeatureSettings(next);
                         setFeatureSettingsDraft(next);
-                        if (next.featureModels?.organize) {
-                          setModelState((prev) => ({ ...prev, activeId: next.featureModels!.organize! }));
+                        const organizeRaw = next.featureModels?.organize;
+                        if (organizeRaw) {
+                          const configId = parseModelConfigId(organizeRaw)?.configId ?? organizeRaw;
+                          setModelState((prev) => ({ ...prev, activeId: configId }));
                         }
                         setStatus("已保存功能设置。");
                       } catch (e: unknown) {
@@ -4120,7 +4153,20 @@ export function App() {
             />
 
           )}
-          {status ? <div className="status">{status}</div> : null}
+          {status ? (
+            <div className="statusBar" role="status">
+              <div className="statusBarText">{status}</div>
+              <button
+                type="button"
+                className="statusBarClose"
+                onClick={() => setStatus("")}
+                aria-label="关闭提示"
+                title="关闭"
+              >
+                ×
+              </button>
+            </div>
+          ) : null}
         </main>
 
         <div
@@ -4196,6 +4242,7 @@ export function App() {
           auditRun={auditRun}
           onAuditSelectedChapter={() => void onAuditSelectedChapter()}
           auditStreamPhase={auditStreamPhase}
+          auditStreamError={auditStreamError}
           auditStreamText={auditStreamText}
           auditStreamRef={auditStreamRef}
           auditRunningChapter={auditRunningChapter}

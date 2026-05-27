@@ -37,6 +37,7 @@ export type RightPanelProps = {
   auditRun: any;
   onAuditSelectedChapter: () => void | Promise<void>;
   auditStreamPhase: "idle" | "running" | "done" | "error";
+  auditStreamError?: string;
   auditStreamText: string;
   auditStreamRef: React.RefObject<HTMLDivElement | null>;
   auditRunningChapter: { bookSlug: string; filename: string } | null;
@@ -83,6 +84,7 @@ export function RightPanel({
   auditRun,
   onAuditSelectedChapter,
   auditStreamPhase,
+  auditStreamError = "",
   auditStreamText,
   auditStreamRef,
   auditRunningChapter,
@@ -507,7 +509,9 @@ export function RightPanel({
                   </div>
                 ) : null}
                 <div ref={auditStreamRef} className="auditStream">
-                  {auditStreamText.trim() ? (
+                  {auditStreamPhase === "error" && auditStreamError.trim() ? (
+                    <div className="auditStreamInner auditStreamError">{auditStreamError}</div>
+                  ) : auditStreamText.trim() ? (
                     <div className="auditStreamInner auditStreamMd">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{auditStreamText}</ReactMarkdown>
                     </div>

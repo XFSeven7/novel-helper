@@ -2185,10 +2185,156 @@ code {
 
 .homeModelEditor,
 .homeModelList {
-  background: var(--panel);
-  border: 1px solid var(--border);
+  background: transparent;
+  border: none;
   border-radius: 0;
-  padding: 12px;
+  padding: 0;
+}
+
+.homeModelEditorTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.homeModelEditorTopRight {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.homeModelBackBtn {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.modelCustomSection {
+  margin-top: 6px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.modelCustomList {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.modelCustomRow {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.modelCustomRow.active .modelCustomMain {
+  outline: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.modelCustomMain {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: color-mix(in srgb, var(--text) 92%, transparent);
+  padding: 10px 10px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.modelCustomMain:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--panel2) 70%, transparent);
+}
+
+.modelCustomName {
+  font-size: 13px;
+  line-height: 1.35;
+  margin-bottom: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modelCustomMeta {
+  font-size: 12px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modelCustomDel {
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  color: color-mix(in srgb, var(--text) 85%, var(--muted));
+  padding: 0 10px;
+  cursor: pointer;
+  height: 100%;
+}
+
+.modelCustomDel:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--danger, #c0392b) 20%, transparent);
+  border-color: color-mix(in srgb, var(--danger, #c0392b) 40%, var(--border));
+  color: var(--text);
+}
+
+.modelTestStatusLine {
+  margin-top: 10px;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--text) 85%, var(--muted));
+  line-height: 1.5;
+}
+
+.modelTestModelListWrap {
+  margin-top: 10px;
+}
+
+.modelTestModelListWrap .navSubtitle {
+  margin-bottom: 6px;
+}
+
+.modelTestModelList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: min(420px, 50vh);
+  overflow: auto;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel2) 40%, var(--panel));
+}
+
+.modelTestModelList li {
+  margin: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.modelTestModelList li:last-child {
+  border-bottom: none;
+}
+
+.modelTestModelItem {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  text-align: left;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  line-height: 1.4;
+  color: color-mix(in srgb, var(--text) 90%, var(--muted));
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.modelTestModelItem:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text);
 }
 
 .centerReading {
@@ -3385,6 +3531,12 @@ code {
 
 .auditStreamInner {
   padding: 10px;
+}
+
+.auditStreamError {
+  color: var(--danger, #c0392b);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .auditStreamMd p {
@@ -6379,12 +6531,43 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   margin-top: 10px;
 }
 
-.status {
-  padding: 10px 12px;
+.statusBar {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 8px 10px 12px;
   border-top: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.statusBarText {
+  flex: 1;
+  min-width: 0;
   color: rgba(255, 255, 255, 0.78);
   font-size: 12px;
-  background: rgba(0, 0, 0, 0.2);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.statusBarClose {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  margin: -4px 0;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: color-mix(in srgb, var(--text) 70%, var(--muted));
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.statusBarClose:hover {
+  background: color-mix(in srgb, var(--panel2) 80%, transparent);
+  color: var(--text);
 }
 
 @media (max-width: 1000px) {

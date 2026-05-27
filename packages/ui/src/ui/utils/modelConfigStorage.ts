@@ -10,6 +10,8 @@ export const BUILTIN_MODEL_PROVIDERS: Array<{ id: ModelProviderId; label: string
   { id: "custom", label: "自定义服务" }
 ];
 
+export const BUILTIN_MODEL_PROVIDERS_NO_CUSTOM = BUILTIN_MODEL_PROVIDERS.filter((p) => p.id !== "custom");
+
 export function defaultConfigFor(provider: ModelProviderId): ModelConfig {
   const id = `${provider}-${Date.now()}`;
   if (provider === "openai")
@@ -66,9 +68,9 @@ export function defaultConfigFor(provider: ModelProviderId): ModelConfig {
     id,
     label: "自定义",
     provider: "custom",
-    baseUrl: "",
+    baseUrl: "https://openrouter.ai/api/v1",
     apiKey: "",
-    testUrl: "",
+    testUrl: "https://openrouter.ai/api/v1/models",
     model: "",
     extraHeadersJson: "{}"
   };
@@ -80,16 +82,23 @@ export function loadModelConfigs(): { configs: ModelConfig[]; activeId: string |
     const activeId = localStorage.getItem(MODEL_ACTIVE_ID_STORAGE_KEY);
     const parsed = raw ? (JSON.parse(raw) as ModelConfig[]) : [];
     const byProvider = new Map<ModelProviderId, ModelConfig>();
+    const customs: ModelConfig[] = [];
     if (Array.isArray(parsed)) {
       for (const c of parsed) {
         if (!c?.provider) continue;
+        if (c.provider === "custom") {
+          customs.push(c);
+          continue;
+        }
         if (!byProvider.has(c.provider)) byProvider.set(c.provider, c);
       }
     }
-    const configs = BUILTIN_MODEL_PROVIDERS.map((p) => byProvider.get(p.id) ?? defaultConfigFor(p.id));
-    return { configs, activeId: activeId || configs[0]?.id || null };
+    const builtin = BUILTIN_MODEL_PROVIDERS_NO_CUSTOM.map((p) => byProvider.get(p.id) ?? defaultConfigFor(p.id));
+    const configs = [...builtin, ...customs];
+    const nextActiveId = activeId && configs.some((c) => c.id === activeId) ? activeId : configs[0]?.id || null;
+    return { configs, activeId: nextActiveId };
   } catch {
-    const configs = BUILTIN_MODEL_PROVIDERS.map((p) => defaultConfigFor(p.id));
+    const configs = BUILTIN_MODEL_PROVIDERS_NO_CUSTOM.map((p) => defaultConfigFor(p.id));
     return { configs, activeId: configs[0]?.id || null };
   }
 }

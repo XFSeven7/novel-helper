@@ -1,4 +1,5 @@
 import { streamText } from "ai";
+import { findModelConfig, type FeatureSettingsFile } from "../featureSettings.js";
 import { buildStageChatSystemPrompt } from "./prompt.js";
 import type { StageChatModelMessage } from "./types.js";
 
@@ -22,7 +23,9 @@ export async function performStageChat(
 ): Promise<string> {
   const settings = await deps.readModelSettings();
   const activeId = opts.modelConfigId || settings.activeId;
-  const cfg = settings.configs.find((c) => c.id === activeId) || settings.configs[0];
+  const cfg =
+    findModelConfig({ configs: settings.configs, activeId: settings.activeId } as FeatureSettingsFile, activeId) ||
+    settings.configs[0];
   if (!cfg) throw new Error("未配置模型");
 
   const userMessage = opts.userMessage.trim();

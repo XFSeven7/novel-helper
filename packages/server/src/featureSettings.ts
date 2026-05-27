@@ -119,9 +119,61 @@ export function resolveReaderCommentsModelId(file: FeatureSettingsFile): string 
   return file.featureModels?.readerComments ?? null;
 }
 
+export const MODEL_CONFIG_ID_SEP = "::";
+
+export function parseModelConfigId(
+  raw: string | null | undefined
+): { configId: string; modelName?: string } | null {
+  if (!raw?.trim()) return null;
+  const t = raw.trim();
+  const sep = t.indexOf(MODEL_CONFIG_ID_SEP);
+  if (sep > 0) {
+    const configId = t.slice(0, sep);
+    const modelName = t.slice(sep + MODEL_CONFIG_ID_SEP.length).trim();
+    if (!configId) return null;
+    return { configId, modelName: modelName || undefined };
+  }
+  return { configId: t };
+}
+
 export function findModelConfig(file: FeatureSettingsFile, id: string | null | undefined): ModelConfig | undefined {
-  if (!id) return undefined;
-  return file.configs.find((c) => c.id === id);
+  const parsed = parseModelConfigId(id);
+  if (!parsed) return undefined;
+  const cfg = file.configs.find((c) => c.id === parsed.configId);
+  if (!cfg) return undefined;
+  if (parsed.modelName) return { ...cfg, model: parsed.modelName };
+  return cfg;
+}
+
+/** 自定义 OpenAI 兼容网关：从 testUrl 推断 baseUrl，避免只填测试地址导致 Invalid URL。 */
+export function normalizeCustomModelConfig(cfg: ModelConfig): ModelConfig {
+  if (cfg.provider !== "custom") return cfg;
+  let baseUrl = (cfg.baseUrl || "").trim().replace(/\/$/, "");
+  let testUrl = (cfg.testUrl || "").trim();
+  const tryParse = (raw: string) => {
+    try {
+      return new URL(raw);
+    } catch {
+      return null;
+    }
+  };
+  if (!baseUrl && testUrl) {
+    const u = tryParse(testUrl);
+    if (u) {
+      if (u.pathname.endsWith("/models")) {
+        baseUrl = testUrl.replace(/\/models\/?$/, "");
+      } else if (/\/v\d+(\/)?$/.test(u.pathname) || u.pathname === "/api/v1") {
+        baseUrl = testUrl.replace(/\/$/, "");
+        if (!testUrl.endsWith("/models")) testUrl = `${baseUrl}/models`;
+      }
+    }
+  }
+  if (baseUrl && !testUrl) testUrl = `${baseUrl}/models`;
+  return { ...cfg, baseUrl, testUrl };
+}
+
+export function normalizeModelConfigs(configs: ModelConfig[]): ModelConfig[] {
+  return configs.map((c) => normalizeCustomModelConfig(c));
 }
 
 export function assertReaderCommentsReady(file: FeatureSettingsFile): { cfg: ModelConfig } | { error: string } {
