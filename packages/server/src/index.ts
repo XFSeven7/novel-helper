@@ -116,6 +116,13 @@ import {
   writeFeatureSettings,
   type FeatureSettingsFile
 } from "./featureSettings.js";
+import {
+  appendModelBenchmarkRecord,
+  computeDurations,
+  readModelBenchmarkFile,
+  type ModelBenchmarkRecord,
+  type ModelBenchmarkTimeline
+} from "./modelBenchmark.js";
 import { migrateBookIds } from "./migrateBookIds.js";
 import { mergeOccurredNotes } from "./characterOccurredNotes.js";
 import { parseChapterExtract } from "./audit/auditExtractSchema.js";
@@ -275,6 +282,82 @@ function stringifyInspirationContent(subtypeOrKind: string, card: any): string {
 
 function newId(): string {
   return crypto.randomUUID();
+}
+
+async function runModelBenchmarkOnce(input: {
+  modelConfigId: string;
+  modelOverride?: string | undefined;
+  userInput: string;
+  maxOutputChars: number;
+}): Promise<{ record: ModelBenchmarkRecord; outputText: string }> {
+  const { modelConfigId, modelOverride, userInput, maxOutputChars } = input;
+
+  const t_srv_received_ms = Date.now();
+  const timeline: ModelBenchmarkTimeline = { t_srv_received_ms };
+
+  const settings = await readModelSettings();
+  const cfgRaw = pickModelCfg(settings, modelConfigId);
+  const cfg = modelOverride?.trim() ? { ...cfgRaw, model: modelOverride.trim() } : cfgRaw;
+  timeline.t_srv_validated_ms = Date.now();
+
+  let outputText = "";
+  let ok = false;
+  let error: string | undefined = undefined;
+
+  try {
+    const { model, providerOptions } = createAiSdkModel(cfg);
+    timeline.t_upstream_start_ms = Date.now();
+    const r = await streamText({
+      model,
+      messages: [{ role: "user", content: userInput }],
+      temperature: 0.2,
+      providerOptions
+    } as any);
+
+    let sawFirst = false;
+    for await (const delta of r.textStream) {
+      if (!sawFirst) {
+        sawFirst = true;
+        timeline.t_upstream_first_token_ms = Date.now();
+      }
+      if (!delta) continue;
+      if (outputText.length >= maxOutputChars) continue;
+      outputText += delta;
+      if (outputText.length > maxOutputChars) outputText = outputText.slice(0, maxOutputChars);
+    }
+    await r.text.catch(() => "");
+    timeline.t_upstream_done_ms = Date.now();
+    ok = true;
+  } catch (e: any) {
+    timeline.t_upstream_done_ms = Date.now();
+    ok = false;
+    error = e?.message || String(e);
+  }
+
+  timeline.t_srv_respond_start_ms = Date.now();
+  const preview = outputText.trim().slice(0, 200);
+  const record: ModelBenchmarkRecord = {
+    id: newId(),
+    createdAt: new Date().toISOString(),
+    ok,
+    error,
+    modelConfigId: cfg.id,
+    modelLabel: cfg.label,
+    provider: cfg.provider,
+    modelName: cfg.model?.trim() || undefined,
+    baseUrl: cfg.baseUrl?.trim() || undefined,
+    inputChars: userInput.length,
+    outputChars: outputText.length,
+    outputPreview: preview || undefined,
+    timeline,
+    durations: computeDurations(timeline)
+  };
+  timeline.t_srv_respond_done_ms = Date.now();
+  record.timeline = timeline;
+  record.durations = computeDurations(timeline);
+
+  await appendModelBenchmarkRecord(record).catch(() => {});
+  return { record, outputText };
 }
 
 function normalizeIdeaItem(x: any): IdeaItem | null {
@@ -1541,6 +1624,51 @@ app.put("/api/settings/model-configs", async (req) => {
     activeId: body.activeId
   });
   return { ok: true };
+});
+
+app.get("/api/settings/model-benchmark/history", async (req) => {
+  const q = z
+    .object({ limit: z.coerce.number().int().min(1).max(500).optional() })
+    .parse((req as any).query ?? {});
+  const f = await readModelBenchmarkFile();
+  const limit = typeof q.limit === "number" ? q.limit : 200;
+  return { ok: true, items: (f.items || []).slice(0, limit) };
+});
+
+app.post("/api/settings/model-benchmark/run", async (req, reply) => {
+  const body = z
+    .object({
+      modelConfigId: z.string().min(1),
+      model: z.string().optional(),
+      input: z.string().default(""),
+      maxOutputChars: z.number().int().min(50).max(20000).optional(),
+      client: z
+        .object({
+          client_wait_first_byte_ms: z.number().nonnegative().optional(),
+          client_download_parse_ms: z.number().nonnegative().optional(),
+          client_total_ms: z.number().nonnegative().optional()
+        })
+        .optional()
+    })
+    .parse((req as any).body ?? {});
+
+  const userInput = String(body.input || "").trim();
+  if (!userInput) return reply.code(400).send({ message: "请输入测试内容。" });
+
+  try {
+    const { record, outputText } = await runModelBenchmarkOnce({
+      modelConfigId: body.modelConfigId,
+      modelOverride: body.model,
+      userInput,
+      maxOutputChars: body.maxOutputChars ?? 4000
+    });
+    if (body.client) {
+      record.timeline = { ...record.timeline, ...body.client };
+    }
+    return { ok: true, record, outputText };
+  } catch (e: any) {
+    return reply.code(400).send({ message: e?.message || String(e) });
+  }
 });
 
 app.get("/api/settings/app", async (): Promise<AppSettingsResponse> => {

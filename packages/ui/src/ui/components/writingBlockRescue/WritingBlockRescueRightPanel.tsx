@@ -74,7 +74,7 @@ export function WritingBlockRescueRightPanel(props: {
                 <div className="rescueField">
                   <div className="rescueFieldLabel muted">节拍清单</div>
                   <ul className="rescueBeats">
-                    {item.beats.map((b, i) => (
+                    {item.beats.map((b: string, i: number) => (
                       <li key={i}>{b}</li>
                     ))}
                   </ul>
@@ -118,7 +118,7 @@ export function WritingBlockRescueRightPanel(props: {
                   <div className="rescueField">
                     <div className="rescueFieldLabel muted">决策点</div>
                     <div className="rescueDecisions">
-                      {item.decisions.slice(0, 3).map((d, i) => (
+                      {item.decisions.slice(0, 3).map((d: any, i: number) => (
                         <div key={i} className="rescueDecision">
                           <div>
                             <span className="muted">选择：</span>
@@ -160,7 +160,7 @@ export function WritingBlockRescueRightPanel(props: {
                         item.risk ? `风险：${item.risk}` : "",
                         "",
                         "节拍：",
-                        ...item.beats.map((x) => `- ${x}`),
+                        ...item.beats.map((x: string) => `- ${x}`),
                         "",
                         "场景卡片：",
                         `- 目标：${item.sceneCard.goal}`,
@@ -173,7 +173,7 @@ export function WritingBlockRescueRightPanel(props: {
                         item.decisions?.length
                           ? [
                               "决策点：",
-                              ...item.decisions.slice(0, 3).flatMap((d) => [
+                              ...item.decisions.slice(0, 3).flatMap((d: any) => [
                                 `- 选择：${d.choice}`,
                                 `  后果：${d.consequence}`,
                                 d.risk ? `  风险：${d.risk}` : "",

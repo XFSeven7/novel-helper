@@ -189,6 +189,68 @@ export async function putModelConfigs(input: { configs: ModelConfig[]; activeId:
   });
 }
 
+export type ModelBenchmarkTimeline = {
+  t_srv_received_ms: number;
+  t_srv_validated_ms?: number;
+  t_upstream_start_ms?: number;
+  t_upstream_first_token_ms?: number;
+  t_upstream_done_ms?: number;
+  t_srv_respond_start_ms?: number;
+  t_srv_respond_done_ms?: number;
+  client_wait_first_byte_ms?: number;
+  client_download_parse_ms?: number;
+  client_total_ms?: number;
+};
+
+export type ModelBenchmarkDurations = {
+  server_total_ms?: number;
+  server_overhead_ms?: number;
+  model_ttfb_ms?: number;
+  model_total_ms?: number;
+  server_postprocess_ms?: number;
+  server_respond_ms?: number;
+};
+
+export type ModelBenchmarkRecord = {
+  id: string;
+  createdAt: string;
+  ok: boolean;
+  error?: string;
+  modelConfigId: string;
+  modelLabel: string;
+  provider: string;
+  modelName?: string;
+  baseUrl?: string;
+  inputChars: number;
+  outputChars?: number;
+  outputPreview?: string;
+  timeline: ModelBenchmarkTimeline;
+  durations?: ModelBenchmarkDurations;
+};
+
+export async function runModelBenchmark(input: {
+  modelConfigId: string;
+  model?: string;
+  input: string;
+  maxOutputChars?: number;
+  client?: {
+    client_wait_first_byte_ms?: number;
+    client_download_parse_ms?: number;
+    client_total_ms?: number;
+  };
+}) {
+  return await http<{ ok: true; record: ModelBenchmarkRecord; outputText: string }>(`/api/settings/model-benchmark/run`, {
+    method: "POST",
+    body: JSON.stringify(input)
+  });
+}
+
+export async function getModelBenchmarkHistory(limit = 200) {
+  return await http<{ ok: true; items: ModelBenchmarkRecord[] }>(
+    `/api/settings/model-benchmark/history?limit=${encodeURIComponent(String(limit))}`
+  );
+}
+
 export type AppSettings = {
   effectiveDataDir: string;
   source: "env" | "file" | "default";
