@@ -42,62 +42,65 @@ export function TrainingCategoryTree({ categories, selection, onSelect, disabled
           const hasQ = cat.questions.length > 0;
           return (
             <div key={cat.id} className="outlineStageTreeNode">
-              <div
+              <button
+                type="button"
                 className={[
                   "outlineStageTreeRow",
+                  "outlineStageTreeRowBtn",
+                  "trainingTreeRowBtn",
                   isCatSelected(cat.id) ? "outlineStageTreeRow--selected" : ""
                 ]
                   .filter(Boolean)
                   .join(" ")}
                 style={{ paddingLeft: 8 }}
+                disabled={disabled}
+                aria-expanded={hasQ ? open : undefined}
+                onClick={() => {
+                  if (hasQ) toggle(cat.id);
+                  onSelect({ kind: "category", categoryId: cat.id });
+                }}
               >
-                <button
-                  type="button"
-                  className={`outlineStageTreeToggle${hasQ ? "" : " outlineStageTreeToggle--spacer"}`}
-                  disabled={!hasQ}
-                  onClick={() => toggle(cat.id)}
-                  aria-label={open ? "收起" : "展开"}
+                <span
+                  className={`outlineStageTreeToggle outlineStageTreeToggle--decor${
+                    hasQ ? "" : " outlineStageTreeToggle--spacer"
+                  }`}
+                  aria-hidden
                 >
                   {hasQ ? (open ? "▾" : "▸") : ""}
-                </button>
-                <button
-                  type="button"
-                  className="outlineStageTreeLabelBtn trainingTreeLabelBtn"
-                  disabled={disabled}
-                  onClick={() => onSelect({ kind: "category", categoryId: cat.id })}
-                >
+                </span>
+                <span className="outlineStageTreeLabelBtn trainingTreeLabelBtn">
                   <span className="trainingTreeTitle">{cat.title}</span>
                   <span className="muted trainingTreeMeta">练 {cat.attemptCount}</span>
-                </button>
-              </div>
+                </span>
+              </button>
               {open
                 ? cat.questions.map((q) => (
                     <div key={q.id} className="outlineStageTreeNode">
-                      <div
+                      <button
+                        type="button"
                         className={[
                           "outlineStageTreeRow",
+                          "outlineStageTreeRowBtn",
+                          "trainingTreeRowBtn",
                           isQSelected(q.id) ? "outlineStageTreeRow--selected" : ""
                         ]
                           .filter(Boolean)
                           .join(" ")}
                         style={{ paddingLeft: 28 }}
+                        disabled={disabled}
+                        onClick={() =>
+                          onSelect({ kind: "question", categoryId: cat.id, questionId: q.id })
+                        }
                       >
-                        <span className="outlineStageTreeToggle outlineStageTreeToggle--spacer" />
-                        <button
-                          type="button"
-                          className="outlineStageTreeLabelBtn trainingTreeLabelBtn"
-                          disabled={disabled}
-                          onClick={() =>
-                            onSelect({ kind: "question", categoryId: cat.id, questionId: q.id })
-                          }
-                        >
+                        <span className="outlineStageTreeToggle outlineStageTreeToggle--spacer" aria-hidden />
+                        <span className="outlineStageTreeLabelBtn trainingTreeLabelBtn">
                           <span className="trainingTreeTitle">{q.title}</span>
                           <span className="muted trainingTreeMeta">
                             练 {q.attemptCount}
                             {q.bestScore != null ? ` · ${q.bestScore}` : ""}
                           </span>
-                        </button>
-                      </div>
+                        </span>
+                      </button>
                     </div>
                   ))
                 : null}

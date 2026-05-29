@@ -10647,6 +10647,36 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   min-height: 0;
 }
 
+.trainingCategoryTree .outlineStageTreeRowBtn {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.trainingCategoryTree .outlineStageTreeRowBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.trainingCategoryTree .outlineStageTreeRowBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.trainingCategoryTree .outlineStageTreeToggle--decor {
+  pointer-events: none;
+  cursor: inherit;
+}
+
+.trainingCategoryTree .outlineStageTreeLabelBtn {
+  cursor: inherit;
+  pointer-events: none;
+}
+
 .trainingTreeLabelBtn {
   display: flex;
   flex-direction: column;
