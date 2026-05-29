@@ -67,6 +67,7 @@ import {
 import { InspirationTab } from "./components/inspiration/InspirationTab";
 import { getFullscreenElement, isAltEnter, toggleDocumentFullscreen } from "./components/layout/fullscreen";
 import { TopBar } from "./components/layout/TopBar";
+import { TrainingWorkspace } from "./components/training/TrainingWorkspace";
 import { SettingsPage, type SettingsTabId } from "./components/settings/SettingsPage";
 import { SettingsFeaturesPanel } from "./components/settings/SettingsFeaturesPanel";
 import { SettingsShortcutsPanel } from "./components/settings/SettingsShortcutsPanel";
@@ -333,6 +334,7 @@ export function App() {
   const [modelConfigEditorId, setModelConfigEditorId] = useState<string | null>(null);
   const [modelEditorDraft, setModelEditorDraft] = useState<ModelConfig | null>(null);
   const [modelTestStatus, setModelTestStatus] = useState<string>("");
+  const [rootView, setRootView] = useState<"main" | "training">("main");
   const [homeCenterTab, setHomeCenterTab] = useState<"welcome" | "settings">("welcome");
   const [settingsTab, setSettingsTab] = useState<SettingsTabId>("models");
   const [featureSettings, setFeatureSettings] = useState<FeatureModelsResponse | null>(null);
@@ -1035,9 +1037,16 @@ export function App() {
     }
   }, [modelConfigs, activeModelId]);
 
+  const modelSyncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    // 同步到服务端供审计调用(失败不影响前端使用)
-    void putModelConfigs({ configs: modelConfigs as any, activeId: activeModelId ?? null }).catch(() => {});
+    // 同步到服务端供审计调用；防抖避免与「保存功能设置」竞态覆盖 features
+    if (modelSyncTimerRef.current) clearTimeout(modelSyncTimerRef.current);
+    modelSyncTimerRef.current = setTimeout(() => {
+      void putModelConfigs({ configs: modelConfigs as any, activeId: activeModelId ?? null }).catch(() => {});
+    }, 800);
+    return () => {
+      if (modelSyncTimerRef.current) clearTimeout(modelSyncTimerRef.current);
+    };
   }, [modelConfigs, activeModelId]);
 
   useEffect(() => {
@@ -1048,6 +1057,16 @@ export function App() {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (homeCenterTab !== "settings" || settingsTab !== "features") return;
+    void getFeatureModels()
+      .then((f) => {
+        setFeatureSettings(f);
+        setFeatureSettingsDraft(f);
+      })
+      .catch(() => {});
+  }, [homeCenterTab, settingsTab]);
 
   const [auditRun, setAuditRun] = useState<any | null>(null);
   const [auditDirty, setAuditDirty] = useState(false);
@@ -1545,6 +1564,17 @@ export function App() {
     readerCommentsEnabled &&
     Boolean(readerCommentsModelId) &&
     okModelConfigs.some((c) => modelConfigIdMatches(c.id, readerCommentsModelId));
+
+  const trainingModeEnabled = Boolean(
+    featureSettingsDraft?.features?.trainingModeEnabled ?? featureSettings?.features?.trainingModeEnabled
+  );
+  const trainingModelId =
+    featureSettingsDraft?.featureModels?.training ?? featureSettings?.featureModels?.training ?? null;
+  const trainingEntryDisabled =
+    !trainingModelId || !okModelConfigs.some((c) => modelConfigIdMatches(c.id, trainingModelId));
+  const trainingEntryTitle = trainingEntryDisabled
+    ? "请先在设置 → 功能中配置训练评改模型（须通过连接测试）"
+    : "网文写作训练";
 
   const contentOrganizeModelId = organizeModelId ?? activeModelId;
 
@@ -3519,6 +3549,18 @@ export function App() {
     }
   }
 
+  if (rootView === "training") {
+    return (
+      <div className="app appTraining">
+        <TrainingWorkspace
+          onExit={() => setRootView("main")}
+          onStatus={setStatus}
+          modelConfigId={trainingModelId}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <TopBar
@@ -3533,6 +3575,10 @@ export function App() {
         onToggleNav={() => setNavCollapsed((v) => !v)}
         rightCollapsed={rightCollapsed}
         onToggleRight={() => setRightCollapsed((v) => !v)}
+        trainingModeEnabled={trainingModeEnabled}
+        trainingEntryDisabled={trainingEntryDisabled}
+        trainingEntryTitle={trainingEntryTitle}
+        onOpenTraining={() => setRootView("training")}
       />
 
       <OutlineBookProvider bookId={activeBook || null} refreshToken={outlineRefreshKey}>
@@ -4303,15 +4349,16 @@ export function App() {
                       if (!featureSettingsDraft) return;
                       setFeatureSaveBusy(true);
                       try {
-                        await putModelConfigs({
-                          configs: modelConfigs as any,
-                          activeId: featureSettingsDraft.featureModels?.organize ?? activeModelId ?? null
-                        });
                         await putFeatureModels({
                           configs: modelConfigs as FeatureModelsResponse["configs"],
                           activeId: featureSettingsDraft.featureModels?.organize ?? activeModelId,
                           featureModels: featureSettingsDraft.featureModels,
-                          features: featureSettingsDraft.features,
+                          features: {
+                            readerCommentsEnabled: Boolean(
+                              featureSettingsDraft.features?.readerCommentsEnabled
+                            ),
+                            trainingModeEnabled: Boolean(featureSettingsDraft.features?.trainingModeEnabled)
+                          },
                           readerComments: featureSettingsDraft.readerComments
                         });
                         const next = await getFeatureModels();

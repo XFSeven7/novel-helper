@@ -105,6 +105,7 @@ import { registerWritingGuidanceRoutes } from "./writingGuidance/routes.js";
 import { registerWritingBlockRescueRoutes } from "./writingBlockRescue/routes.js";
 import { registerOutlineStageChatRoutes } from "./outlineStageChat/routes.js";
 import { registerReaderCommentsRoutes } from "./readerComments/routes.js";
+import { registerTrainingRoutes } from "./training/routes.js";
 import { registerReaderPersonaRoutes } from "./readerPersonas/routes.js";
 import { queueReaderCommentsOnSave } from "./readerComments/background.js";
 import {
@@ -221,12 +222,11 @@ async function writeModelSettings(v: { configs: ModelConfig[]; activeId: string 
   const current = await readFeatureSettings();
   // 注意：`activeId` 是「全局活动配置」概念；而 `featureModels.organize` 允许用户在功能页选择到具体模型（configId::modelName）。
   // 若这里强行把 `organize` 覆盖成 `activeId`（通常仅 configId），会导致刷新后回退为配置默认模型。
+  // 仅 patch configs/activeId/organize，features 由 read-merge-write 保留，避免与功能设置保存竞态互覆盖。
   await writeFeatureSettings({
-    ...current,
     configs: v.configs as FeatureSettingsFile["configs"],
     activeId: v.activeId,
     featureModels: {
-      ...current.featureModels,
       organize: current.featureModels?.organize ?? v.activeId ?? null
     }
   });
@@ -4596,6 +4596,12 @@ registerOutlineStageChatRoutes(app, {
 registerReaderCommentsRoutes(app, {
   getDataDir,
   createAiSdkModel: (cfg) => createAiSdkModel(cfg as ModelConfig)
+});
+
+registerTrainingRoutes(app, {
+  getDataDir,
+  createAiSdkModel: (cfg) => createAiSdkModel(cfg as ModelConfig),
+  sseWrite
 });
 
 registerReaderPersonaRoutes(app, {

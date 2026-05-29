@@ -39,7 +39,7 @@ export function registerReaderCommentsRoutes(app: FastifyInstance, deps: ReaderC
       configs: file.configs,
       activeId: file.activeId,
       featureModels: file.featureModels ?? {},
-      features: file.features ?? { readerCommentsEnabled: false },
+      features: file.features ?? { readerCommentsEnabled: false, trainingModeEnabled: false },
       readerComments,
       readerPersonaPool
     };
@@ -53,10 +53,16 @@ export function registerReaderCommentsRoutes(app: FastifyInstance, deps: ReaderC
         featureModels: z
           .object({
             organize: z.string().nullable().optional(),
-            readerComments: z.string().nullable().optional()
+            readerComments: z.string().nullable().optional(),
+            training: z.string().nullable().optional()
           })
           .optional(),
-        features: z.object({ readerCommentsEnabled: z.boolean().optional() }).optional(),
+        features: z
+          .object({
+            readerCommentsEnabled: z.boolean().optional(),
+            trainingModeEnabled: z.boolean().optional()
+          })
+          .optional(),
         readerComments: z
           .object({
             maxAiCommentsPerChapter: z.number().optional(),
@@ -81,19 +87,13 @@ export function registerReaderCommentsRoutes(app: FastifyInstance, deps: ReaderC
       return reply.code(400).send({ message: "最少条数不能大于最多条数" });
     }
 
-    const current = await readFeatureSettings();
-    const next: FeatureSettingsFile = {
-      configs: body.configs ?? current.configs,
-      activeId: body.activeId !== undefined ? body.activeId : current.activeId,
-      featureModels: { ...current.featureModels, ...body.featureModels },
-      features: { ...current.features, ...body.features },
-      readerComments: normalizeReaderCommentsOptions({
-        ...current.readerComments,
-        ...(body.readerComments as FeatureSettingsFile["readerComments"])
-      })
-    };
-    if (next.featureModels?.organize) next.activeId = next.featureModels.organize;
-    await writeFeatureSettings(next);
+    await writeFeatureSettings({
+      configs: body.configs,
+      activeId: body.activeId,
+      featureModels: body.featureModels,
+      features: body.features,
+      readerComments: body.readerComments as FeatureSettingsFile["readerComments"]
+    });
     return { ok: true };
   });
 

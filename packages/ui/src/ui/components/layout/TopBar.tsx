@@ -22,6 +22,10 @@ export type TopBarProps = {
   onToggleNav: () => void;
   rightCollapsed: boolean;
   onToggleRight: () => void;
+  trainingModeEnabled?: boolean;
+  trainingEntryDisabled?: boolean;
+  trainingEntryTitle?: string;
+  onOpenTraining?: () => void;
 };
 
 export function TopBar({
@@ -35,7 +39,11 @@ export function TopBar({
   navCollapsed,
   onToggleNav,
   rightCollapsed,
-  onToggleRight
+  onToggleRight,
+  trainingModeEnabled,
+  trainingEntryDisabled,
+  trainingEntryTitle,
+  onOpenTraining
 }: TopBarProps) {
   return (
     <header className="topbar">
@@ -69,6 +77,17 @@ export function TopBar({
             右栏
           </button>
         </div>
+        {trainingModeEnabled ? (
+          <button
+            type="button"
+            className="btnSort topbarTrainingBtn"
+            disabled={busy || trainingEntryDisabled}
+            title={trainingEntryTitle ?? "网文写作训练"}
+            onClick={() => onOpenTraining?.()}
+          >
+            训练
+          </button>
+        ) : null}
         <ThemePicker busy={busy} themeId={themeId} onThemeChange={onThemeChange} />
         <a
           href={GITHUB_REPO_URL}

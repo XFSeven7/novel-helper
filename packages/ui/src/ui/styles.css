@@ -8807,8 +8807,26 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   box-sizing: border-box;
 }
 
-.settingsFeaturesSurface > .muted.settingsDataDirHint {
-  margin: 0 0 14px;
+.settingsFeaturesTopBar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.settingsFeaturesTopBar .settingsDataDirHint {
+  margin: 0;
+  flex: 1;
+  min-width: 200px;
+}
+
+.settingsFeaturesTopActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
 }
 
 .settingsFeatureBlock {
@@ -9991,6 +10009,672 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   .writingBlockRescueInfo {
     border-right: 0;
     padding-right: 0;
+  }
+}
+
+/* —— 训练模式 —— */
+.appTraining {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.trainingWorkspace {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.trainingTopbar {
+  flex-shrink: 0;
+}
+
+.trainingTopbarTitle {
+  flex: 1;
+  text-align: center;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.topbarTrainingBtn {
+  margin-right: 4px;
+}
+
+.trainingBody {
+  flex: 1;
+  overflow: auto;
+  padding: 16px 20px 32px;
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.trainingBodyWide {
+  max-width: none;
+  padding: 12px 20px 20px;
+}
+
+.trainingHomeContinue {
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.trainingHomeHistoryBtn {
+  align-self: flex-start;
+}
+
+.trainingModule {
+  margin-bottom: 20px;
+}
+
+.trainingModuleTitle {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--muted);
+}
+
+.trainingLessonList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.trainingLessonBtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 6px;
+  background: var(--panel);
+  text-align: left;
+  cursor: pointer;
+}
+
+.trainingLessonBtn.isLocked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.trainingLessonLabel {
+  flex: 1;
+}
+
+.trainingLessonScore {
+  font-size: 12px;
+}
+
+.trainingLessonPage {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.trainingLessonHeader {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.trainingLessonHeaderText {
+  flex: 1;
+  min-width: 0;
+}
+
+.trainingLessonModule {
+  margin: 2px 0 0;
+  font-size: 13px;
+}
+
+.trainingLessonSplit {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.trainingLessonLearn,
+.trainingLessonPractice {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 14px 16px;
+  min-height: 0;
+  max-height: calc(100vh - 128px);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.trainingLessonPractice {
+  overflow: hidden;
+}
+
+.trainingPaneTitle {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin: 0 0 10px;
+  flex-shrink: 0;
+}
+
+.trainingLessonPage .trainingLessonContent {
+  white-space: pre-wrap;
+  line-height: 1.65;
+  margin: 0;
+  font-size: 14px;
+  flex: 1;
+}
+
+.trainingSnippet {
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  flex-shrink: 0;
+}
+
+.trainingSnippetHeading {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.trainingSnippetBody {
+  white-space: pre-wrap;
+  margin: 8px 0 0;
+  font-family: inherit;
+  font-size: 14px;
+}
+
+.trainingSnippetAnalysis {
+  margin: 8px 0 0;
+  font-size: 13px;
+}
+
+.trainingExercisePrompt {
+  margin: 0 0 10px;
+  font-size: 14px;
+  line-height: 1.55;
+  flex-shrink: 0;
+  white-space: pre-wrap;
+}
+
+.trainingPracticeEditor {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow: auto;
+}
+
+.trainingPracticeFooter {
+  flex-shrink: 0;
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.trainingPracticeFooter .btnModalPrimary {
+  align-self: flex-start;
+}
+
+.trainingTextarea {
+  width: 100%;
+  min-height: 160px;
+  margin: 0;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: inherit;
+  font-size: 14px;
+  line-height: 1.55;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.trainingTextareaCompact {
+  min-height: 100px;
+  flex-shrink: 0;
+}
+
+.trainingTextareaGrow {
+  flex: 1;
+  min-height: 200px;
+}
+
+.trainingFieldLabel {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 10px;
+}
+
+.trainingCharCount {
+  font-size: 12px;
+}
+
+.trainingLessonTitle {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .trainingLessonSplit {
+    grid-template-columns: 1fr;
+  }
+
+  .trainingLessonLearn,
+  .trainingLessonPractice {
+    max-height: none;
+  }
+
+  .trainingLessonPractice {
+    min-height: 320px;
+  }
+}
+
+.trainingGradingScore {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin: 12px 0 16px;
+  color: var(--accent, #6ea8fe);
+}
+
+.trainingGradingSection {
+  margin-bottom: 16px;
+}
+
+.trainingGradingSection h3 {
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.trainingGradingDims {
+  padding-left: 1.2em;
+}
+
+.trainingGradingRewrite {
+  white-space: pre-wrap;
+  padding: 10px;
+  background: var(--panel);
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.trainingGradingActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.trainingHistoryList {
+  list-style: none;
+  padding: 0;
+}
+
+.trainingHistoryItem {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  background: var(--panel);
+  text-align: left;
+  cursor: pointer;
+}
+
+.trainingWorkbench {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  border-top: 1px solid var(--border);
+}
+
+.trainingWorkbenchSplit {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+}
+
+.trainingWorkbenchSplit--dragging {
+  user-select: none;
+  cursor: col-resize;
+}
+
+.trainingWorkbenchPane {
+  min-width: 280px;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.trainingSplitHandle {
+  flex: 0 0 6px;
+  cursor: col-resize;
+  background: var(--border);
+  transition: background 0.15s;
+}
+
+.trainingSplitHandle:hover {
+  background: var(--accent, #6ea8fe);
+}
+
+.trainingTreeNav {
+  flex: 0 0 240px;
+  width: 240px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.trainingCategoryTree {
+  flex: 1;
+  min-height: 0;
+}
+
+.trainingTreeLabelBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.trainingTreeTitle {
+  font-size: 13px;
+}
+
+.trainingTreeMeta {
+  font-size: 11px;
+}
+
+.trainingLearnHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-shrink: 0;
+  margin-bottom: 10px;
+}
+
+.trainingLearnHead .trainingPaneTitle {
+  margin: 0;
+}
+
+.trainingGenerateMenu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.trainingGenerateBtn {
+  white-space: nowrap;
+}
+
+.trainingGenerateDropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  min-width: 140px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+}
+
+.trainingGenerateOption {
+  padding: 10px 12px;
+  text-align: left;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.trainingGenerateOption:hover {
+  background: var(--bg);
+}
+
+.trainingMain,
+.trainingPractice {
+  flex: 1;
+  min-height: 0;
+  padding: 14px 16px;
+}
+
+.trainingCategoryChat {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding: 14px 16px;
+}
+
+.trainingCategoryChatHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+  margin-bottom: 8px;
+}
+
+.trainingCategoryChatHead .trainingPaneTitle {
+  margin: 0;
+}
+
+.trainingCategoryChatHint {
+  font-size: 13px;
+  margin: 0 0 8px;
+  flex-shrink: 0;
+}
+
+.trainingCategoryChatScroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.trainingCategoryChatBubble {
+  max-width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.trainingCategoryChatBubble--user {
+  align-self: flex-end;
+  background: var(--panel);
+}
+
+.trainingCategoryChatBubble--assistant {
+  align-self: flex-start;
+  background: var(--bg);
+}
+
+.trainingCategoryChatText {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.trainingCategoryChatFooter {
+  flex-shrink: 0;
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.trainingCategoryChatInput {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.trainingMain .trainingLessonContent {
+  white-space: pre-wrap;
+  line-height: 1.65;
+  font-size: 14px;
+}
+
+.trainingPractice {
+  display: flex;
+  flex-direction: column;
+}
+
+.trainingPractice .trainingTextareaGrow {
+  flex: 1;
+  min-height: 240px;
+}
+
+.trainingAttemptsSection {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.trainingAttemptsSection h4 {
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+
+.trainingAttemptHistory {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.trainingAttemptHistoryItem {
+  margin-bottom: 6px;
+}
+
+.trainingAttemptHistoryHead {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+
+.trainingAttemptHistoryBody {
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.trainingAttemptText {
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 13px;
+  margin: 0 0 12px;
+  padding: 8px;
+  background: var(--bg);
+  border-radius: 6px;
+  max-height: 200px;
+  overflow: auto;
+}
+
+.trainingGradingScoreUnit {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--muted);
+  margin-left: 4px;
+}
+
+.trainingGradingHint {
+  margin: -8px 0 12px;
+  font-size: 13px;
+}
+
+.trainingRecordsPage {
+  max-width: 720px;
+}
+
+.trainingRecordsByQuestion {
+  list-style: none;
+  padding: 0;
+}
+
+.trainingRecordsGroup {
+  margin-bottom: 16px;
+}
+
+.trainingRecordsGroupTitle {
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 1000px) {
+  .trainingWorkbench {
+    flex-direction: column;
+  }
+
+  .trainingTreeNav {
+    max-height: 220px;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .trainingWorkbenchSplit {
+    flex-direction: column;
+    max-height: none;
+  }
+
+  .trainingWorkbenchPane {
+    min-width: 0;
+    max-height: 40vh;
+  }
+
+  .trainingSplitHandle {
+    display: none;
   }
 }
 

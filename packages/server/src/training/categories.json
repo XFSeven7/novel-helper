@@ -1,0 +1,89 @@
+{
+  "categories": [
+    {
+      "id": "cat-rhythm",
+      "title": "语感与句段节奏",
+      "order": 0,
+      "teachingFile": "cat-rhythm.md",
+      "rubricHints": [
+        "句长与标点节奏是否贴合网文快读",
+        "快慢场对比是否清晰",
+        "长句是否已拆短、无赘词堆砌"
+      ],
+      "exerciseDefaults": { "minChars": 80, "maxChars": 500 }
+    },
+    {
+      "id": "cat-imagery",
+      "title": "画面与具象",
+      "order": 1,
+      "teachingFile": "cat-imagery.md",
+      "rubricHints": [
+        "是否展示而非贴情绪标签",
+        "是否有 2–3 个具象感官锚点",
+        "是否避免空洞形容词评价"
+      ],
+      "exerciseDefaults": { "minChars": 60, "maxChars": 500 }
+    },
+    {
+      "id": "cat-dialogue",
+      "title": "对话与排版",
+      "order": 2,
+      "teachingFile": "cat-dialogue.md",
+      "rubricHints": [
+        "对话是否推进剧情或有信息差",
+        "是否存在无功能灌水对话",
+        "标点与话在前/换行是否合理"
+      ],
+      "exerciseDefaults": { "minChars": 80, "maxChars": 600 }
+    },
+    {
+      "id": "cat-pacing",
+      "title": "追读·钩子·章骨架",
+      "order": 3,
+      "teachingFile": "cat-pacing.md",
+      "rubricHints": [
+        "是否有明确爽点或情绪回报",
+        "章末/段末是否有钩子",
+        "结构是否拖沓无推进"
+      ],
+      "exerciseDefaults": { "minChars": 80, "maxChars": 600 }
+    },
+    {
+      "id": "cat-opening",
+      "title": "开篇与信息",
+      "order": 4,
+      "teachingFile": "cat-opening.md",
+      "rubricHints": [
+        "是否场面进场而非设定堆砌",
+        "信息投放是否克制",
+        "是否尽快建立冲突或异常"
+      ],
+      "exerciseDefaults": { "minChars": 150, "maxChars": 550 }
+    },
+    {
+      "id": "cat-deconstruct",
+      "title": "拆书仿写",
+      "order": 5,
+      "teachingFile": "cat-deconstruct.md",
+      "rubricHints": [
+        "是否抓住情绪曲线而非抄情节",
+        "平行仿写是否换设定",
+        "释放点是否有力"
+      ],
+      "exerciseDefaults": { "minChars": 200, "maxChars": 1200 }
+    },
+    {
+      "id": "cat-rewrite",
+      "title": "综合改稿",
+      "order": 6,
+      "teachingFile": "cat-rewrite.md",
+      "rubricHints": [
+        "是否消除告知体",
+        "节奏是否收紧",
+        "对话与动作是否有功能",
+        "改后是否仍保留核心冲突"
+      ],
+      "exerciseDefaults": { "minChars": 150, "maxChars": 450 }
+    }
+  ]
+}

@@ -1460,8 +1460,8 @@ export type ReaderPersonaPoolStats = {
 export type FeatureModelsResponse = {
   configs: ModelConfig[];
   activeId: string | null;
-  featureModels: { organize?: string | null; readerComments?: string | null };
-  features: { readerCommentsEnabled?: boolean };
+  featureModels: { organize?: string | null; readerComments?: string | null; training?: string | null };
+  features: { readerCommentsEnabled?: boolean; trainingModeEnabled?: boolean };
   readerComments: ReaderCommentsSettings;
   readerPersonaPool?: ReaderPersonaPoolStats;
 };
@@ -1493,6 +1493,115 @@ export async function generateReaderPersonas(count: number) {
     method: "POST",
     body: JSON.stringify({ count })
   });
+}
+
+export type TrainingCategory = {
+  id: string;
+  title: string;
+  order: number;
+  teachingFile?: string;
+  contentMarkdown: string;
+  rubricHints: string[];
+  exerciseDefaults: { minChars: number; maxChars: number };
+};
+
+export type TrainingChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+};
+
+export type TrainingQuestion = {
+  id: string;
+  categoryId: string;
+  title: string;
+  prompt: string;
+  minChars: number;
+  maxChars: number;
+  snippet?: { title: string; body: string };
+  createdAt: string;
+  source: "ai";
+};
+
+export type TrainingTreeQuestion = TrainingQuestion & {
+  attemptCount: number;
+  bestScore: number | null;
+};
+
+export type TrainingTreeCategory = TrainingCategory & {
+  attemptCount: number;
+  questionCount: number;
+  questions: TrainingTreeQuestion[];
+};
+
+export type TrainingGradingResult = {
+  overallScore: number;
+  strengths: string[];
+  improvements: string[];
+  exampleRewrite: string;
+  nextStep: string;
+};
+
+export type TrainingAttempt = {
+  id: string;
+  questionId: string;
+  categoryId: string;
+  text: string;
+  result: TrainingGradingResult;
+  modelConfigId: string;
+  createdAt: string;
+};
+
+export async function getTrainingTree() {
+  return await http<{ categories: TrainingTreeCategory[] }>(`/api/training/tree`);
+}
+
+export async function getTrainingCategory(id: string) {
+  return await http<{ category: TrainingCategory }>(`/api/training/categories/${encodeURIComponent(id)}`);
+}
+
+export async function getTrainingCategoryChat(categoryId: string) {
+  return await http<{ messages: TrainingChatMessage[] }>(
+    `/api/training/categories/${encodeURIComponent(categoryId)}/chat`
+  );
+}
+
+export async function clearTrainingCategoryChat(categoryId: string) {
+  return await http<{ ok: boolean }>(`/api/training/categories/${encodeURIComponent(categoryId)}/chat`, {
+    method: "DELETE"
+  });
+}
+
+export async function getTrainingQuestion(id: string) {
+  return await http<{ question: TrainingQuestion }>(`/api/training/questions/${encodeURIComponent(id)}`);
+}
+
+export async function generateTrainingQuestions(categoryId: string, count: 1 | 3 | 5) {
+  return await http<{ questions: TrainingQuestion[] }>(
+    `/api/training/categories/${encodeURIComponent(categoryId)}/generate-questions`,
+    { method: "POST", body: JSON.stringify({ count }) }
+  );
+}
+
+export async function submitTrainingQuestion(questionId: string, text: string) {
+  return await http<{ attempt: TrainingAttempt; result: TrainingGradingResult }>(
+    `/api/training/questions/${encodeURIComponent(questionId)}/submit`,
+    { method: "POST", body: JSON.stringify({ text }) }
+  );
+}
+
+export async function getTrainingQuestionAttempts(questionId: string) {
+  return await http<{ question: TrainingQuestion; attempts: TrainingAttempt[] }>(
+    `/api/training/questions/${encodeURIComponent(questionId)}/attempts`
+  );
+}
+
+export async function listTrainingAttempts() {
+  return await http<{ attempts: TrainingAttempt[] }>(`/api/training/attempts`);
+}
+
+export async function getTrainingAttempt(id: string) {
+  return await http<{ attempt: TrainingAttempt }>(`/api/training/attempts/${encodeURIComponent(id)}`);
 }
 
 export type ReaderCommentReply = {

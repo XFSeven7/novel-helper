@@ -18,7 +18,7 @@ function formatApiError(e: unknown): string {
   return text;
 }
 
-function isReaderSettingsDirty(
+function isFeatureSettingsDirty(
   draft: FeatureModelsResponse | null,
   saved: FeatureModelsResponse | null | undefined
 ): boolean {
@@ -27,7 +27,13 @@ function isReaderSettingsDirty(
   if (Boolean(draft.features?.readerCommentsEnabled) !== Boolean(saved.features?.readerCommentsEnabled)) {
     return true;
   }
+  if (Boolean(draft.features?.trainingModeEnabled) !== Boolean(saved.features?.trainingModeEnabled)) {
+    return true;
+  }
   if ((draft.featureModels?.readerComments ?? null) !== (saved.featureModels?.readerComments ?? null)) {
+    return true;
+  }
+  if ((draft.featureModels?.training ?? null) !== (saved.featureModels?.training ?? null)) {
     return true;
   }
   if (draft.readerComments?.commentsPerChapterMin !== saved.readerComments?.commentsPerChapterMin) {
@@ -50,13 +56,15 @@ export function SettingsFeaturesPanel(props: {
 }) {
   const f = props.feature;
   const enabled = Boolean(f?.features?.readerCommentsEnabled);
+  const trainingEnabled = Boolean(f?.features?.trainingModeEnabled);
   const organizeId = f?.featureModels?.organize ?? f?.activeId ?? "";
   const readerId = f?.featureModels?.readerComments ?? "";
+  const trainingId = f?.featureModels?.training ?? "";
   const pool = f?.readerPersonaPool;
   const rc = f?.readerComments;
   const commentsMin = rc?.commentsPerChapterMin ?? pool?.commentsPerChapterMin ?? 10;
   const commentsMax = rc?.commentsPerChapterMax ?? pool?.commentsPerChapterMax ?? 16;
-  const settingsDirty = isReaderSettingsDirty(f, props.savedFeature);
+  const settingsDirty = isFeatureSettingsDirty(f, props.savedFeature);
 
   const modelSelectOptions = useMemo(() => buildModelSelectOptions(props.okConfigs), [props.okConfigs]);
   const organizeLabel = useMemo(
@@ -64,6 +72,10 @@ export function SettingsFeaturesPanel(props: {
     [props.okConfigs, organizeId]
   );
   const readerLabel = useMemo(() => resolveModelSelectLabel(props.okConfigs, readerId), [props.okConfigs, readerId]);
+  const trainingLabel = useMemo(
+    () => resolveModelSelectLabel(props.okConfigs, trainingId),
+    [props.okConfigs, trainingId]
+  );
 
   const [modalOpen, setModalOpen] = useState(false);
   const [generateCount, setGenerateCount] = useState(10);
@@ -91,7 +103,7 @@ export function SettingsFeaturesPanel(props: {
     }
     setGenerateBusy(true);
     try {
-      if (isReaderSettingsDirty(f, props.savedFeature)) {
+      if (isFeatureSettingsDirty(f, props.savedFeature)) {
         await props.onSave();
       }
       const res = await generateReaderPersonas(count);
@@ -126,7 +138,22 @@ export function SettingsFeaturesPanel(props: {
     <>
       <div className="settingsFeaturesPanel">
         <div className="settingsFeaturesSurface">
-          <p className="muted settingsDataDirHint">功能模型与模拟评论</p>
+          <div className="settingsFeaturesTopBar">
+            <p className="muted settingsDataDirHint">功能模型、训练模式与模拟评论</p>
+            <div className="settingsFeaturesTopActions">
+              {settingsDirty ? (
+                <span className="muted settingsFeatureDirtyHint">有未保存的更改</span>
+              ) : null}
+              <button
+                type="button"
+                className="btnModalPrimary"
+                disabled={props.saveBusy}
+                onClick={() => void props.onSave()}
+              >
+                {props.saveBusy ? "保存中…" : "保存功能设置"}
+              </button>
+            </div>
+          </div>
 
           <section className="settingsFeatureBlock">
             <h3 className="settingsFeatureBlockTitle">内容整理</h3>
@@ -141,6 +168,41 @@ export function SettingsFeaturesPanel(props: {
                   props.onChange({
                     featureModels: { ...f?.featureModels, organize: id || null },
                     activeId: id || null
+                  })
+                }
+              />
+            </div>
+          </section>
+
+          <section className="settingsFeatureBlock">
+            <div className="settingsFeatureBlockHead">
+              <h3 className="settingsFeatureBlockTitle">训练模式（实验功能）</h3>
+              <label className="settingsFeatureSwitch">
+                <input
+                  type="checkbox"
+                  checked={trainingEnabled}
+                  onChange={(e) =>
+                    props.onChange({
+                      features: { ...f?.features, trainingModeEnabled: e.target.checked }
+                    })
+                  }
+                />
+                <span>{trainingEnabled ? "已启用" : "未启用"}</span>
+              </label>
+            </div>
+            <p className="muted settingsFeatureBlockDesc">
+              启用后顶栏出现「训练」，进入独立网文写作训练场（与书稿无关）。
+            </p>
+            <div className={`settingsFeatureRow ${!trainingEnabled ? "isDisabled" : ""}`}>
+              <span className="settingsFeatureRowLabel">评改模型</span>
+              <AppSelect
+                value={trainingId}
+                disabled={!trainingEnabled}
+                displayLabel={trainingLabel}
+                options={modelSelectOptions}
+                onChange={(id) =>
+                  props.onChange({
+                    featureModels: { ...f?.featureModels, training: id || null }
                   })
                 }
               />
@@ -254,9 +316,9 @@ export function SettingsFeaturesPanel(props: {
             <p className="muted settingsFeatureBlockFoot">
               读者池全库共享；存稿时自动邀请新读者（10–30 人，有冷却）。存稿后评论在后台生成。
             </p>
-            {settingsDirty ? (
-              <p className="muted settingsFeatureBlockFoot settingsFeatureDirtyHint">
-                有未保存的更改；点击「生成」时会先自动保存功能设置。
+            {!settingsDirty ? (
+              <p className="muted settingsFeatureBlockFoot">
+                点击「生成」读者前若改了开关或模型，会先自动保存功能设置。
               </p>
             ) : null}
 
@@ -269,16 +331,6 @@ export function SettingsFeaturesPanel(props: {
               </p>
             ) : null}
 
-            <div className="settingsFeatureActions">
-              <button
-                type="button"
-                className="btnModalPrimary"
-                disabled={props.saveBusy}
-                onClick={() => void props.onSave()}
-              >
-                {props.saveBusy ? "保存中…" : "保存功能设置"}
-              </button>
-            </div>
           </section>
         </div>
       </div>

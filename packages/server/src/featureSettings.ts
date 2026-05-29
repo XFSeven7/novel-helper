@@ -33,9 +33,11 @@ export type FeatureSettingsFile = {
   featureModels?: {
     organize?: string | null;
     readerComments?: string | null;
+    training?: string | null;
   };
   features?: {
     readerCommentsEnabled?: boolean;
+    trainingModeEnabled?: boolean;
   };
   readerComments?: Partial<ReaderCommentsOptions>;
 };
@@ -91,7 +93,7 @@ export function migrateFeatureSettings(raw: FeatureSettingsFile): FeatureSetting
   return {
     ...raw,
     featureModels,
-    features: { readerCommentsEnabled: false, ...raw.features },
+    features: { readerCommentsEnabled: false, trainingModeEnabled: false, ...raw.features },
     readerComments: normalizeReaderCommentsOptions(raw.readerComments)
   };
 }
@@ -105,10 +107,25 @@ export async function readFeatureSettings(): Promise<FeatureSettingsFile> {
   }
 }
 
-export async function writeFeatureSettings(file: FeatureSettingsFile): Promise<void> {
+/** 读-合并-写，避免仅更新模型配置时覆盖 features 等功能字段 */
+export async function writeFeatureSettings(patch: Partial<FeatureSettingsFile>): Promise<FeatureSettingsFile> {
+  const current = await readFeatureSettings();
+  const merged = migrateFeatureSettings({
+    ...current,
+    ...patch,
+    configs: patch.configs ?? current.configs,
+    activeId: patch.activeId !== undefined ? patch.activeId : current.activeId,
+    featureModels: { ...current.featureModels, ...(patch.featureModels ?? {}) },
+    features: { ...(current.features ?? {}), ...(patch.features ?? {}) },
+    readerComments: normalizeReaderCommentsOptions({
+      ...current.readerComments,
+      ...(patch.readerComments ?? {})
+    })
+  });
+  if (merged.featureModels?.organize) merged.activeId = merged.featureModels.organize;
   await fs.mkdir(settingsDir(), { recursive: true });
-  const normalized = migrateFeatureSettings(file);
-  await fs.writeFile(settingsPath(), JSON.stringify(normalized, null, 2), "utf8");
+  await fs.writeFile(settingsPath(), JSON.stringify(merged, null, 2), "utf8");
+  return merged;
 }
 
 export function resolveOrganizeModelId(file: FeatureSettingsFile): string | null {
@@ -117,6 +134,21 @@ export function resolveOrganizeModelId(file: FeatureSettingsFile): string | null
 
 export function resolveReaderCommentsModelId(file: FeatureSettingsFile): string | null {
   return file.featureModels?.readerComments ?? null;
+}
+
+export function resolveTrainingModelId(file: FeatureSettingsFile): string | null {
+  return file.featureModels?.training ?? null;
+}
+
+export function assertTrainingReady(file: FeatureSettingsFile): { cfg: ModelConfig } | { error: string } {
+  if (!file.features?.trainingModeEnabled) {
+    return { error: "训练模式未开启" };
+  }
+  const modelId = resolveTrainingModelId(file);
+  const cfg = findModelConfig(file, modelId);
+  if (!cfg) return { error: "请先在设置 → 功能中配置训练评改模型" };
+  if (cfg.lastTestOk === false) return { error: "训练评改模型未通过连接测试" };
+  return { cfg };
 }
 
 export const MODEL_CONFIG_ID_SEP = "::";
