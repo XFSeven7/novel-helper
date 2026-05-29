@@ -22,10 +22,19 @@ export async function ensureTeachingSeeded(dataDir: string): Promise<void> {
   }
   for (const name of names.filter((n) => n.endsWith(".md"))) {
     const target = path.join(dest, name);
+    const bundled = path.join(BUNDLED_DIR, name);
+    let shouldCopy = false;
     try {
       await fs.access(target);
+      const existing = await fs.readFile(target, "utf8");
+      if (existing.includes("待扩写") || existing.includes("P0 占位")) {
+        shouldCopy = true;
+      }
     } catch {
-      await fs.copyFile(path.join(BUNDLED_DIR, name), target);
+      shouldCopy = true;
+    }
+    if (shouldCopy) {
+      await fs.copyFile(bundled, target);
     }
   }
 }
