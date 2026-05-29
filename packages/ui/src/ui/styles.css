@@ -10304,6 +10304,11 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   color: var(--accent, #6ea8fe);
 }
 
+.trainingGradingModalHead .trainingGradingHint {
+  margin: 0;
+  font-size: 12px;
+}
+
 .trainingGradingSection {
   margin-bottom: 16px;
 }
@@ -10315,6 +10320,56 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
 
 .trainingGradingDims {
   padding-left: 1.2em;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+}
+
+.trainingGradingThinking {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.trainingGradingToggle {
+  margin-bottom: 4px;
+}
+
+.trainingFatalFlaws {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.trainingFatalFlawItem {
+  margin-bottom: 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.trainingFatalFlawQuote {
+  margin: 0 0 6px;
+  padding-left: 10px;
+  border-left: 3px solid var(--border);
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.trainingRewriteAnalysis {
+  margin-top: 8px;
+  font-size: 13px;
+}
+
+.trainingNextStep {
+  font-weight: 600;
+}
+
+.trainingRespecGuide {
+  border-color: var(--border);
 }
 
 .trainingGradingRewrite {
@@ -10330,6 +10385,96 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   gap: 10px;
   flex-wrap: wrap;
   margin-top: 16px;
+}
+
+.modalBackdropTrainingGrading {
+  align-items: center;
+  padding: 16px;
+  z-index: 1200;
+}
+
+.modalPanelTrainingGrading {
+  width: min(1080px, 98vw);
+  height: min(92vh, 900px);
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  box-shadow: 0 28px 100px rgba(0, 0, 0, 0.45);
+}
+
+.trainingGradingModalHead {
+  flex: none;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: start;
+  gap: 12px 20px;
+  padding: 16px 20px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+.trainingGradingModalHeadMain {
+  min-width: 0;
+}
+
+.trainingGradingModalTitle {
+  margin: 0 0 6px;
+  font-size: 1.15rem;
+  line-height: 1.35;
+}
+
+.trainingGradingModalHeadScore {
+  display: flex;
+  align-items: baseline;
+  gap: 2px;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.trainingGradingModalHeadScore .trainingGradingScore {
+  margin: 0;
+  font-size: 2.75rem;
+  line-height: 1;
+}
+
+.trainingGradingModalClose {
+  flex-shrink: 0;
+}
+
+.trainingGradingModalBody {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 20px;
+}
+
+.trainingGradingModalBody .trainingGradingSection p {
+  line-height: 1.6;
+}
+
+.trainingGradingModalActions {
+  flex: none;
+  margin: 0;
+  padding: 14px 20px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
+
+@media (max-width: 720px) {
+  .trainingGradingModalHead {
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+  }
+
+  .trainingGradingModalHeadScore {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .trainingGradingModalClose {
+    grid-column: 1 / -1;
+    justify-self: end;
+  }
 }
 
 .trainingHistoryList {
@@ -10350,6 +10495,101 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   background: var(--panel);
   text-align: left;
   cursor: pointer;
+}
+
+.trainingHistoryItemMain {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  width: 100%;
+}
+
+.trainingGradingBrief {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.trainingGradingModeTag {
+  font-size: 11px;
+}
+
+.trainingGradingSubmitBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.trainingGradingSubmitBarLabel {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.trainingGradingSubmitBtns {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 6px;
+}
+
+.trainingGradingSubmitBtn {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 120px;
+  padding: 7px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.trainingGradingSubmitBtn:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent, #6ea8fe) 50%, var(--border));
+  background: color-mix(in srgb, var(--accent, #6ea8fe) 10%, var(--panel));
+}
+
+.trainingGradingSubmitBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.trainingGradingSubmitBtn--busy {
+  border-color: color-mix(in srgb, var(--accent, #6ea8fe) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent, #6ea8fe) 14%, var(--panel));
+}
+
+.trainingGradingSubmitBtn--infernal:hover:not(:disabled) {
+  border-color: color-mix(in srgb, #e85d5d 55%, var(--border));
+  background: color-mix(in srgb, #e85d5d 12%, var(--panel));
+}
+
+.trainingGradingAnswerSection .trainingAttemptText {
+  max-height: 200px;
+  overflow: auto;
+}
+
+.trainingSoulCrushing {
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.trainingExecutionList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
 }
 
 .trainingWorkbench {

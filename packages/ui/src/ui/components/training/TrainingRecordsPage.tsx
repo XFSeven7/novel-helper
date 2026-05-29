@@ -1,5 +1,26 @@
 import React, { useMemo, useState } from "react";
 import type { TrainingAttempt, TrainingTreeCategory } from "../../api";
+import { trainingGradingBrief } from "./trainingGradingBrief";
+
+function AttemptRow(props: {
+  label: string;
+  time: string;
+  score: number;
+  brief: string;
+  onClick: () => void;
+}) {
+  return (
+    <button type="button" className="trainingHistoryItem" onClick={props.onClick}>
+      <span className="trainingHistoryItemMain">
+        <span>
+          {props.label} · {props.score}/100
+          <span className="trainingGradingBrief"> · {props.brief}</span>
+        </span>
+        <span className="muted">{props.time}</span>
+      </span>
+    </button>
+  );
+}
 
 export function TrainingRecordsPage(props: {
   categories: TrainingTreeCategory[];
@@ -80,16 +101,13 @@ export function TrainingRecordsPage(props: {
                 <ul>
                   {attempts.map((a, i) => (
                     <li key={a.id}>
-                      <button
-                        type="button"
-                        className="trainingHistoryItem"
+                      <AttemptRow
+                        label={`第 ${attempts.length - i} 次`}
+                        time={new Date(a.createdAt).toLocaleString()}
+                        score={a.result.overallScore}
+                        brief={trainingGradingBrief(a.result)}
                         onClick={() => props.onOpenAttempt(a.id, a.questionId)}
-                      >
-                        <span>
-                          第 {attempts.length - i} 次 · {a.result.overallScore}/100
-                        </span>
-                        <span className="muted">{new Date(a.createdAt).toLocaleString()}</span>
-                      </button>
+                      />
                     </li>
                   ))}
                 </ul>
@@ -103,16 +121,13 @@ export function TrainingRecordsPage(props: {
         <ul className="trainingHistoryList">
           {byTime.map((a) => (
             <li key={a.id}>
-              <button
-                type="button"
-                className="trainingHistoryItem"
+              <AttemptRow
+                label={`${catTitle.get(a.categoryId) ?? "题型"} · ${qTitle.get(a.questionId) ?? a.questionId}`}
+                time={new Date(a.createdAt).toLocaleString()}
+                score={a.result.overallScore}
+                brief={trainingGradingBrief(a.result)}
                 onClick={() => props.onOpenAttempt(a.id, a.questionId)}
-              >
-                <span>
-                  {catTitle.get(a.categoryId)} · {qTitle.get(a.questionId)} · {a.result.overallScore}/100
-                </span>
-                <span className="muted">{new Date(a.createdAt).toLocaleString()}</span>
-              </button>
+              />
             </li>
           ))}
         </ul>

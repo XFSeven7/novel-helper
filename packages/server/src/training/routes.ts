@@ -11,6 +11,7 @@ import {
 } from "./chatStore.js";
 import { performCategoryChat } from "./categoryChat.js";
 import { generateTrainingQuestions } from "./generateQuestions.js";
+import { parseTrainingGradingMode } from "./gradingModes.js";
 import { gradeTrainingAttempt } from "./grade.js";
 import { getCategoryWithTeaching } from "./teaching.js";
 import {
@@ -162,7 +163,12 @@ export function registerTrainingRoutes(app: FastifyInstance, deps: TrainingRoute
     const question = await readQuestion(deps.getDataDir(), id);
     if (!question) return reply.code(404).send({ message: "题目不存在" });
 
-    const body = z.object({ text: z.string().min(1).max(2000) }).parse((req as { body: unknown }).body);
+    const body = z
+      .object({
+        text: z.string().min(1).max(2000),
+        gradingMode: z.enum(["infernal", "strict", "honest"]).optional()
+      })
+      .parse((req as { body: unknown }).body);
     const userText = body.text.trim();
     if (userText.length < question.minChars) {
       return reply.code(400).send({ message: `练习至少 ${question.minChars} 字` });
@@ -171,6 +177,7 @@ export function registerTrainingRoutes(app: FastifyInstance, deps: TrainingRoute
       return reply.code(400).send({ message: `练习超过 ${question.maxChars} 字上限` });
     }
 
+    const gradingMode = parseTrainingGradingMode(body.gradingMode);
     const category = await getCategoryWithTeaching(deps.getDataDir(), question.categoryId);
     let result;
     try {
@@ -179,7 +186,8 @@ export function registerTrainingRoutes(app: FastifyInstance, deps: TrainingRoute
         cfg: ctx.cfg,
         category,
         question,
-        userText
+        userText,
+        gradingMode
       });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -191,6 +199,7 @@ export function registerTrainingRoutes(app: FastifyInstance, deps: TrainingRoute
       categoryId: question.categoryId,
       text: userText,
       result,
+      gradingMode,
       modelConfigId: ctx.file.featureModels?.training ?? ctx.cfg.id
     });
 

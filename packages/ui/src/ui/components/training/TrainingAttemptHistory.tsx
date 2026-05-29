@@ -1,11 +1,13 @@
-import React, { useState } from "react";
+import React from "react";
 import type { TrainingAttempt } from "../../api";
+import { TRAINING_GRADING_MODE_META, resolveTrainingGradingMode } from "./gradingModeLabels";
+import { trainingGradingBrief } from "./trainingGradingBrief";
 
 export function TrainingAttemptHistory(props: {
   attempts: TrainingAttempt[];
   loading?: boolean;
+  onOpenAttempt?: (attempt: TrainingAttempt) => void;
 }) {
-  const [openId, setOpenId] = useState<string | null>(null);
   const sorted = [...props.attempts].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   if (props.loading) {
@@ -19,38 +21,26 @@ export function TrainingAttemptHistory(props: {
     <ul className="trainingAttemptHistory">
       {sorted.map((a, idx) => {
         const n = sorted.length - idx;
-        const open = openId === a.id;
+        const r = a.result;
+        const brief = trainingGradingBrief(r);
+        const modeLabel = TRAINING_GRADING_MODE_META[resolveTrainingGradingMode(a.gradingMode)].short;
         return (
           <li key={a.id} className="trainingAttemptHistoryItem">
             <button
               type="button"
-              className="trainingAttemptHistoryHead"
-              onClick={() => setOpenId(open ? null : a.id)}
+              className="trainingHistoryItem"
+              onClick={() => props.onOpenAttempt?.(a)}
+              disabled={!props.onOpenAttempt}
             >
-              <span>
-                第 {n} 次 · {a.result.overallScore}/100
+              <span className="trainingHistoryItemMain">
+                <span>
+                  第 {n} 次 · {r.overallScore}/100
+                  <span className="muted trainingGradingModeTag"> · {modeLabel}</span>
+                  <span className="trainingGradingBrief"> · {brief}</span>
+                </span>
+                <span className="muted">{new Date(a.createdAt).toLocaleString()}</span>
               </span>
-              <span className="muted">{new Date(a.createdAt).toLocaleString()}</span>
             </button>
-            {open ? (
-              <div className="trainingAttemptHistoryBody">
-                <h4>我的作答</h4>
-                <pre className="trainingAttemptText">{a.text}</pre>
-                <h4>批阅</h4>
-                <ul>
-                  {a.result.strengths.map((s, i) => (
-                    <li key={`s${i}`}>{s}</li>
-                  ))}
-                </ul>
-                <ul>
-                  {a.result.improvements.map((s, i) => (
-                    <li key={`i${i}`}>{s}</li>
-                  ))}
-                </ul>
-                <p className="trainingGradingRewrite">{a.result.exampleRewrite}</p>
-                <p className="muted">{a.result.nextStep}</p>
-              </div>
-            ) : null}
           </li>
         );
       })}

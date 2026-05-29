@@ -9,6 +9,7 @@ import {
   submitTrainingQuestion,
   type TrainingAttempt,
   type TrainingCategory,
+  type TrainingGradingMode,
   type TrainingGradingResult,
   type TrainingQuestion,
   type TrainingTreeCategory
@@ -16,13 +17,15 @@ import {
 import { TrainingAttemptHistory } from "./TrainingAttemptHistory";
 import { TrainingCategoryTree, type TrainingSelection } from "./TrainingCategoryTree";
 import { TrainingGenerateMenu } from "./TrainingGenerateMenu";
+import { TrainingGradingModePicker } from "./TrainingGradingModePicker";
 import { TrainingGradingView } from "./TrainingGradingView";
+import { resolveTrainingGradingMode } from "./gradingModeLabels";
 import { TrainingRecordsPage } from "./TrainingRecordsPage";
 import { TrainingCategoryChat } from "./TrainingCategoryChat";
 import { TrainingWorkbenchSplit } from "./TrainingWorkbenchSplit";
 import { TrainingTopBar } from "./TrainingTopBar";
 
-type Screen = "practice" | "grading" | "records";
+type Screen = "practice" | "records";
 
 function formatApiError(e: unknown): string {
   if (!(e instanceof Error)) return String(e);
@@ -49,10 +52,14 @@ export function TrainingWorkspace(props: {
   const [attempts, setAttempts] = useState<TrainingAttempt[]>([]);
   const [allAttempts, setAllAttempts] = useState<TrainingAttempt[]>([]);
   const [text, setText] = useState("");
-  const [grading, setGrading] = useState<{ question: TrainingQuestion; result: TrainingGradingResult } | null>(
-    null
-  );
+  const [grading, setGrading] = useState<{
+    question: TrainingQuestion;
+    result: TrainingGradingResult;
+    gradingMode: TrainingGradingMode;
+    answerText: string;
+  } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [submittingMode, setSubmittingMode] = useState<TrainingGradingMode | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -130,19 +137,54 @@ export function TrainingWorkspace(props: {
     }
   }
 
-  async function handleSubmit() {
+  async function handleSubmitWithMode(mode: TrainingGradingMode) {
     if (!question) return;
     setSubmitError(null);
     setBusy(true);
+    setSubmittingMode(mode);
+    const answer = text.trim();
     try {
-      const res = await submitTrainingQuestion(question.id, text.trim());
-      setGrading({ question, result: res.result });
-      setScreen("grading");
+      const res = await submitTrainingQuestion(question.id, answer, mode);
+      setGrading({
+        question,
+        result: res.result,
+        gradingMode: res.attempt.gradingMode ?? mode,
+        answerText: res.attempt.text ?? answer
+      });
+      try {
+        localStorage.setItem("novel-helper.trainingGradingMode", mode);
+      } catch {
+        /* */
+      }
       await refreshTree();
       const { attempts: list } = await getTrainingQuestionAttempts(question.id);
       setAttempts(list);
     } catch (e: unknown) {
       setSubmitError(formatApiError(e));
+    } finally {
+      setBusy(false);
+      setSubmittingMode(null);
+    }
+  }
+
+  async function openGradingForAttempt(attempt: TrainingAttempt) {
+    setBusy(true);
+    try {
+      const q =
+        question?.id === attempt.questionId
+          ? question
+          : (await getTrainingQuestion(attempt.questionId)).question;
+      if (question?.id !== attempt.questionId) {
+        setQuestion(q);
+      }
+      setGrading({
+        question: q,
+        result: attempt.result,
+        gradingMode: resolveTrainingGradingMode(attempt.gradingMode),
+        answerText: attempt.text
+      });
+    } catch (e: unknown) {
+      props.onStatus?.(formatApiError(e));
     } finally {
       setBusy(false);
     }
@@ -168,6 +210,27 @@ export function TrainingWorkspace(props: {
     charCount >= question.minChars &&
     charCount <= Math.min(question.maxChars, 2000);
 
+  const gradingModal = grading ? (
+    <TrainingGradingView
+      open
+      question={grading.question}
+      result={grading.result}
+      gradingMode={grading.gradingMode}
+      answerText={grading.answerText}
+      onClose={() => setGrading(null)}
+      onRetry={() => setGrading(null)}
+      onViewHistory={() => {
+        setSelection({
+          kind: "question",
+          categoryId: grading.question.categoryId,
+          questionId: grading.question.id
+        });
+        setGrading(null);
+        setScreen("practice");
+      }}
+    />
+  ) : null;
+
   if (loadError) {
     return (
       <div className="trainingWorkspace">
@@ -181,67 +244,44 @@ export function TrainingWorkspace(props: {
 
   if (screen === "records") {
     return (
-      <div className="trainingWorkspace">
-        <TrainingTopBar onExit={props.onExit} />
-        <div className="trainingBody trainingBodyWide">
-          <TrainingRecordsPage
-            categories={categories}
-            attempts={allAttempts}
-            onBack={() => setScreen("practice")}
-            onOpenAttempt={(attemptId, questionId) => {
-              void (async () => {
-                setBusy(true);
-                try {
-                  const { attempt } = await getTrainingAttempt(attemptId);
-                  const { question: q } = await getTrainingQuestion(questionId);
-                  setGrading({ question: q, result: attempt.result });
-                  setSelection({ kind: "question", categoryId: q.categoryId, questionId });
-                  setScreen("grading");
-                } catch (e: unknown) {
-                  props.onStatus?.(formatApiError(e));
-                } finally {
-                  setBusy(false);
-                }
-              })();
-            }}
-          />
+      <>
+        <div className="trainingWorkspace">
+          <TrainingTopBar onExit={props.onExit} />
+          <div className="trainingBody trainingBodyWide">
+            <TrainingRecordsPage
+              categories={categories}
+              attempts={allAttempts}
+              onBack={() => setScreen("practice")}
+              onOpenAttempt={(attemptId, questionId) => {
+                void (async () => {
+                  setBusy(true);
+                  try {
+                    const { attempt } = await getTrainingAttempt(attemptId);
+                    const { question: q } = await getTrainingQuestion(questionId);
+                    setGrading({
+                      question: q,
+                      result: attempt.result,
+                      gradingMode: resolveTrainingGradingMode(attempt.gradingMode),
+                      answerText: attempt.text
+                    });
+                    setSelection({ kind: "question", categoryId: q.categoryId, questionId });
+                  } catch (e: unknown) {
+                    props.onStatus?.(formatApiError(e));
+                  } finally {
+                    setBusy(false);
+                  }
+                })();
+              }}
+            />
+          </div>
         </div>
-      </div>
-    );
-  }
-
-  if (screen === "grading" && grading) {
-    return (
-      <div className="trainingWorkspace">
-        <TrainingTopBar onExit={props.onExit} onOpenHistory={() => void openRecords()} />
-        <div className="trainingBody trainingBodyWide">
-          <TrainingGradingView
-            question={grading.question}
-            result={grading.result}
-            onBackToTree={() => {
-              setGrading(null);
-              setScreen("practice");
-            }}
-            onRetry={() => {
-              setGrading(null);
-              setScreen("practice");
-            }}
-            onViewHistory={() => {
-              setSelection({
-                kind: "question",
-                categoryId: grading.question.categoryId,
-                questionId: grading.question.id
-              });
-              setGrading(null);
-              setScreen("practice");
-            }}
-          />
-        </div>
-      </div>
+        {gradingModal}
+      </>
     );
   }
 
   return (
+    <>
     <div className="trainingWorkspace">
       <TrainingTopBar onExit={props.onExit} onOpenHistory={() => void openRecords()} />
       <div className="trainingWorkbench">
@@ -283,7 +323,10 @@ export function TrainingWorkspace(props: {
                   ) : null}
                   <section className="trainingAttemptsSection">
                     <h4>历次练习</h4>
-                    <TrainingAttemptHistory attempts={attempts} />
+                    <TrainingAttemptHistory
+                      attempts={attempts}
+                      onOpenAttempt={(a) => void openGradingForAttempt(a)}
+                    />
                   </section>
                 </>
               ) : selection?.kind === "category" ? (
@@ -323,14 +366,13 @@ export function TrainingWorkspace(props: {
                       {submitError ? (
                         <p className="settingsDataDirFeedback settingsDataDirFeedbackErr">{submitError}</p>
                       ) : null}
-                      <button
-                        type="button"
-                        className="btnModalPrimary"
-                        disabled={!canSubmit}
-                        onClick={() => void handleSubmit()}
-                      >
-                        {busy ? "评改中…" : "提交评改"}
-                      </button>
+                      <TrainingGradingModePicker
+                        canSubmit={Boolean(canSubmit)}
+                        disabled={busy}
+                        busy={busy}
+                        busyMode={submittingMode}
+                        onSubmit={(mode) => void handleSubmitWithMode(mode)}
+                      />
                     </footer>
                   </>
                 )}
@@ -340,5 +382,7 @@ export function TrainingWorkspace(props: {
         />
       </div>
     </div>
+    {gradingModal}
+    </>
   );
 }

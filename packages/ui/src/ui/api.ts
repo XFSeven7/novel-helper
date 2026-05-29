@@ -1534,12 +1534,20 @@ export type TrainingTreeCategory = TrainingCategory & {
   questions: TrainingTreeQuestion[];
 };
 
+export type TrainingGradingMode = "infernal" | "strict" | "honest";
+
+export type TrainingExecutionDetail = {
+  crimeScene: string;
+  roast: string;
+};
+
 export type TrainingGradingResult = {
+  attitudeDiagnosis: string;
+  sanityDamage: number;
+  soulCrushingMockery: string;
+  executionDetails: TrainingExecutionDetail[];
   overallScore: number;
-  strengths: string[];
-  improvements: string[];
-  exampleRewrite: string;
-  nextStep: string;
+  purgatoryPenalty: string;
 };
 
 export type TrainingAttempt = {
@@ -1548,6 +1556,7 @@ export type TrainingAttempt = {
   categoryId: string;
   text: string;
   result: TrainingGradingResult;
+  gradingMode?: TrainingGradingMode;
   modelConfigId: string;
   createdAt: string;
 };
@@ -1583,10 +1592,14 @@ export async function generateTrainingQuestions(categoryId: string, count: 1 | 3
   );
 }
 
-export async function submitTrainingQuestion(questionId: string, text: string) {
+export async function submitTrainingQuestion(
+  questionId: string,
+  text: string,
+  gradingMode: TrainingGradingMode
+) {
   return await http<{ attempt: TrainingAttempt; result: TrainingGradingResult }>(
     `/api/training/questions/${encodeURIComponent(questionId)}/submit`,
-    { method: "POST", body: JSON.stringify({ text }) }
+    { method: "POST", body: JSON.stringify({ text, gradingMode }) }
   );
 }
 

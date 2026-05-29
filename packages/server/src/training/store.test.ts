@@ -51,11 +51,13 @@ describe("training v2 store", () => {
       text: "a",
       result: {
         overallScore: 60,
-        strengths: ["s"],
-        improvements: ["i"],
-        exampleRewrite: "e",
-        nextStep: "n"
+        attitudeDiagnosis: "认真但菜",
+        sanityDamage: 70,
+        soulCrushingMockery: "i",
+        executionDetails: [{ crimeScene: "x", roast: "i" }],
+        purgatoryPenalty: "n"
       },
+      gradingMode: "honest",
       modelConfigId: "m1"
     });
     await saveAttempt(tmp, {
@@ -64,11 +66,13 @@ describe("training v2 store", () => {
       text: "b",
       result: {
         overallScore: 75,
-        strengths: ["s"],
-        improvements: ["i"],
-        exampleRewrite: "e",
-        nextStep: "n"
+        attitudeDiagnosis: "认真但菜",
+        sanityDamage: 30,
+        soulCrushingMockery: "s",
+        executionDetails: [{ crimeScene: "x", roast: "i" }],
+        purgatoryPenalty: "n"
       },
+      gradingMode: "honest",
       modelConfigId: "m1"
     });
     const attempts = await listAttemptsByQuestion(tmp, q.id);
@@ -92,11 +96,13 @@ describe("training v2 store", () => {
       text: "x",
       result: {
         overallScore: 70,
-        strengths: ["s"],
-        improvements: ["i"],
-        exampleRewrite: "e",
-        nextStep: "n"
+        attitudeDiagnosis: "认真但菜",
+        sanityDamage: 40,
+        soulCrushingMockery: "i",
+        executionDetails: [{ crimeScene: "x", roast: "i" }],
+        purgatoryPenalty: "n"
       },
+      gradingMode: "honest",
       modelConfigId: "m1"
     });
     const tree = await buildTrainingTree(tmp);

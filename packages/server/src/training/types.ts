@@ -28,6 +28,10 @@ export type TrainingQuestionSnippet = {
   body: string;
 };
 
+import type { TrainingGradingMode } from "./gradingModes.js";
+
+export type { TrainingGradingMode };
+
 export type TrainingQuestion = {
   id: string;
   categoryId: string;
@@ -40,12 +44,18 @@ export type TrainingQuestion = {
   source: "ai";
 };
 
+export type TrainingExecutionDetail = {
+  crimeScene: string;
+  roast: string;
+};
+
 export type TrainingGradingResult = {
+  attitudeDiagnosis: string;
+  sanityDamage: number;
+  soulCrushingMockery: string;
+  executionDetails: TrainingExecutionDetail[];
   overallScore: number;
-  strengths: string[];
-  improvements: string[];
-  exampleRewrite: string;
-  nextStep: string;
+  purgatoryPenalty: string;
 };
 
 export type TrainingAttempt = {
@@ -54,6 +64,7 @@ export type TrainingAttempt = {
   categoryId: string;
   text: string;
   result: TrainingGradingResult;
+  gradingMode: TrainingGradingMode;
   modelConfigId: string;
   createdAt: string;
 };

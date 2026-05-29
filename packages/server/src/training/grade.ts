@@ -1,7 +1,8 @@
 import { generateText } from "ai";
 import type { ModelConfig } from "../featureSettings.js";
-import { buildStrictTeacherGradingPrompt } from "./promptGrade.js";
+import { buildGradingPrompt } from "./promptGrade.js";
 import { parseTrainingGradingJson } from "./parseGrading.js";
+import type { TrainingGradingMode } from "./gradingModes.js";
 import type { TrainingCategory, TrainingGradingResult, TrainingQuestion } from "./types.js";
 
 export async function gradeTrainingAttempt(deps: {
@@ -10,9 +11,10 @@ export async function gradeTrainingAttempt(deps: {
   category: TrainingCategory;
   question: TrainingQuestion;
   userText: string;
+  gradingMode: TrainingGradingMode;
 }): Promise<TrainingGradingResult> {
   const { model, providerOptions } = deps.createAiSdkModel(deps.cfg);
-  const prompt = buildStrictTeacherGradingPrompt({
+  const prompt = buildGradingPrompt(deps.gradingMode, {
     category: deps.category,
     question: deps.question,
     userText: deps.userText
