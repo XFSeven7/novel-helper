@@ -17,6 +17,7 @@ import {
 import { TrainingAttemptHistory } from "./TrainingAttemptHistory";
 import { TrainingCategoryTree, type TrainingSelection } from "./TrainingCategoryTree";
 import { TrainingGenerateMenu } from "./TrainingGenerateMenu";
+import { TrainingLessonMarkdown } from "./TrainingLessonMarkdown";
 import { TrainingGradingModePicker } from "./TrainingGradingModePicker";
 import { TrainingGradingView } from "./TrainingGradingView";
 import { resolveTrainingGradingMode } from "./gradingModeLabels";
@@ -308,7 +309,7 @@ export function TrainingWorkspace(props: {
               {selection?.kind === "category" && categoryDetail ? (
                 <>
                   <h2 className="trainingLessonTitle">{categoryDetail.title}</h2>
-                  <div className="trainingLessonContent">{categoryDetail.contentMarkdown}</div>
+                  <TrainingLessonMarkdown content={categoryDetail.contentMarkdown} />
                 </>
               ) : null}
               {selection?.kind === "question" && question ? (

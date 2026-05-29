@@ -10176,11 +10176,10 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
 }
 
 .trainingLessonPage .trainingLessonContent {
-  white-space: pre-wrap;
-  line-height: 1.65;
   margin: 0;
-  font-size: 14px;
   flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .trainingSnippet {
@@ -10718,6 +10717,8 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   flex: 1;
   min-height: 0;
   padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
 }
 
 .trainingCategoryChat {
@@ -10795,9 +10796,143 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
 }
 
 .trainingMain .trainingLessonContent {
-  white-space: pre-wrap;
-  line-height: 1.65;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.trainingLessonMd {
   font-size: 14px;
+  line-height: 1.65;
+  color: var(--text);
+}
+
+.trainingLessonMd p {
+  margin: 0 0 0.75em;
+}
+
+.trainingLessonMd p:last-child {
+  margin-bottom: 0;
+}
+
+.trainingLessonMd h1,
+.trainingLessonMd h2,
+.trainingLessonMd h3,
+.trainingLessonMd h4 {
+  margin: 1.1em 0 0.5em;
+  font-weight: 650;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.trainingLessonMd h1 {
+  font-size: 1.25rem;
+}
+
+.trainingLessonMd h2 {
+  font-size: 1.1rem;
+}
+
+.trainingLessonMd h3 {
+  font-size: 1rem;
+}
+
+.trainingLessonMd h4 {
+  font-size: 0.95rem;
+}
+
+.trainingLessonMd h1:first-child,
+.trainingLessonMd h2:first-child,
+.trainingLessonMd h3:first-child,
+.trainingLessonMd h4:first-child {
+  margin-top: 0;
+}
+
+.trainingLessonMd ul,
+.trainingLessonMd ol {
+  margin: 0 0 0.75em;
+  padding-left: 1.4em;
+}
+
+.trainingLessonMd li {
+  margin: 0.25em 0;
+}
+
+.trainingLessonMd li > p {
+  margin: 0.2em 0;
+}
+
+.trainingLessonMd strong {
+  font-weight: 650;
+  color: var(--text);
+}
+
+.trainingLessonMd blockquote {
+  margin: 0.65em 0;
+  padding: 8px 12px;
+  border-left: 3px solid color-mix(in srgb, var(--accent, #6ea8fe) 50%, transparent);
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
+  color: var(--muted);
+  border-radius: 0 8px 8px 0;
+}
+
+.trainingLessonMd hr {
+  border: 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  margin: 1em 0;
+}
+
+.trainingLessonMd code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.92em;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.trainingLessonMd pre {
+  margin: 0.75em 0;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--border) 65%, transparent);
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  overflow-x: auto;
+}
+
+.trainingLessonMd pre code {
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.trainingLessonMd table {
+  border-collapse: collapse;
+  font-size: 13px;
+  width: 100%;
+  margin: 0.75em 0;
+}
+
+.trainingLessonMd th,
+.trainingLessonMd td {
+  border: 1px solid var(--border);
+  padding: 8px 10px;
+  vertical-align: top;
+}
+
+.trainingLessonMd th {
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+  font-weight: 600;
+}
+
+.trainingLessonMd a {
+  color: color-mix(in srgb, var(--accent, #6ea8fe) 80%, var(--text));
+}
+
+.trainingLessonMd input[type="checkbox"] {
+  margin-right: 6px;
+  accent-color: var(--accent, #6ea8fe);
 }
 
 .trainingPractice {
