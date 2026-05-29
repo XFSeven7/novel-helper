@@ -1111,6 +1111,47 @@ code {
   display: none; /* Chrome/Safari */
 }
 
+/* 书籍视图：外层不滚动，由 navTabBody / chapterNavScroll 分担 */
+.navSectionMain--bookOpen {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.navSectionMain--bookOpen > .navChapterHeader,
+.navSectionMain--bookOpen > .browserTabsBar {
+  flex-shrink: 0;
+}
+
+.navTabBody {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.navTabBody::-webkit-scrollbar {
+  display: none;
+}
+
+.navTabBody--chapterScroll {
+  overflow: hidden;
+}
+
+.chapterNavRoot {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chapterNavRoot > .navSortBar {
+  flex-shrink: 0;
+}
+
 .navChapterHeader {
   margin-bottom: 6px;
 }
@@ -1146,7 +1187,13 @@ code {
 .chapterNavScroll {
   flex: 1;
   min-height: 0;
-  overflow-y: visible;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.chapterNavScroll::-webkit-scrollbar {
+  display: none;
 }
 
 .relationsTree {

@@ -2659,7 +2659,7 @@ export function App() {
       >
         <aside className="nav">
           {navCollapsed ? null : (
-          <div className="panel navSectionMain">
+          <div className={`panel navSectionMain${navHome ? "" : " navSectionMain--bookOpen"}`}>
             {navHome ? (
               <>
                 <div className="navTitle">书架</div>
@@ -2739,6 +2739,7 @@ export function App() {
                     </button>
                   ) : null}
                 </div>
+                <div className="chapterNavRoot">
                 <div className="navOverviewBar">
                   <button
                     type="button"
@@ -2808,6 +2809,7 @@ export function App() {
                       新建章节
                     </button>
                   </div>
+                </div>
                 </div>
               </>
             )}

@@ -33,7 +33,7 @@ export function ChapterNav({
   onCreateChapter
 }: ChapterNavProps) {
   return (
-    <>
+    <div className="chapterNavRoot">
       <div className="navSortBar">
         <button
           type="button"
@@ -107,6 +107,6 @@ export function ChapterNav({
           </button>
         </div>
       </div>
-    </>
+    </div>
   );
 }

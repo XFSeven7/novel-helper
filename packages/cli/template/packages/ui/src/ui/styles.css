@@ -325,6 +325,36 @@ button:disabled {
 .navSectionMain {
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.navSectionMain::-webkit-scrollbar {
+  display: none;
+}
+
+.navSectionMain--bookOpen {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.navSectionMain--bookOpen > .navChapterHeader,
+.navSectionMain--bookOpen > .navOverviewBar {
+  flex-shrink: 0;
+}
+
+.chapterNavRoot {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.chapterNavRoot > .navOverviewBar,
+.chapterNavRoot > .navSortBar {
+  flex-shrink: 0;
 }
 
 .navChapterHeader {
@@ -362,6 +392,12 @@ button:disabled {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.chapterNavScroll::-webkit-scrollbar {
+  display: none;
 }
 
 .chapterNavList {

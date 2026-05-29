@@ -3556,7 +3556,7 @@ export function App() {
       >
         <aside className="nav">
           {navCollapsed ? null : (
-            <div className="navSection navSectionMain">
+            <div className={`navSection navSectionMain${navHome ? "" : " navSectionMain--bookOpen"}`}>
               {navHome ? (
                 <>
                   <BookShelfTabs tab={shelfTab} onChange={setShelfTab} disabled={busy} />
@@ -3709,6 +3709,9 @@ export function App() {
                     </div>
                   </div>
 
+                  <div
+                    className={`navTabBody${leftTab === "chapters" ? " navTabBody--chapterScroll" : ""}`}
+                  >
                   {leftTab === "chapters" ? (
                     <ChapterNav
                       chapters={chapters}
@@ -3945,6 +3948,7 @@ export function App() {
                       )}
                     </>
                   )}
+                  </div>
                 </>
               )}
             </div>
