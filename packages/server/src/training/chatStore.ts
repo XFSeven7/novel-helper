@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { trainingDir } from "./store.js";
-import type { TrainingCategoryChat, TrainingChatMessage } from "./types.js";
+import type { TrainingSceneChat, TrainingChatMessage } from "./types.js";
 
 export const MAX_TRAINING_CHAT_TURNS = 40;
 export const MAX_TRAINING_CHAT_USER_LEN = 2000;
@@ -11,22 +11,22 @@ function chatDir(dataDir: string) {
   return path.join(trainingDir(dataDir), "chat");
 }
 
-function chatPath(dataDir: string, categoryId: string) {
-  const safe = path.basename(categoryId);
+function chatPath(dataDir: string, sceneId: string) {
+  const safe = path.basename(sceneId);
   return path.join(chatDir(dataDir), `${safe}.json`);
 }
 
-export async function readCategoryChat(dataDir: string, categoryId: string): Promise<TrainingCategoryChat> {
+export async function readSceneChat(dataDir: string, sceneId: string): Promise<TrainingSceneChat> {
   try {
-    const raw = await fs.readFile(chatPath(dataDir, categoryId), "utf8");
-    const parsed = JSON.parse(raw) as TrainingCategoryChat;
+    const raw = await fs.readFile(chatPath(dataDir, sceneId), "utf8");
+    const parsed = JSON.parse(raw) as TrainingSceneChat & { categoryId?: string };
     return {
-      categoryId,
+      sceneId,
       messages: Array.isArray(parsed.messages) ? parsed.messages : [],
       updatedAt: parsed.updatedAt ?? new Date().toISOString()
     };
   } catch {
-    return { categoryId, messages: [], updatedAt: new Date().toISOString() };
+    return { sceneId, messages: [], updatedAt: new Date().toISOString() };
   }
 }
 
@@ -36,20 +36,20 @@ function trimTurns(messages: TrainingChatMessage[]): TrainingChatMessage[] {
   return messages.slice(-maxMessages);
 }
 
-export async function appendCategoryChatTurn(
+export async function appendSceneChatTurn(
   dataDir: string,
-  categoryId: string,
+  sceneId: string,
   userContent: string,
   assistantContent: string
-): Promise<TrainingCategoryChat> {
+): Promise<TrainingSceneChat> {
   const user = userContent.trim().slice(0, MAX_TRAINING_CHAT_USER_LEN);
   const assistant = assistantContent.trim().slice(0, MAX_TRAINING_CHAT_ASSISTANT_STORE);
   if (!user || !assistant) throw new Error("Content required");
 
-  const prev = await readCategoryChat(dataDir, categoryId);
+  const prev = await readSceneChat(dataDir, sceneId);
   const now = new Date().toISOString();
-  const next: TrainingCategoryChat = {
-    categoryId,
+  const next: TrainingSceneChat = {
+    sceneId,
     messages: trimTurns([
       ...prev.messages,
       { role: "user", content: user, createdAt: now },
@@ -58,18 +58,18 @@ export async function appendCategoryChatTurn(
     updatedAt: now
   };
   await fs.mkdir(chatDir(dataDir), { recursive: true });
-  await fs.writeFile(chatPath(dataDir, categoryId), JSON.stringify(next, null, 2), "utf8");
+  await fs.writeFile(chatPath(dataDir, sceneId), JSON.stringify(next, null, 2), "utf8");
   return next;
 }
 
-export async function clearCategoryChat(dataDir: string, categoryId: string): Promise<void> {
-  const empty: TrainingCategoryChat = {
-    categoryId,
+export async function clearSceneChat(dataDir: string, sceneId: string): Promise<void> {
+  const empty: TrainingSceneChat = {
+    sceneId,
     messages: [],
     updatedAt: new Date().toISOString()
   };
   await fs.mkdir(chatDir(dataDir), { recursive: true });
-  await fs.writeFile(chatPath(dataDir, categoryId), JSON.stringify(empty, null, 2), "utf8");
+  await fs.writeFile(chatPath(dataDir, sceneId), JSON.stringify(empty, null, 2), "utf8");
 }
 
 export function messagesForModel(messages: TrainingChatMessage[]): Array<{ role: "user" | "assistant"; content: string }> {

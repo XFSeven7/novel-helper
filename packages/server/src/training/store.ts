@@ -1,14 +1,17 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { listCategories } from "./categories.js";
-import { getCategoryWithTeaching } from "./teaching.js";
+import { resolveTopicId } from "./legacy.js";
+import { listScenes } from "./scenes.js";
+import { getCategoryWithTeaching, getSceneWithTeaching } from "./teaching.js";
 import type {
   TrainingAttempt,
   TrainingGradingResult,
   TrainingQuestion,
   TrainingTree,
-  TrainingTreeCategory,
-  TrainingTreeQuestion
+  TrainingTreeGroup,
+  TrainingTreeQuestion,
+  TrainingTreeScene
 } from "./types.js";
 
 export function trainingDir(dataDir: string) {
@@ -27,7 +30,45 @@ export function newTrainingId(prefix: string) {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
-export async function saveQuestion(dataDir: string, input: Omit<TrainingQuestion, "id" | "createdAt"> & { id?: string }): Promise<TrainingQuestion> {
+function parseQuestion(raw: unknown): TrainingQuestion | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as TrainingQuestion & { categoryId?: string };
+  const sceneId = resolveTopicId(o);
+  if (!sceneId) return null;
+  return {
+    id: o.id,
+    sceneId,
+    title: o.title,
+    prompt: o.prompt,
+    minChars: o.minChars,
+    maxChars: o.maxChars,
+    snippet: o.snippet,
+    createdAt: o.createdAt,
+    source: o.source
+  };
+}
+
+function parseAttempt(raw: unknown): TrainingAttempt | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as TrainingAttempt & { categoryId?: string };
+  const sceneId = resolveTopicId(o);
+  if (!sceneId) return null;
+  return {
+    id: o.id,
+    questionId: o.questionId,
+    sceneId,
+    text: o.text,
+    result: o.result,
+    gradingMode: o.gradingMode,
+    modelConfigId: o.modelConfigId,
+    createdAt: o.createdAt
+  };
+}
+
+export async function saveQuestion(
+  dataDir: string,
+  input: Omit<TrainingQuestion, "id" | "createdAt"> & { id?: string }
+): Promise<TrainingQuestion> {
   const q: TrainingQuestion = {
     ...input,
     id: input.id ?? newTrainingId("tq"),
@@ -41,31 +82,15 @@ export async function saveQuestion(dataDir: string, input: Omit<TrainingQuestion
 export async function readQuestion(dataDir: string, id: string): Promise<TrainingQuestion | null> {
   try {
     const raw = await fs.readFile(path.join(questionsDir(dataDir), `${id}.json`), "utf8");
-    return JSON.parse(raw) as TrainingQuestion;
+    return parseQuestion(JSON.parse(raw));
   } catch {
     return null;
   }
 }
 
-export async function listQuestionsByCategory(dataDir: string, categoryId: string): Promise<TrainingQuestion[]> {
-  const dir = questionsDir(dataDir);
-  try {
-    const files = await fs.readdir(dir);
-    const out: TrainingQuestion[] = [];
-    for (const f of files) {
-      if (!f.endsWith(".json")) continue;
-      try {
-        const raw = await fs.readFile(path.join(dir, f), "utf8");
-        const q = JSON.parse(raw) as TrainingQuestion;
-        if (q.categoryId === categoryId) out.push(q);
-      } catch {
-        /* skip */
-      }
-    }
-    return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  } catch {
-    return [];
-  }
+export async function listQuestionsByScene(dataDir: string, sceneId: string): Promise<TrainingQuestion[]> {
+  const all = await listAllQuestions(dataDir);
+  return all.filter((q) => q.sceneId === sceneId);
 }
 
 export async function listAllQuestions(dataDir: string): Promise<TrainingQuestion[]> {
@@ -77,7 +102,8 @@ export async function listAllQuestions(dataDir: string): Promise<TrainingQuestio
       if (!f.endsWith(".json")) continue;
       try {
         const raw = await fs.readFile(path.join(dir, f), "utf8");
-        out.push(JSON.parse(raw) as TrainingQuestion);
+        const q = parseQuestion(JSON.parse(raw));
+        if (q) out.push(q);
       } catch {
         /* skip */
       }
@@ -105,7 +131,7 @@ export async function saveAttempt(
 export async function readAttempt(dataDir: string, id: string): Promise<TrainingAttempt | null> {
   try {
     const raw = await fs.readFile(path.join(attemptsDir(dataDir), `${id}.json`), "utf8");
-    return JSON.parse(raw) as TrainingAttempt;
+    return parseAttempt(JSON.parse(raw));
   } catch {
     return null;
   }
@@ -125,7 +151,8 @@ export async function listAllAttempts(dataDir: string, limit = 200): Promise<Tra
       if (!f.endsWith(".json")) continue;
       try {
         const raw = await fs.readFile(path.join(dir, f), "utf8");
-        out.push(JSON.parse(raw) as TrainingAttempt);
+        const a = parseAttempt(JSON.parse(raw));
+        if (a) out.push(a);
       } catch {
         /* skip */
       }
@@ -145,41 +172,66 @@ export function computeQuestionStats(attempts: TrainingAttempt[], questionId: st
   };
 }
 
-export function computeCategoryStats(attempts: TrainingAttempt[], categoryId: string) {
-  const mine = attempts.filter((a) => a.categoryId === categoryId);
+export function computeSceneStats(attempts: TrainingAttempt[], sceneId: string) {
+  const mine = attempts.filter((a) => a.sceneId === sceneId);
   return { attemptCount: mine.length };
 }
 
 export async function buildTrainingTree(dataDir: string): Promise<TrainingTree> {
   const attempts = await listAllAttempts(dataDir, 500);
-  const categories: TrainingTreeCategory[] = await Promise.all(
-    listCategories().map(async (cat) => {
-      const full = await getCategoryWithTeaching(dataDir, cat.id);
-      const catStats = computeCategoryStats(attempts, cat.id);
-      const questions: TrainingTreeQuestion[] = [];
+
+  const sceneItems: TrainingTreeScene[] = await Promise.all(
+    listScenes().map(async (s) => {
+      const full = await getSceneWithTeaching(dataDir, s.id);
+      const stats = computeSceneStats(attempts, s.id);
       return {
         ...full,
-        attemptCount: catStats.attemptCount,
+        attemptCount: stats.attemptCount,
         questionCount: 0,
-        questions
+        questions: [] as TrainingTreeQuestion[]
       };
     })
   );
 
-  const byCat = new Map(categories.map((c) => [c.id, c]));
+  const categoryItems: TrainingTreeScene[] = await Promise.all(
+    listCategories().map(async (c) => {
+      const full = await getCategoryWithTeaching(dataDir, c.id);
+      const stats = computeSceneStats(attempts, c.id);
+      return {
+        ...full,
+        sceneBrief: "",
+        attemptCount: stats.attemptCount,
+        questionCount: 0,
+        questions: [] as TrainingTreeQuestion[]
+      };
+    })
+  );
+
+  const sceneGroup: TrainingTreeGroup = {
+    id: "group-scene-practice",
+    title: "场景练习",
+    scenes: sceneItems
+  };
+  const techniqueGroup: TrainingTreeGroup = {
+    id: "group-technique",
+    title: "文笔技法",
+    scenes: categoryItems
+  };
+
+  const byScene = new Map(sceneGroup.scenes.map((s) => [s.id, s]));
+  const byCat = new Map(techniqueGroup.scenes.map((s) => [s.id, s]));
   for (const q of await listAllQuestions(dataDir)) {
-    const cat = byCat.get(q.categoryId);
-    if (!cat) continue;
     const stats = computeQuestionStats(attempts, q.id);
-    cat.questions.push({ ...q, ...stats });
-    cat.questionCount += 1;
+    const node = byScene.get(q.sceneId) ?? byCat.get(q.sceneId);
+    if (!node) continue;
+    node.questions.push({ ...q, ...stats });
+    node.questionCount += 1;
+  }
+  for (const node of [...sceneGroup.scenes, ...techniqueGroup.scenes]) {
+    node.questions.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
-  for (const cat of categories) {
-    cat.questions.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  }
-
-  return { categories };
+  return { groups: [sceneGroup, techniqueGroup] };
 }
 
 export type { TrainingGradingResult };

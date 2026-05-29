@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import type { TrainingAttempt, TrainingTreeCategory } from "../../api";
+import { allTreeScenes, resolveSceneTitle, type TrainingAttempt, type TrainingTree } from "../../api";
 import { trainingGradingBrief } from "./trainingGradingBrief";
 
 function AttemptRow(props: {
@@ -23,26 +23,26 @@ function AttemptRow(props: {
 }
 
 export function TrainingRecordsPage(props: {
-  categories: TrainingTreeCategory[];
+  tree: TrainingTree;
   attempts: TrainingAttempt[];
   onOpenAttempt: (attemptId: string, questionId: string) => void;
   onBack: () => void;
 }) {
   const [tab, setTab] = useState<"byQuestion" | "byTime">("byQuestion");
+  const scenes = useMemo(() => allTreeScenes(props.tree), [props.tree]);
 
-  const catTitle = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const c of props.categories) m.set(c.id, c.title);
-    return m;
-  }, [props.categories]);
+  const sceneTitle = useMemo(
+    () => (sceneId: string) => resolveSceneTitle(sceneId, props.tree),
+    [props.tree]
+  );
 
   const qTitle = useMemo(() => {
     const m = new Map<string, string>();
-    for (const c of props.categories) {
-      for (const q of c.questions) m.set(q.id, q.title);
+    for (const s of scenes) {
+      for (const q of s.questions) m.set(q.id, q.title);
     }
     return m;
-  }, [props.categories]);
+  }, [scenes]);
 
   const byQuestion = useMemo(() => {
     const map = new Map<string, TrainingAttempt[]>();
@@ -96,7 +96,7 @@ export function TrainingRecordsPage(props: {
             {byQuestion.map(({ questionId, attempts }) => (
               <li key={questionId} className="trainingRecordsGroup">
                 <div className="trainingRecordsGroupTitle">
-                  {catTitle.get(attempts[0]!.categoryId) ?? "题型"} · {qTitle.get(questionId) ?? questionId}
+                  {sceneTitle(attempts[0]!.sceneId)} · {qTitle.get(questionId) ?? questionId}
                 </div>
                 <ul>
                   {attempts.map((a, i) => (
@@ -122,7 +122,7 @@ export function TrainingRecordsPage(props: {
           {byTime.map((a) => (
             <li key={a.id}>
               <AttemptRow
-                label={`${catTitle.get(a.categoryId) ?? "题型"} · ${qTitle.get(a.questionId) ?? a.questionId}`}
+                label={`${sceneTitle(a.sceneId)} · ${qTitle.get(a.questionId) ?? a.questionId}`}
                 time={new Date(a.createdAt).toLocaleString()}
                 score={a.result.overallScore}
                 brief={trainingGradingBrief(a.result)}

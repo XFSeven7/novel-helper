@@ -1499,10 +1499,14 @@ export type TrainingCategory = {
   id: string;
   title: string;
   order: number;
-  teachingFile?: string;
+  teachingFile: string;
   contentMarkdown: string;
   rubricHints: string[];
   exerciseDefaults: { minChars: number; maxChars: number };
+};
+
+export type TrainingScene = TrainingCategory & {
+  sceneBrief: string;
 };
 
 export type TrainingChatMessage = {
@@ -1513,7 +1517,7 @@ export type TrainingChatMessage = {
 
 export type TrainingQuestion = {
   id: string;
-  categoryId: string;
+  sceneId: string;
   title: string;
   prompt: string;
   minChars: number;
@@ -1528,11 +1532,32 @@ export type TrainingTreeQuestion = TrainingQuestion & {
   bestScore: number | null;
 };
 
-export type TrainingTreeCategory = TrainingCategory & {
+export type TrainingTreeScene = TrainingScene & {
   attemptCount: number;
   questionCount: number;
   questions: TrainingTreeQuestion[];
 };
+
+export type TrainingTreeGroup = {
+  id: string;
+  title: string;
+  scenes: TrainingTreeScene[];
+};
+
+export type TrainingTree = {
+  groups: TrainingTreeGroup[];
+};
+
+export function allTreeScenes(tree: TrainingTree): TrainingTreeScene[] {
+  return tree.groups.flatMap((g) => g.scenes);
+}
+
+export function resolveSceneTitle(sceneId: string, tree: TrainingTree | TrainingTreeScene[]): string {
+  const scenes = Array.isArray(tree) ? tree : allTreeScenes(tree);
+  const hit = scenes.find((s) => s.id === sceneId);
+  if (hit) return hit.title;
+  return sceneId;
+}
 
 export type TrainingGradingMode = "infernal" | "strict" | "honest";
 
@@ -1553,7 +1578,7 @@ export type TrainingGradingResult = {
 export type TrainingAttempt = {
   id: string;
   questionId: string;
-  categoryId: string;
+  sceneId: string;
   text: string;
   result: TrainingGradingResult;
   gradingMode?: TrainingGradingMode;
@@ -1562,21 +1587,21 @@ export type TrainingAttempt = {
 };
 
 export async function getTrainingTree() {
-  return await http<{ categories: TrainingTreeCategory[] }>(`/api/training/tree`);
+  return await http<TrainingTree>(`/api/training/tree`);
 }
 
-export async function getTrainingCategory(id: string) {
-  return await http<{ category: TrainingCategory }>(`/api/training/categories/${encodeURIComponent(id)}`);
+export async function getTrainingScene(id: string) {
+  return await http<{ scene: TrainingScene }>(`/api/training/scenes/${encodeURIComponent(id)}`);
 }
 
-export async function getTrainingCategoryChat(categoryId: string) {
+export async function getTrainingSceneChat(sceneId: string) {
   return await http<{ messages: TrainingChatMessage[] }>(
-    `/api/training/categories/${encodeURIComponent(categoryId)}/chat`
+    `/api/training/scenes/${encodeURIComponent(sceneId)}/chat`
   );
 }
 
-export async function clearTrainingCategoryChat(categoryId: string) {
-  return await http<{ ok: boolean }>(`/api/training/categories/${encodeURIComponent(categoryId)}/chat`, {
+export async function clearTrainingSceneChat(sceneId: string) {
+  return await http<{ ok: boolean }>(`/api/training/scenes/${encodeURIComponent(sceneId)}/chat`, {
     method: "DELETE"
   });
 }
@@ -1585,9 +1610,9 @@ export async function getTrainingQuestion(id: string) {
   return await http<{ question: TrainingQuestion }>(`/api/training/questions/${encodeURIComponent(id)}`);
 }
 
-export async function generateTrainingQuestions(categoryId: string, count: 1 | 3 | 5) {
+export async function generateTrainingQuestions(sceneId: string, count: 1 | 3 | 5) {
   return await http<{ questions: TrainingQuestion[] }>(
-    `/api/training/categories/${encodeURIComponent(categoryId)}/generate-questions`,
+    `/api/training/scenes/${encodeURIComponent(sceneId)}/generate-questions`,
     { method: "POST", body: JSON.stringify({ count }) }
   );
 }

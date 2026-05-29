@@ -2,7 +2,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { getCategory } from "./categories.js";
-import type { TrainingCategoryPublic } from "./types.js";
+import { getScene } from "./scenes.js";
+import type { TrainingCategoryPublic, TrainingScenePublic } from "./types.js";
 
 const BUNDLED_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "teaching");
 
@@ -36,8 +37,14 @@ export async function readTeachingMarkdown(dataDir: string, teachingFile: string
   return await fs.readFile(p, "utf8");
 }
 
+export async function getSceneWithTeaching(dataDir: string, id: string): Promise<TrainingScenePublic> {
+  const scene = getScene(id);
+  const contentMarkdown = await readTeachingMarkdown(dataDir, scene.teachingFile);
+  return { ...scene, contentMarkdown };
+}
+
 export async function getCategoryWithTeaching(dataDir: string, id: string): Promise<TrainingCategoryPublic> {
-  const cat = getCategory(id);
-  const contentMarkdown = await readTeachingMarkdown(dataDir, cat.teachingFile);
-  return { ...cat, contentMarkdown };
+  const category = getCategory(id);
+  const contentMarkdown = await readTeachingMarkdown(dataDir, category.teachingFile);
+  return { ...category, contentMarkdown };
 }

@@ -6,7 +6,7 @@ import {
   buildTrainingTree,
   computeQuestionStats,
   listAttemptsByQuestion,
-  listQuestionsByCategory,
+  listQuestionsByScene,
   saveAttempt,
   saveQuestion
 } from "./store.js";
@@ -14,31 +14,31 @@ import {
 let tmp = "";
 
 beforeEach(async () => {
-  tmp = await fs.mkdtemp(path.join(os.tmpdir(), "nh-training-v2-"));
+  tmp = await fs.mkdtemp(path.join(os.tmpdir(), "nh-training-scene-"));
 });
 
 afterEach(async () => {
   await fs.rm(tmp, { recursive: true, force: true });
 });
 
-describe("training v2 store", () => {
-  it("saves question and lists by category", async () => {
+describe("training scene store", () => {
+  it("saves question and lists by scene", async () => {
     await saveQuestion(tmp, {
-      categoryId: "cat-dialogue",
+      sceneId: "scene-dialogue-daily",
       title: "测试题",
       prompt: "写对话",
       minChars: 50,
       maxChars: 300,
       source: "ai"
     });
-    const list = await listQuestionsByCategory(tmp, "cat-dialogue");
+    const list = await listQuestionsByScene(tmp, "scene-dialogue-daily");
     expect(list.length).toBe(1);
     expect(list[0]!.title).toBe("测试题");
   });
 
   it("saves multiple attempts and computes stats", async () => {
     const q = await saveQuestion(tmp, {
-      categoryId: "cat-dialogue",
+      sceneId: "scene-dialogue-daily",
       title: "Q1",
       prompt: "p",
       minChars: 10,
@@ -47,7 +47,7 @@ describe("training v2 store", () => {
     });
     await saveAttempt(tmp, {
       questionId: q.id,
-      categoryId: q.categoryId,
+      sceneId: q.sceneId,
       text: "a",
       result: {
         overallScore: 60,
@@ -62,7 +62,7 @@ describe("training v2 store", () => {
     });
     await saveAttempt(tmp, {
       questionId: q.id,
-      categoryId: q.categoryId,
+      sceneId: q.sceneId,
       text: "b",
       result: {
         overallScore: 75,
@@ -81,9 +81,9 @@ describe("training v2 store", () => {
     expect(s2.bestScore).toBe(75);
   });
 
-  it("buildTreeStats aggregates category attemptCount", async () => {
+  it("buildTreeStats aggregates scene attemptCount", async () => {
     const q = await saveQuestion(tmp, {
-      categoryId: "cat-rhythm",
+      sceneId: "scene-env",
       title: "R1",
       prompt: "p",
       minChars: 10,
@@ -92,7 +92,7 @@ describe("training v2 store", () => {
     });
     await saveAttempt(tmp, {
       questionId: q.id,
-      categoryId: q.categoryId,
+      sceneId: q.sceneId,
       text: "x",
       result: {
         overallScore: 70,
@@ -106,9 +106,13 @@ describe("training v2 store", () => {
       modelConfigId: "m1"
     });
     const tree = await buildTrainingTree(tmp);
-    const cat = tree.categories.find((c) => c.id === "cat-rhythm");
-    expect(cat?.attemptCount).toBe(1);
-    expect(cat?.questions[0]?.attemptCount).toBe(1);
-    expect(cat?.questions[0]?.bestScore).toBe(70);
+    const sceneGroup = tree.groups.find((g) => g.id === "group-scene-practice");
+    const scene = sceneGroup?.scenes.find((s) => s.id === "scene-env");
+    expect(scene?.attemptCount).toBe(1);
+    expect(scene?.questions[0]?.attemptCount).toBe(1);
+    expect(scene?.questions[0]?.bestScore).toBe(70);
+    expect(sceneGroup?.title).toBe("场景练习");
+    expect(tree.groups.some((g) => g.id === "group-technique")).toBe(true);
+    expect(tree.groups.find((g) => g.id === "group-technique")?.scenes.length).toBe(7);
   });
 });

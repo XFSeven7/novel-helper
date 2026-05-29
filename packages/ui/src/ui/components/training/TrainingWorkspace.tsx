@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   generateTrainingQuestions,
   getTrainingAttempt,
@@ -8,21 +8,22 @@ import {
   listTrainingAttempts,
   submitTrainingQuestion,
   type TrainingAttempt,
-  type TrainingCategory,
   type TrainingGradingMode,
   type TrainingGradingResult,
   type TrainingQuestion,
-  type TrainingTreeCategory
+  type TrainingScene,
+  allTreeScenes,
+  type TrainingTree
 } from "../../api";
 import { TrainingAttemptHistory } from "./TrainingAttemptHistory";
-import { TrainingCategoryTree, type TrainingSelection } from "./TrainingCategoryTree";
+import { TrainingSceneTree, type TrainingSelection } from "./TrainingSceneTree";
 import { TrainingGenerateMenu } from "./TrainingGenerateMenu";
 import { TrainingLessonMarkdown } from "./TrainingLessonMarkdown";
 import { TrainingGradingModePicker } from "./TrainingGradingModePicker";
 import { TrainingGradingView } from "./TrainingGradingView";
 import { resolveTrainingGradingMode } from "./gradingModeLabels";
 import { TrainingRecordsPage } from "./TrainingRecordsPage";
-import { TrainingCategoryChat } from "./TrainingCategoryChat";
+import { TrainingSceneChat } from "./TrainingSceneChat";
 import { TrainingWorkbenchSplit } from "./TrainingWorkbenchSplit";
 import { TrainingTopBar } from "./TrainingTopBar";
 
@@ -40,15 +41,19 @@ function formatApiError(e: unknown): string {
   return text || "请求失败";
 }
 
+function sceneIdFromSelection(sel: TrainingSelection | null): string | null {
+  if (!sel || sel.kind === "group") return null;
+  return sel.sceneId;
+}
+
 export function TrainingWorkspace(props: {
   onExit: () => void;
   onStatus?: (msg: string) => void;
   modelConfigId?: string | null;
 }) {
   const [screen, setScreen] = useState<Screen>("practice");
-  const [categories, setCategories] = useState<TrainingTreeCategory[]>([]);
+  const [tree, setTree] = useState<TrainingTree | null>(null);
   const [selection, setSelection] = useState<TrainingSelection | null>(null);
-  const [categoryDetail, setCategoryDetail] = useState<TrainingCategory | null>(null);
   const [question, setQuestion] = useState<TrainingQuestion | null>(null);
   const [attempts, setAttempts] = useState<TrainingAttempt[]>([]);
   const [allAttempts, setAllAttempts] = useState<TrainingAttempt[]>([]);
@@ -64,17 +69,45 @@ export function TrainingWorkspace(props: {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
+  const scenes = useMemo(() => (tree ? allTreeScenes(tree) : []), [tree]);
+
+  const sceneDetail = useMemo((): TrainingScene | null => {
+    const sid = sceneIdFromSelection(selection);
+    if (!sid) return null;
+    const scene = scenes.find((s) => s.id === sid);
+    if (!scene) return null;
+    return {
+      id: scene.id,
+      title: scene.title,
+      order: scene.order,
+      teachingFile: scene.teachingFile,
+      contentMarkdown: scene.contentMarkdown,
+      rubricHints: scene.rubricHints,
+      exerciseDefaults: scene.exerciseDefaults,
+      sceneBrief: scene.sceneBrief ?? ""
+    };
+  }, [selection, scenes]);
+
+  const questionId = selection?.kind === "question" ? selection.questionId : null;
+
   const refreshTree = useCallback(async () => {
     const data = await getTrainingTree();
-    setCategories(data.categories);
+    setTree(data);
+    return data;
   }, []);
 
   useEffect(() => {
     void (async () => {
       try {
-        await refreshTree();
-        const first = (await getTrainingTree()).categories[0];
-        if (first) setSelection({ kind: "category", categoryId: first.id });
+        const data = await refreshTree();
+        const technique = data.groups.find((g) => g.id === "group-technique");
+        const group = technique ?? data.groups[0];
+        const first = group?.scenes[0];
+        if (first && group) {
+          setSelection({ kind: "scene", groupId: group.id, sceneId: first.id });
+        } else if (group) {
+          setSelection({ kind: "group", groupId: group.id });
+        }
       } catch (e: unknown) {
         setLoadError(formatApiError(e));
       }
@@ -82,52 +115,43 @@ export function TrainingWorkspace(props: {
   }, [refreshTree]);
 
   useEffect(() => {
-    if (!selection) {
-      setCategoryDetail(null);
-      setQuestion(null);
-      return;
-    }
-    const cat = categories.find((c) => c.id === selection.categoryId);
-    if (cat) {
-      setCategoryDetail({
-        id: cat.id,
-        title: cat.title,
-        order: cat.order,
-        contentMarkdown: cat.contentMarkdown,
-        rubricHints: cat.rubricHints,
-        exerciseDefaults: cat.exerciseDefaults
-      });
-    }
-    if (selection.kind === "question") {
-      void (async () => {
-        try {
-          const { question: q } = await getTrainingQuestion(selection.questionId);
-          setQuestion(q);
-          const { attempts: list } = await getTrainingQuestionAttempts(selection.questionId);
-          setAttempts(list);
-        } catch (e: unknown) {
-          props.onStatus?.(formatApiError(e));
-        }
-      })();
-    } else {
+    if (!questionId) {
       setQuestion(null);
       setAttempts([]);
+      return;
     }
-  }, [selection, categories, props]);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { question: q } = await getTrainingQuestion(questionId);
+        const { attempts: list } = await getTrainingQuestionAttempts(questionId);
+        if (!cancelled) {
+          setQuestion(q);
+          setAttempts(list);
+        }
+      } catch (e: unknown) {
+        if (!cancelled) props.onStatus?.(formatApiError(e));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [questionId, props.onStatus]);
 
   async function handleGenerate(count: 1 | 3 | 5) {
-    if (!selection || selection.kind !== "category") {
-      props.onStatus?.("请先选择一个题型分类");
+    if (!selection || selection.kind !== "scene") {
+      props.onStatus?.("请先选择一个场景或技法分类");
       return;
     }
     setBusy(true);
     try {
-      const res = await generateTrainingQuestions(selection.categoryId, count);
+      const res = await generateTrainingQuestions(selection.sceneId, count);
       await refreshTree();
       if (res.questions[0]) {
         setSelection({
           kind: "question",
-          categoryId: selection.categoryId,
+          groupId: selection.groupId,
+          sceneId: selection.sceneId,
           questionId: res.questions[0]!.id
         });
       }
@@ -221,9 +245,13 @@ export function TrainingWorkspace(props: {
       onClose={() => setGrading(null)}
       onRetry={() => setGrading(null)}
       onViewHistory={() => {
+        const groupId =
+          tree?.groups.find((gr) => gr.scenes.some((s) => s.id === grading.question.sceneId))?.id ??
+          "group-scene-practice";
         setSelection({
           kind: "question",
-          categoryId: grading.question.categoryId,
+          groupId,
+          sceneId: grading.question.sceneId,
           questionId: grading.question.id
         });
         setGrading(null);
@@ -243,6 +271,17 @@ export function TrainingWorkspace(props: {
     );
   }
 
+  if (!tree) {
+    return (
+      <div className="trainingWorkspace">
+        <TrainingTopBar onExit={props.onExit} />
+        <div className="trainingBody">
+          <p className="muted">加载训练数据…</p>
+        </div>
+      </div>
+    );
+  }
+
   if (screen === "records") {
     return (
       <>
@@ -250,7 +289,7 @@ export function TrainingWorkspace(props: {
           <TrainingTopBar onExit={props.onExit} />
           <div className="trainingBody trainingBodyWide">
             <TrainingRecordsPage
-              categories={categories}
+              tree={tree}
               attempts={allAttempts}
               onBack={() => setScreen("practice")}
               onOpenAttempt={(attemptId, questionId) => {
@@ -265,7 +304,10 @@ export function TrainingWorkspace(props: {
                       gradingMode: resolveTrainingGradingMode(attempt.gradingMode),
                       answerText: attempt.text
                     });
-                    setSelection({ kind: "question", categoryId: q.categoryId, questionId });
+                    const g =
+                      tree.groups.find((gr) => gr.scenes.some((s) => s.id === q.sceneId))?.id ??
+                      "group-scene-practice";
+                    setSelection({ kind: "question", groupId: g, sceneId: q.sceneId, questionId });
                   } catch (e: unknown) {
                     props.onStatus?.(formatApiError(e));
                   } finally {
@@ -283,107 +325,110 @@ export function TrainingWorkspace(props: {
 
   return (
     <>
-    <div className="trainingWorkspace">
-      <TrainingTopBar onExit={props.onExit} onOpenHistory={() => void openRecords()} />
-      <div className="trainingWorkbench">
-        <aside className="trainingTreeNav">
-          <TrainingCategoryTree
-            categories={categories}
-            selection={selection}
-            disabled={busy}
-            onSelect={setSelection}
-          />
-        </aside>
-        <TrainingWorkbenchSplit
-          mode={selection?.kind === "question" ? "practice" : "learn"}
-          center={
-            <div className="trainingMain">
-              {selection?.kind === "category" && categoryDetail ? (
-                <header className="trainingLearnHead">
-                  <h3 className="trainingPaneTitle">学法</h3>
-                  <TrainingGenerateMenu disabled={busy} busy={busy} onGenerate={(c) => void handleGenerate(c)} />
-                </header>
-              ) : (
-                <h3 className="trainingPaneTitle">{selection?.kind === "question" ? "题目" : "学法"}</h3>
-              )}
-              {selection?.kind === "category" && categoryDetail ? (
-                <>
-                  <h2 className="trainingLessonTitle">{categoryDetail.title}</h2>
-                  <TrainingLessonMarkdown content={categoryDetail.contentMarkdown} />
-                </>
-              ) : null}
-              {selection?.kind === "question" && question ? (
-                <>
-                  <h2 className="trainingLessonTitle">{question.title}</h2>
-                  <p className="trainingExercisePrompt">{question.prompt}</p>
-                  {question.snippet ? (
-                    <div className="trainingSnippet">
-                      <h4 className="trainingSnippetHeading">{question.snippet.title}</h4>
-                      <pre className="trainingSnippetBody">{question.snippet.body}</pre>
-                    </div>
-                  ) : null}
-                  <section className="trainingAttemptsSection">
-                    <h4>历次练习</h4>
-                    <TrainingAttemptHistory
-                      attempts={attempts}
-                      onOpenAttempt={(a) => void openGradingForAttempt(a)}
-                    />
-                  </section>
-                </>
-              ) : selection?.kind === "category" ? (
-                <p className="muted">阅读学法后可在右侧咨询；点击上方「生成题目」或从左侧选择题目开始练习。</p>
-              ) : (
-                <p className="muted">请从左侧选择题型。</p>
-              )}
-            </div>
-          }
-          right={
-            selection?.kind === "category" && categoryDetail ? (
-              <TrainingCategoryChat
-                categoryId={categoryDetail.id}
-                categoryTitle={categoryDetail.title}
-                modelConfigId={props.modelConfigId ?? null}
-                disabled={busy}
-                onStatus={props.onStatus}
-              />
-            ) : (
-              <aside className="trainingPractice">
-                <h3 className="trainingPaneTitle">练习</h3>
-                {!question ? (
-                  <p className="muted">请选择一个题目后开始写作。</p>
+      <div className="trainingWorkspace">
+        <TrainingTopBar onExit={props.onExit} onOpenHistory={() => void openRecords()} />
+        <div className="trainingWorkbench">
+          <aside className="trainingTreeNav">
+            <TrainingSceneTree
+              groups={tree.groups}
+              selection={selection}
+              disabled={busy}
+              onSelect={setSelection}
+            />
+          </aside>
+          <TrainingWorkbenchSplit
+            mode={selection?.kind === "question" ? "practice" : "learn"}
+            center={
+              <div className="trainingMain">
+                {selection?.kind === "scene" && sceneDetail ? (
+                  <header className="trainingLearnHead">
+                    <h3 className="trainingPaneTitle">学法</h3>
+                    <TrainingGenerateMenu disabled={busy} busy={busy} onGenerate={(c) => void handleGenerate(c)} />
+                  </header>
                 ) : (
-                  <>
-                    <textarea
-                      className="trainingTextarea trainingTextareaGrow"
-                      value={text}
-                      onChange={(e) => setText(e.target.value)}
-                      disabled={busy}
-                      placeholder="在此输入练习…"
-                    />
-                    <footer className="trainingPracticeFooter">
-                      <p className="muted trainingCharCount">
-                        {charCount} 字（{question.minChars}–{question.maxChars}，上限 2000）
-                      </p>
-                      {submitError ? (
-                        <p className="settingsDataDirFeedback settingsDataDirFeedbackErr">{submitError}</p>
-                      ) : null}
-                      <TrainingGradingModePicker
-                        canSubmit={Boolean(canSubmit)}
-                        disabled={busy}
-                        busy={busy}
-                        busyMode={submittingMode}
-                        onSubmit={(mode) => void handleSubmitWithMode(mode)}
-                      />
-                    </footer>
-                  </>
+                  <h3 className="trainingPaneTitle">{selection?.kind === "question" ? "题目" : "学法"}</h3>
                 )}
-              </aside>
-            )
-          }
-        />
+                {selection?.kind === "group" ? (
+                  <p className="muted">请从左侧展开分组，选择一个场景或技法分类开始学习或出题。</p>
+                ) : null}
+                {selection?.kind === "scene" && sceneDetail ? (
+                  <>
+                    <h2 className="trainingLessonTitle">{sceneDetail.title}</h2>
+                    <TrainingLessonMarkdown content={sceneDetail.contentMarkdown} />
+                  </>
+                ) : null}
+                {selection?.kind === "question" && question ? (
+                  <>
+                    <h2 className="trainingLessonTitle">{question.title}</h2>
+                    <p className="trainingExercisePrompt">{question.prompt}</p>
+                    {question.snippet ? (
+                      <div className="trainingSnippet">
+                        <h4 className="trainingSnippetHeading">{question.snippet.title}</h4>
+                        <pre className="trainingSnippetBody">{question.snippet.body}</pre>
+                      </div>
+                    ) : null}
+                    <section className="trainingAttemptsSection">
+                      <h4>历次练习</h4>
+                      <TrainingAttemptHistory
+                        attempts={attempts}
+                        onOpenAttempt={(a) => void openGradingForAttempt(a)}
+                      />
+                    </section>
+                  </>
+                ) : selection?.kind === "scene" ? (
+                  <p className="muted">阅读学法后可在右侧咨询；点击上方「生成题目」或从左侧选择题目开始练习。</p>
+                ) : selection?.kind !== "group" ? (
+                  <p className="muted">请从左侧选择场景。</p>
+                ) : null}
+              </div>
+            }
+            right={
+              selection?.kind === "scene" && sceneDetail ? (
+                <TrainingSceneChat
+                  sceneId={sceneDetail.id}
+                  sceneTitle={sceneDetail.title}
+                  modelConfigId={props.modelConfigId ?? null}
+                  disabled={busy}
+                  onStatus={props.onStatus}
+                />
+              ) : (
+                <aside className="trainingPractice">
+                  <h3 className="trainingPaneTitle">练习</h3>
+                  {!question ? (
+                    <p className="muted">请选择一个题目后开始写作。</p>
+                  ) : (
+                    <>
+                      <textarea
+                        className="trainingTextarea trainingTextareaGrow"
+                        value={text}
+                        onChange={(e) => setText(e.target.value)}
+                        disabled={busy}
+                        placeholder="在此输入练习…"
+                      />
+                      <footer className="trainingPracticeFooter">
+                        <p className="muted trainingCharCount">
+                          {charCount} 字（{question.minChars}–{question.maxChars}，上限 2000）
+                        </p>
+                        {submitError ? (
+                          <p className="settingsDataDirFeedback settingsDataDirFeedbackErr">{submitError}</p>
+                        ) : null}
+                        <TrainingGradingModePicker
+                          canSubmit={Boolean(canSubmit)}
+                          disabled={busy}
+                          busy={busy}
+                          busyMode={submittingMode}
+                          onSubmit={(mode) => void handleSubmitWithMode(mode)}
+                        />
+                      </footer>
+                    </>
+                  )}
+                </aside>
+              )
+            }
+          />
+        </div>
       </div>
-    </div>
-    {gradingModal}
+      {gradingModal}
     </>
   );
 }

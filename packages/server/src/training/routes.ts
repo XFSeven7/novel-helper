@@ -1,19 +1,20 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { assertTrainingReady, readFeatureSettings, type ModelConfig } from "../featureSettings.js";
-import { isValidCategoryId } from "./categories.js";
-import {
-  appendCategoryChatTurn,
-  clearCategoryChat,
-  MAX_TRAINING_CHAT_USER_LEN,
-  messagesForModel,
-  readCategoryChat
-} from "./chatStore.js";
 import { performCategoryChat } from "./categoryChat.js";
+import { isLegacyCategoryId } from "./legacy.js";
+import { getTopicWithTeaching, isValidTopicId } from "./topics.js";
+import type { TrainingCategoryPublic, TrainingScenePublic } from "./types.js";
+import {
+  appendSceneChatTurn,
+  clearSceneChat,
+  MAX_TRAINING_CHAT_USER_LEN,
+  readSceneChat
+} from "./chatStore.js";
+import { performSceneChat } from "./sceneChat.js";
 import { generateTrainingQuestions } from "./generateQuestions.js";
 import { parseTrainingGradingMode } from "./gradingModes.js";
 import { gradeTrainingAttempt } from "./grade.js";
-import { getCategoryWithTeaching } from "./teaching.js";
 import {
   buildTrainingTree,
   listAllAttempts,
@@ -46,38 +47,38 @@ export function registerTrainingRoutes(app: FastifyInstance, deps: TrainingRoute
     return buildTrainingTree(deps.getDataDir());
   });
 
-  app.get("/api/training/categories/:id", async (req, reply) => {
+  app.get("/api/training/scenes/:id", async (req, reply) => {
     const ctx = await requireTraining(reply);
     if (!ctx) return;
     const { id } = z.object({ id: z.string() }).parse((req as { params: unknown }).params);
-    if (!isValidCategoryId(id)) return reply.code(404).send({ message: "题型不存在" });
-    const category = await getCategoryWithTeaching(deps.getDataDir(), id);
-    return { category };
+    if (!isValidTopicId(id)) return reply.code(404).send({ message: "节点不存在" });
+    const topic = await getTopicWithTeaching(deps.getDataDir(), id);
+    return { scene: topic };
   });
 
-  app.get("/api/training/categories/:id/chat", async (req, reply) => {
+  app.get("/api/training/scenes/:id/chat", async (req, reply) => {
     const ctx = await requireTraining(reply);
     if (!ctx) return;
     const { id } = z.object({ id: z.string() }).parse((req as { params: unknown }).params);
-    if (!isValidCategoryId(id)) return reply.code(404).send({ message: "题型不存在" });
-    const chat = await readCategoryChat(deps.getDataDir(), id);
+    if (!isValidTopicId(id)) return reply.code(404).send({ message: "节点不存在" });
+    const chat = await readSceneChat(deps.getDataDir(), id);
     return { messages: chat.messages };
   });
 
-  app.delete("/api/training/categories/:id/chat", async (req, reply) => {
+  app.delete("/api/training/scenes/:id/chat", async (req, reply) => {
     const ctx = await requireTraining(reply);
     if (!ctx) return;
     const { id } = z.object({ id: z.string() }).parse((req as { params: unknown }).params);
-    if (!isValidCategoryId(id)) return reply.code(404).send({ message: "题型不存在" });
-    await clearCategoryChat(deps.getDataDir(), id);
+    if (!isValidTopicId(id)) return reply.code(404).send({ message: "节点不存在" });
+    await clearSceneChat(deps.getDataDir(), id);
     return { ok: true };
   });
 
-  app.post("/api/training/categories/:id/chat/stream", async (req, reply) => {
+  app.post("/api/training/scenes/:id/chat/stream", async (req, reply) => {
     const ctx = await requireTraining(reply);
     if (!ctx) return;
     const { id } = z.object({ id: z.string() }).parse((req as { params: unknown }).params);
-    if (!isValidCategoryId(id)) return reply.code(404).send({ message: "题型不存在" });
+    if (!isValidTopicId(id)) return reply.code(404).send({ message: "节点不存在" });
 
     const body = z
       .object({
@@ -87,8 +88,8 @@ export function registerTrainingRoutes(app: FastifyInstance, deps: TrainingRoute
       .parse((req as { body: unknown }).body);
 
     const dataDir = deps.getDataDir();
-    const category = await getCategoryWithTeaching(dataDir, id);
-    const prior = await readCategoryChat(dataDir, id);
+    const topic = await getTopicWithTeaching(dataDir, id);
+    const prior = await readSceneChat(dataDir, id);
 
     // @ts-ignore
     reply.hijack();
@@ -104,20 +105,31 @@ export function registerTrainingRoutes(app: FastifyInstance, deps: TrainingRoute
 
     try {
       deps.sseWrite(reply.raw, { type: "log", text: "生成回复…\n" });
-      const assistantText = await performCategoryChat({
-        createAiSdkModel: deps.createAiSdkModel,
-        cfg: ctx.cfg,
-        category,
-        history: prior.messages,
-        userMessage: body.message,
-        onDelta: (d) => {
-          if (d) deps.sseWrite(reply.raw, { type: "delta", textDelta: d });
-        }
-      });
+      const assistantText = isLegacyCategoryId(id)
+        ? await performCategoryChat({
+            createAiSdkModel: deps.createAiSdkModel,
+            cfg: ctx.cfg,
+            category: topic as TrainingCategoryPublic,
+            history: prior.messages,
+            userMessage: body.message,
+            onDelta: (d) => {
+              if (d) deps.sseWrite(reply.raw, { type: "delta", textDelta: d });
+            }
+          })
+        : await performSceneChat({
+            createAiSdkModel: deps.createAiSdkModel,
+            cfg: ctx.cfg,
+            scene: topic as TrainingScenePublic,
+            history: prior.messages,
+            userMessage: body.message,
+            onDelta: (d) => {
+              if (d) deps.sseWrite(reply.raw, { type: "delta", textDelta: d });
+            }
+          });
       if (!assistantText.trim()) {
         throw new Error("模型未返回有效内容");
       }
-      const saved = await appendCategoryChatTurn(dataDir, id, body.message, assistantText);
+      const saved = await appendSceneChatTurn(dataDir, id, body.message, assistantText);
       deps.sseWrite(reply.raw, { type: "done", assistantText, messages: saved.messages });
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : String(e);
@@ -136,18 +148,18 @@ export function registerTrainingRoutes(app: FastifyInstance, deps: TrainingRoute
     return { question: q };
   });
 
-  app.post("/api/training/categories/:id/generate-questions", async (req, reply) => {
+  app.post("/api/training/scenes/:id/generate-questions", async (req, reply) => {
     const ctx = await requireTraining(reply);
     if (!ctx) return;
     const { id } = z.object({ id: z.string() }).parse((req as { params: unknown }).params);
-    if (!isValidCategoryId(id)) return reply.code(404).send({ message: "题型不存在" });
+    if (!isValidTopicId(id)) return reply.code(404).send({ message: "节点不存在" });
 
     const body = z.object({ count: z.union([z.literal(1), z.literal(3), z.literal(5)]) }).parse((req as { body: unknown }).body);
 
     try {
       const questions = await generateTrainingQuestions(
         { getDataDir: deps.getDataDir, createAiSdkModel: deps.createAiSdkModel, cfg: ctx.cfg },
-        { categoryId: id, count: body.count }
+        { sceneId: id, count: body.count }
       );
       return { questions };
     } catch (e: unknown) {
@@ -178,13 +190,13 @@ export function registerTrainingRoutes(app: FastifyInstance, deps: TrainingRoute
     }
 
     const gradingMode = parseTrainingGradingMode(body.gradingMode);
-    const category = await getCategoryWithTeaching(deps.getDataDir(), question.categoryId);
+    const topic = await getTopicWithTeaching(deps.getDataDir(), question.sceneId);
     let result;
     try {
       result = await gradeTrainingAttempt({
         createAiSdkModel: deps.createAiSdkModel,
         cfg: ctx.cfg,
-        category,
+        topic,
         question,
         userText,
         gradingMode
@@ -196,7 +208,7 @@ export function registerTrainingRoutes(app: FastifyInstance, deps: TrainingRoute
 
     const attempt = await saveAttempt(deps.getDataDir(), {
       questionId: question.id,
-      categoryId: question.categoryId,
+      sceneId: question.sceneId,
       text: userText,
       result,
       gradingMode,

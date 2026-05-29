@@ -10677,6 +10677,10 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   pointer-events: none;
 }
 
+.trainingTreeGroupRow .trainingTreeTitle {
+  font-weight: 600;
+}
+
 .trainingTreeLabelBtn {
   display: flex;
   flex-direction: column;

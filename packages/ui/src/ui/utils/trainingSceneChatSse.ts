@@ -3,12 +3,12 @@ import { consumeSseStream } from "./sseStream";
 
 const API_BASE = (import.meta as any).env?.VITE_API_BASE || "http://127.0.0.1:3177";
 
-export function trainingCategoryChatStreamUrl(categoryId: string) {
-  return `${API_BASE}/api/training/categories/${encodeURIComponent(categoryId)}/chat/stream`;
+export function trainingSceneChatStreamUrl(sceneId: string) {
+  return `${API_BASE}/api/training/scenes/${encodeURIComponent(sceneId)}/chat/stream`;
 }
 
-export async function consumeTrainingCategoryChatStream(
-  categoryId: string,
+export async function consumeTrainingSceneChatStream(
+  sceneId: string,
   body: { message: string; modelConfigId?: string | null },
   handlers: {
     onDelta?: (delta: string) => void;
@@ -16,7 +16,7 @@ export async function consumeTrainingCategoryChatStream(
   }
 ): Promise<TrainingChatMessage[]> {
   return consumeSseStream<TrainingChatMessage[]>({
-    url: trainingCategoryChatStreamUrl(categoryId),
+    url: trainingSceneChatStreamUrl(sceneId),
     body,
     onDelta: handlers.onDelta,
     onDone: handlers.onDone

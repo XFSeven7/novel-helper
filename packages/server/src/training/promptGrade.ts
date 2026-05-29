@@ -1,15 +1,15 @@
-import type { TrainingCategory, TrainingQuestion } from "./types.js";
+import type { TrainingQuestion, TrainingTopicPublic } from "./types.js";
 import type { TrainingGradingMode } from "./gradingModes.js";
 import { buildGradingPromptTail, formatOriginalQuestion } from "./promptGradeShared.js";
 
 export type GradingPromptInput = {
-  category: TrainingCategory;
+  topic: TrainingTopicPublic;
   question: TrainingQuestion;
   userText: string;
 };
 
 function buildInfernalPromptBody(input: GradingPromptInput): string {
-  const hints = input.category.rubricHints.map((h) => `- ${h}`).join("\n");
+  const hints = input.topic.rubricHints.map((h) => `- ${h}`).join("\n");
   const originalQuestion = formatOriginalQuestion(input.question, "罪证");
   const userAnswer = input.userText.trim();
   const userCharCount = userAnswer.length;
@@ -33,11 +33,11 @@ function buildInfernalPromptBody(input: GradingPromptInput): string {
 - 51–65 分：罕见及格，仍不值得表扬。
 - 65 分以上：极少给出。
 
-### 本类额外检验（${input.category.title}）：
+### 本类额外检验（${input.topic.title}）：
 ${hints}
 
 ${buildGradingPromptTail({
-  categoryTitle: input.category.title,
+  categoryTitle: input.topic.title,
   originalQuestion,
   userAnswer,
   userCharCount,
@@ -48,7 +48,7 @@ ${buildGradingPromptTail({
 }
 
 function buildStrictTeacherPrompt(input: GradingPromptInput): string {
-  const hints = input.category.rubricHints.map((h) => `- ${h}`).join("\n");
+  const hints = input.topic.rubricHints.map((h) => `- ${h}`).join("\n");
   const originalQuestion = formatOriginalQuestion(input.question);
   const userAnswer = input.userText.trim();
   const userCharCount = userAnswer.length;
@@ -68,11 +68,11 @@ function buildStrictTeacherPrompt(input: GradingPromptInput): string {
 - 56–70：基本达标，仍有硬伤。
 - 71+：同类练习中上乘。
 
-### 本类检验要点（${input.category.title}）：
+### 本类检验要点（${input.topic.title}）：
 ${hints}
 
 ${buildGradingPromptTail({
-  categoryTitle: input.category.title,
+  categoryTitle: input.topic.title,
   originalQuestion,
   userAnswer,
   userCharCount,
@@ -83,7 +83,7 @@ ${buildGradingPromptTail({
 }
 
 function buildHonestCoachPrompt(input: GradingPromptInput): string {
-  const hints = input.category.rubricHints.map((h) => `- ${h}`).join("\n");
+  const hints = input.topic.rubricHints.map((h) => `- ${h}`).join("\n");
   const originalQuestion = formatOriginalQuestion(input.question);
   const userAnswer = input.userText.trim();
   const userCharCount = userAnswer.length;
@@ -105,11 +105,11 @@ function buildHonestCoachPrompt(input: GradingPromptInput): string {
 - 81–95：优秀，同类练习中突出。
 - 96–100：极少给出，近乎示范级。
 
-### 本类关注点（${input.category.title}）：
+### 本类关注点（${input.topic.title}）：
 ${hints}
 
 ${buildGradingPromptTail({
-  categoryTitle: input.category.title,
+  categoryTitle: input.topic.title,
   originalQuestion,
   userAnswer,
   userCharCount,

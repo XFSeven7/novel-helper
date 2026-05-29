@@ -1,9 +1,11 @@
 import { generateText } from "ai";
 import type { ModelConfig } from "../featureSettings.js";
-import { getCategoryWithTeaching } from "./teaching.js";
-import { buildGenerateQuestionsPrompt } from "./promptGenerate.js";
+import { isLegacyCategoryId } from "./legacy.js";
+import { buildCategoryGenerateQuestionsPrompt, buildGenerateQuestionsPrompt } from "./promptGenerate.js";
+import { getTopicWithTeaching } from "./topics.js";
+import type { TrainingCategoryPublic, TrainingScenePublic } from "./types.js";
 import { parseGenerateQuestionsJson } from "./parseGenerate.js";
-import { listQuestionsByCategory, saveQuestion } from "./store.js";
+import { listQuestionsByScene, saveQuestion } from "./store.js";
 import type { TrainingQuestion } from "./types.js";
 
 export async function generateTrainingQuestions(
@@ -12,19 +14,25 @@ export async function generateTrainingQuestions(
     createAiSdkModel: (cfg: ModelConfig) => { model: unknown; providerOptions: unknown };
     cfg: ModelConfig;
   },
-  input: { categoryId: string; count: 1 | 3 | 5 }
+  input: { sceneId: string; count: 1 | 3 | 5 }
 ): Promise<TrainingQuestion[]> {
   const dataDir = deps.getDataDir();
-  const category = await getCategoryWithTeaching(dataDir, input.categoryId);
-  const existing = await listQuestionsByCategory(dataDir, input.categoryId);
+  const topic = await getTopicWithTeaching(dataDir, input.sceneId);
+  const existing = await listQuestionsByScene(dataDir, input.sceneId);
   const existingTitles = existing.map((q) => q.title);
 
   const { model, providerOptions } = deps.createAiSdkModel(deps.cfg);
-  const prompt = buildGenerateQuestionsPrompt({
-    category,
-    count: input.count,
-    existingTitles
-  });
+  const prompt = isLegacyCategoryId(input.sceneId)
+    ? buildCategoryGenerateQuestionsPrompt({
+        category: topic as TrainingCategoryPublic,
+        count: input.count,
+        existingTitles
+      })
+    : buildGenerateQuestionsPrompt({
+        scene: topic as TrainingScenePublic,
+        count: input.count,
+        existingTitles
+      });
 
   const { text } = await generateText({
     model: model as Parameters<typeof generateText>[0]["model"],
@@ -36,11 +44,11 @@ export async function generateTrainingQuestions(
   const saved: TrainingQuestion[] = [];
   for (const d of drafts.slice(0, input.count)) {
     const q = await saveQuestion(dataDir, {
-      categoryId: input.categoryId,
+      sceneId: input.sceneId,
       title: d.title.trim(),
       prompt: d.prompt.trim(),
-      minChars: d.minChars ?? category.exerciseDefaults.minChars,
-      maxChars: d.maxChars ?? category.exerciseDefaults.maxChars,
+      minChars: d.minChars ?? topic.exerciseDefaults.minChars,
+      maxChars: d.maxChars ?? topic.exerciseDefaults.maxChars,
       snippet: d.snippet,
       source: "ai"
     });

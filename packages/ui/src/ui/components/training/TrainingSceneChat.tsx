@@ -1,11 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  clearTrainingCategoryChat,
-  getTrainingCategoryChat,
+  clearTrainingSceneChat,
+  getTrainingSceneChat,
   type TrainingChatMessage
 } from "../../api";
 import { appConfirm } from "../../dialog/dialog";
-import { consumeTrainingCategoryChatStream } from "../../utils/trainingCategoryChatSse";
+import { consumeTrainingSceneChatStream } from "../../utils/trainingSceneChatSse";
 
 function formatApiError(e: unknown): string {
   if (!(e instanceof Error)) return String(e);
@@ -19,9 +19,9 @@ function formatApiError(e: unknown): string {
   return text || "请求失败";
 }
 
-export function TrainingCategoryChat(props: {
-  categoryId: string;
-  categoryTitle: string;
+export function TrainingSceneChat(props: {
+  sceneId: string;
+  sceneTitle: string;
   modelConfigId: string | null;
   disabled?: boolean;
   onStatus?: (msg: string) => void;
@@ -36,14 +36,14 @@ export function TrainingCategoryChat(props: {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await getTrainingCategoryChat(props.categoryId);
+      const res = await getTrainingSceneChat(props.sceneId);
       setMessages(res.messages);
     } catch (e: unknown) {
       props.onStatus?.(formatApiError(e));
     } finally {
       setLoading(false);
     }
-  }, [props.categoryId, props]);
+  }, [props.sceneId, props.onStatus]);
 
   useEffect(() => {
     void load();
@@ -71,8 +71,8 @@ export function TrainingCategoryChat(props: {
     };
     setMessages((prev) => [...prev, optimistic]);
     try {
-      const next = await consumeTrainingCategoryChatStream(
-        props.categoryId,
+      const next = await consumeTrainingSceneChatStream(
+        props.sceneId,
         { message: text, modelConfigId: props.modelConfigId },
         { onDelta: (d) => setStreamDraft((prev) => prev + d) }
       );
@@ -89,13 +89,13 @@ export function TrainingCategoryChat(props: {
   async function handleClear() {
     const ok = await appConfirm({
       title: "清空对话",
-      message: `确定清空「${props.categoryTitle}」下的学法咨询记录？`,
+      message: `确定清空「${props.sceneTitle}」下的学法咨询记录？`,
       confirmLabel: "清空",
       variant: "danger"
     });
     if (!ok) return;
     try {
-      await clearTrainingCategoryChat(props.categoryId);
+      await clearTrainingSceneChat(props.sceneId);
       setMessages([]);
     } catch (e: unknown) {
       props.onStatus?.(formatApiError(e));
@@ -131,7 +131,7 @@ export function TrainingCategoryChat(props: {
           </div>
         ) : null}
         {!loading && !messages.length && !streaming ? (
-          <p className="muted">可就本类笔法、例题理解向 AI 提问；不会代写练习正文。</p>
+          <p className="muted">可就本场景写法、例题理解向 AI 提问；不会代写练习正文。</p>
         ) : null}
       </div>
       <footer className="trainingCategoryChatFooter">

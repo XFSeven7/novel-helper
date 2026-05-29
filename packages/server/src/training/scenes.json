@@ -1,0 +1,532 @@
+{
+  "scenes": [
+    {
+      "id": "scene-env",
+      "title": "环境写景",
+      "order": 10,
+      "teachingFile": "scene-env.md",
+      "rubricHints": [
+        "禁空泛抒情",
+        "2–3 个感官锚点",
+        "景物服务情绪"
+      ],
+      "exerciseDefaults": {
+        "minChars": 70,
+        "maxChars": 450
+      },
+      "sceneBrief": "写一段环境描写：具象五感，服务当下情绪，禁止空洞抒情。"
+    },
+    {
+      "id": "scene-atmosphere",
+      "title": "氛围烘托",
+      "order": 20,
+      "teachingFile": "scene-atmosphere.md",
+      "rubricHints": [
+        "不直说情绪",
+        "诡异/喜庆/肃杀到位",
+        "少告知体"
+      ],
+      "exerciseDefaults": {
+        "minChars": 70,
+        "maxChars": 450
+      },
+      "sceneBrief": "用环境暗示情绪，不要直接写「他很害怕/很高兴」。"
+    },
+    {
+      "id": "scene-weather",
+      "title": "天气时辰",
+      "order": 30,
+      "teachingFile": "scene-weather.md",
+      "rubricHints": [
+        "天气参与叙事",
+        "时段感清晰",
+        "避免陈词滥调"
+      ],
+      "exerciseDefaults": {
+        "minChars": 70,
+        "maxChars": 450
+      },
+      "sceneBrief": "写出雨夜/雪晨/酷暑等时段感，天气要推动画面。"
+    },
+    {
+      "id": "scene-space",
+      "title": "室内空间",
+      "order": 40,
+      "teachingFile": "scene-space.md",
+      "rubricHints": [
+        "空间布局清晰",
+        "人物与空间关系",
+        "细节可感"
+      ],
+      "exerciseDefaults": {
+        "minChars": 70,
+        "maxChars": 450
+      },
+      "sceneBrief": "描写房间/车厢/密室等，让读者看见空间与人物位置。"
+    },
+    {
+      "id": "scene-dialogue-daily",
+      "title": "日常对话",
+      "order": 50,
+      "teachingFile": "scene-dialogue-daily.md",
+      "rubricHints": [
+        "自然有人味",
+        "有信息量",
+        "删无功能对白"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 600
+      },
+      "sceneBrief": "写一段日常对话：自然、有潜台词或信息差。"
+    },
+    {
+      "id": "scene-dialogue-argument",
+      "title": "争吵对峙",
+      "order": 60,
+      "teachingFile": "scene-dialogue-argument.md",
+      "rubricHints": [
+        "冲突升级",
+        "台词带刀",
+        "情绪有因果"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 600
+      },
+      "sceneBrief": "写争吵对峙：冲突层层升级，禁止说明式「他很愤怒」。"
+    },
+    {
+      "id": "scene-dialogue-negotiate",
+      "title": "谈判博弈",
+      "order": 70,
+      "teachingFile": "scene-dialogue-negotiate.md",
+      "rubricHints": [
+        "双方有筹码",
+        "留白不说破",
+        "交换清晰"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 600
+      },
+      "sceneBrief": "写谈判/博弈对话：施压、交换、留白。"
+    },
+    {
+      "id": "scene-dialogue-interrogate",
+      "title": "质问审讯",
+      "order": 80,
+      "teachingFile": "scene-dialogue-interrogate.md",
+      "rubricHints": [
+        "问答有攻防",
+        "信息控制",
+        "避免流水账"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 600
+      },
+      "sceneBrief": "写质问/审讯：一问一答有攻防，控制信息释放。"
+    },
+    {
+      "id": "scene-dialogue-speech",
+      "title": "演说宣告",
+      "order": 90,
+      "teachingFile": "scene-dialogue-speech.md",
+      "rubricHints": [
+        "一句一义",
+        "听众反应",
+        "气势到位"
+      ],
+      "exerciseDefaults": {
+        "minChars": 100,
+        "maxChars": 600
+      },
+      "sceneBrief": "写公开场合演说/宣告：立威或煽动，有听众反馈。"
+    },
+    {
+      "id": "scene-dialogue-phone",
+      "title": "电话语音",
+      "order": 100,
+      "teachingFile": "scene-dialogue-phone.md",
+      "rubricHints": [
+        "只听一侧可成立",
+        "停顿打断",
+        "信息差"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 500
+      },
+      "sceneBrief": "写电话/语音对话：可只写一侧，用停顿与打断制造张力。"
+    },
+    {
+      "id": "scene-romance",
+      "title": "暧昧亲密",
+      "order": 110,
+      "teachingFile": "scene-romance.md",
+      "rubricHints": [
+        "少直说爱",
+        "距离与动作",
+        "不油腻"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 550
+      },
+      "sceneBrief": "写暧昧/亲密：用距离、动作、潜台词，克制不油腻。"
+    },
+    {
+      "id": "scene-breakup",
+      "title": "分手决裂",
+      "order": 120,
+      "teachingFile": "scene-breakup.md",
+      "rubricHints": [
+        "决裂不可逆",
+        "爆发点明确",
+        "少狗血台词"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 600
+      },
+      "sceneBrief": "写分手/决裂：情绪有爆发点，避免空洞哭喊。"
+    },
+    {
+      "id": "scene-reunion",
+      "title": "重逢相认",
+      "order": 130,
+      "teachingFile": "scene-reunion.md",
+      "rubricHints": [
+        "信息释放有节奏",
+        "情绪翻涌可信",
+        "避免一眼假"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 600
+      },
+      "sceneBrief": "写重逢/相认：控制信息释放，情绪要铺垫。"
+    },
+    {
+      "id": "scene-action-fight",
+      "title": "打斗交锋",
+      "order": 140,
+      "teachingFile": "scene-action-fight.md",
+      "rubricHints": [
+        "短句动词",
+        "空间感",
+        "力量有代价"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 500
+      },
+      "sceneBrief": "写打斗：短句、动词、空间清楚，写出代价。"
+    },
+    {
+      "id": "scene-action-chase",
+      "title": "追逐逃亡",
+      "order": 150,
+      "teachingFile": "scene-action-chase.md",
+      "rubricHints": [
+        "节奏递进",
+        "地形参与",
+        "喘息感"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 500
+      },
+      "sceneBrief": "写追逐/逃亡：障碍、节奏递进、紧迫感。"
+    },
+    {
+      "id": "scene-action-escape",
+      "title": "绝境脱身",
+      "order": 160,
+      "teachingFile": "scene-action-escape.md",
+      "rubricHints": [
+        "紧迫感",
+        "取舍明确",
+        "逻辑闭环"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 500
+      },
+      "sceneBrief": "写绝境脱身：险境+取舍+最后一搏。"
+    },
+    {
+      "id": "scene-interior",
+      "title": "心理内心",
+      "order": 170,
+      "teachingFile": "scene-interior.md",
+      "rubricHints": [
+        "画面化心理",
+        "少「他觉得」",
+        "避免长篇独白"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 500
+      },
+      "sceneBrief": "写内心：用动作/联想外化，少告知体心理。"
+    },
+    {
+      "id": "scene-memory",
+      "title": "回忆插叙",
+      "order": 180,
+      "teachingFile": "scene-memory.md",
+      "rubricHints": [
+        "与当下勾连",
+        "碎片感",
+        "不过度闪回"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 550
+      },
+      "sceneBrief": "写回忆/插叙：有触发物，与当下场景勾连。"
+    },
+    {
+      "id": "scene-dream",
+      "title": "梦境幻觉",
+      "order": 190,
+      "teachingFile": "scene-dream.md",
+      "rubricHints": [
+        "边界清晰",
+        "象征或错位",
+        "醒后落点"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 500
+      },
+      "sceneBrief": "写梦境/幻觉：非现实元素明确，结尾有落点。"
+    },
+    {
+      "id": "scene-opening",
+      "title": "开篇入戏",
+      "order": 200,
+      "teachingFile": "scene-opening.md",
+      "rubricHints": [
+        "300字内钩子",
+        "少设定堆",
+        "强冲突入场"
+      ],
+      "exerciseDefaults": {
+        "minChars": 100,
+        "maxChars": 400
+      },
+      "sceneBrief": "写开篇片段：尽快入戏，少设定堆砌。"
+    },
+    {
+      "id": "scene-chapter-hook",
+      "title": "章末悬念",
+      "order": 210,
+      "teachingFile": "scene-chapter-hook.md",
+      "rubricHints": [
+        "断在问题上",
+        "不泄底",
+        "想点下一章"
+      ],
+      "exerciseDefaults": {
+        "minChars": 60,
+        "maxChars": 400
+      },
+      "sceneBrief": "写章末/段末悬念：断在问题上，不泄底。"
+    },
+    {
+      "id": "scene-transition",
+      "title": "转场过渡",
+      "order": 220,
+      "teachingFile": "scene-transition.md",
+      "rubricHints": [
+        "跳切不突兀",
+        "必要信息交代",
+        "节奏利落"
+      ],
+      "exerciseDefaults": {
+        "minChars": 60,
+        "maxChars": 400
+      },
+      "sceneBrief": "写时间/地点转场：简洁不突兀。"
+    },
+    {
+      "id": "scene-pov",
+      "title": "视角切换",
+      "order": 230,
+      "teachingFile": "scene-pov.md",
+      "rubricHints": [
+        "切换有信号",
+        "人称一致",
+        "限知合理"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 500
+      },
+      "sceneBrief": "写视角切换或他视角片段：切换有明确信号。"
+    },
+    {
+      "id": "scene-payoff",
+      "title": "打脸爽点",
+      "order": 240,
+      "teachingFile": "scene-payoff.md",
+      "rubricHints": [
+        "铺垫足够",
+        "释放干脆",
+        "当众感"
+      ],
+      "exerciseDefaults": {
+        "minChars": 100,
+        "maxChars": 600
+      },
+      "sceneBrief": "写打脸/爽点释放：压抑后当众反转。"
+    },
+    {
+      "id": "scene-reveal",
+      "title": "信息揭晓",
+      "order": 250,
+      "teachingFile": "scene-reveal.md",
+      "rubricHints": [
+        "节奏可控",
+        "证据落地",
+        "少早猜中"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 550
+      },
+      "sceneBrief": "写信息揭晓：抖包袱、证据落地。"
+    },
+    {
+      "id": "scene-misdirect",
+      "title": "误导反转",
+      "order": 260,
+      "teachingFile": "scene-misdirect.md",
+      "rubricHints": [
+        "误导合理",
+        "反转有伏",
+        "不硬扭"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 550
+      },
+      "sceneBrief": "写误导后反转：先错后真，伏笔合理。"
+    },
+    {
+      "id": "scene-power-up",
+      "title": "觉醒升级",
+      "order": 270,
+      "teachingFile": "scene-power-up.md",
+      "rubricHints": [
+        "有代价限制",
+        "首秀有画面",
+        "避免无敌"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 550
+      },
+      "sceneBrief": "写突破/觉醒首秀：新能力第一次用，有代价。"
+    },
+    {
+      "id": "scene-crowd",
+      "title": "群戏场面",
+      "order": 280,
+      "teachingFile": "scene-crowd.md",
+      "rubricHints": [
+        "主次分明",
+        "声音层次",
+        "各怀鬼胎"
+      ],
+      "exerciseDefaults": {
+        "minChars": 100,
+        "maxChars": 650
+      },
+      "sceneBrief": "写群戏：多人同场，主次分明，各有算盘。"
+    },
+    {
+      "id": "scene-banquet",
+      "title": "宴会饭局",
+      "order": 290,
+      "teachingFile": "scene-banquet.md",
+      "rubricHints": [
+        "座次敬酒",
+        "话里有话",
+        "社交信息"
+      ],
+      "exerciseDefaults": {
+        "minChars": 100,
+        "maxChars": 650
+      },
+      "sceneBrief": "写宴会/饭局：座次、敬酒、暗流。"
+    },
+    {
+      "id": "scene-comedy",
+      "title": "喜剧轻松",
+      "order": 300,
+      "teachingFile": "scene-comedy.md",
+      "rubricHints": [
+        "笑点来自情境",
+        "少硬梗",
+        "节奏轻快"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 500
+      },
+      "sceneBrief": "写喜剧/轻松段落：误会或反差，少硬梗。"
+    },
+    {
+      "id": "scene-tragedy",
+      "title": "悲剧告别",
+      "order": 310,
+      "teachingFile": "scene-tragedy.md",
+      "rubricHints": [
+        "克制细节",
+        "少哭喊堆砌",
+        "余波可感"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 550
+      },
+      "sceneBrief": "写悲剧/告别：克制，用细节胜过大段哭喊。"
+    },
+    {
+      "id": "scene-horror",
+      "title": "惊悚压迫",
+      "order": 320,
+      "teachingFile": "scene-horror.md",
+      "rubricHints": [
+        "未知压迫",
+        "少血浆堆砌",
+        "悬念维持"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 550
+      },
+      "sceneBrief": "写惊悚/压迫：剥夺安全感，维持悬念。"
+    },
+    {
+      "id": "scene-discover",
+      "title": "发现线索",
+      "order": 330,
+      "teachingFile": "scene-discover.md",
+      "rubricHints": [
+        "发现过程",
+        "主角反应",
+        "线索可追"
+      ],
+      "exerciseDefaults": {
+        "minChars": 80,
+        "maxChars": 550
+      },
+      "sceneBrief": "写发现线索/密室/遗物：写出发现过程与反应。"
+    }
+  ]
+}

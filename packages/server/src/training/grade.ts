@@ -3,19 +3,19 @@ import type { ModelConfig } from "../featureSettings.js";
 import { buildGradingPrompt } from "./promptGrade.js";
 import { parseTrainingGradingJson } from "./parseGrading.js";
 import type { TrainingGradingMode } from "./gradingModes.js";
-import type { TrainingCategory, TrainingGradingResult, TrainingQuestion } from "./types.js";
+import type { TrainingGradingResult, TrainingQuestion, TrainingTopicPublic } from "./types.js";
 
 export async function gradeTrainingAttempt(deps: {
   createAiSdkModel: (cfg: ModelConfig) => { model: unknown; providerOptions: unknown };
   cfg: ModelConfig;
-  category: TrainingCategory;
+  topic: TrainingTopicPublic;
   question: TrainingQuestion;
   userText: string;
   gradingMode: TrainingGradingMode;
 }): Promise<TrainingGradingResult> {
   const { model, providerOptions } = deps.createAiSdkModel(deps.cfg);
   const prompt = buildGradingPrompt(deps.gradingMode, {
-    category: deps.category,
+    topic: deps.topic,
     question: deps.question,
     userText: deps.userText
   });
