@@ -1642,6 +1642,93 @@ export async function getTrainingAttempt(id: string) {
   return await http<{ attempt: TrainingAttempt }>(`/api/training/attempts/${encodeURIComponent(id)}`);
 }
 
+export type CopybookChapterSummary = {
+  index: number;
+  title: string;
+  status: "not_started" | "in_progress" | "completed";
+};
+
+export type CopybookListItem = {
+  id: string;
+  title: string;
+  filename: string;
+  importedAt: string;
+  charCount: number;
+  chapterCount: number;
+  chapters: CopybookChapterSummary[];
+};
+
+export type CopybookChapterProgress = CopybookChapterSummary & {
+  draftText?: string;
+  cursorPos?: number;
+  sessions?: Array<{
+    completedAt: string;
+    durationSec: number;
+    accuracy: number;
+    errorCount: number;
+    charCount: number;
+  }>;
+};
+
+export async function listTrainingCopybooks() {
+  return await http<{ books: CopybookListItem[] }>(`/api/training/copybooks`);
+}
+
+export async function importTrainingCopybook(file: File) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await fetch(`${API_BASE}/api/training/copybooks/import`, { method: "POST", body: fd });
+  if (!res.ok) throw new Error(parseHttpError(await res.text()));
+  return (await res.json()) as {
+    book: CopybookListItem;
+    singleChapterFallback?: boolean;
+  };
+}
+
+export async function getTrainingCopybookChapter(bookId: string, index: number) {
+  return await http<{
+    title: string;
+    text: string;
+    index: number;
+    draftText: string;
+    cursorPos: number;
+    status: "not_started" | "in_progress" | "completed";
+  }>(`/api/training/copybooks/${encodeURIComponent(bookId)}/chapters/${index}`);
+}
+
+export async function putTrainingCopybookChapterSource(
+  bookId: string,
+  index: number,
+  sourceText: string
+) {
+  return await http<{ ok: boolean }>(
+    `/api/training/copybooks/${encodeURIComponent(bookId)}/chapters/${index}/source`,
+    { method: "PUT", body: JSON.stringify({ sourceText }) }
+  );
+}
+
+export async function putTrainingCopybookProgress(
+  bookId: string,
+  index: number,
+  body: { draftText: string; cursorPos: number }
+) {
+  return await http<{ ok: boolean }>(
+    `/api/training/copybooks/${encodeURIComponent(bookId)}/chapters/${index}/progress`,
+    { method: "PUT", body: JSON.stringify(body) }
+  );
+}
+
+export async function completeTrainingCopybookChapter(
+  bookId: string,
+  index: number,
+  body: { draftText: string; durationSec?: number }
+) {
+  return await http<{ progress: CopybookChapterProgress }>(
+    `/api/training/copybooks/${encodeURIComponent(bookId)}/chapters/${index}/complete`,
+    { method: "POST", body: JSON.stringify(body) }
+  );
+}
+
 export type ReaderCommentReply = {
   id: string;
   authorKind: "persona" | "author";

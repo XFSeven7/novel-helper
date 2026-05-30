@@ -1,34 +1,151 @@
 import React, { useMemo, useState } from "react";
-import type { TrainingTree, TrainingTreeGroup } from "../../api";
+import type { CopybookListItem, TrainingTree, TrainingTreeGroup } from "../../api";
+import { TRAINING_COPYBOOK_GROUP_ID, TRAINING_COPYBOOK_SCENE_ID } from "./trainingCopybook";
 
 export type TrainingSelection =
   | { kind: "group"; groupId: string }
   | { kind: "scene"; groupId: string; sceneId: string }
-  | { kind: "question"; groupId: string; sceneId: string; questionId: string };
+  | { kind: "question"; groupId: string; sceneId: string; questionId: string }
+  | { kind: "copybook"; groupId: string; sceneId: string; bookId: string; chapterIndex: number };
 
 type Props = {
   groups: TrainingTree["groups"];
+  copybooks: CopybookListItem[];
   selection: TrainingSelection | null;
   onSelect: (sel: TrainingSelection) => void;
   disabled?: boolean;
 };
 
-function GroupSection(props: {
-  group: TrainingTreeGroup;
+function copybookStatusMark(status: CopybookListItem["chapters"][number]["status"]) {
+  if (status === "completed") return "✓";
+  if (status === "in_progress") return "●";
+  return "";
+}
+
+function CopybookBookList(props: {
+  copybooks: CopybookListItem[];
+  groupId: string;
+  paddingLeft: number;
+  chapterPaddingLeft: number;
+  expandedCopybooks: Set<string>;
   selection: TrainingSelection | null;
-  expandedScenes: Set<string>;
-  onToggleScene: (sceneId: string) => void;
+  onToggleCopybook: (bookId: string) => void;
   onSelect: (sel: TrainingSelection) => void;
   disabled?: boolean;
 }) {
-  const [expanded, setExpanded] = useState(true);
+  function isCopybookChapterSelected(bookId: string, chapterIndex: number) {
+    return (
+      props.selection?.kind === "copybook" &&
+      props.selection.bookId === bookId &&
+      props.selection.chapterIndex === chapterIndex
+    );
+  }
+
+  if (props.copybooks.length === 0) {
+    return (
+      <p className="muted trainingCopybookTreeEmpty" style={{ paddingLeft: props.paddingLeft }}>
+        暂无书目，请在学法区导入 txt
+      </p>
+    );
+  }
+
+  return (
+    <>
+      {props.copybooks.map((book) => {
+        const bookOpen = props.expandedCopybooks.has(book.id);
+        return (
+          <div key={book.id} className="outlineStageTreeNode">
+            <button
+              type="button"
+              className="outlineStageTreeRow outlineStageTreeRowBtn trainingTreeRowBtn"
+              style={{ paddingLeft: props.paddingLeft }}
+              disabled={props.disabled}
+              aria-expanded={bookOpen}
+              onClick={() => props.onToggleCopybook(book.id)}
+            >
+              <span className="outlineStageTreeToggle outlineStageTreeToggle--decor" aria-hidden>
+                {bookOpen ? "▾" : "▸"}
+              </span>
+              <span className="outlineStageTreeLabelBtn trainingTreeLabelBtn">
+                <span className="trainingTreeTitle">{book.title}</span>
+                <span className="muted trainingTreeMeta">{book.chapterCount} 章</span>
+              </span>
+            </button>
+            {bookOpen
+              ? book.chapters.map((ch) => {
+                  const mark = copybookStatusMark(ch.status);
+                  return (
+                    <div key={ch.index} className="outlineStageTreeNode">
+                      <button
+                        type="button"
+                        className={[
+                          "outlineStageTreeRow",
+                          "outlineStageTreeRowBtn",
+                          "trainingTreeRowBtn",
+                          isCopybookChapterSelected(book.id, ch.index)
+                            ? "outlineStageTreeRow--selected"
+                            : ""
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        style={{ paddingLeft: props.chapterPaddingLeft }}
+                        disabled={props.disabled}
+                        onClick={() =>
+                          props.onSelect({
+                            kind: "copybook",
+                            groupId: props.groupId,
+                            sceneId: TRAINING_COPYBOOK_SCENE_ID,
+                            bookId: book.id,
+                            chapterIndex: ch.index
+                          })
+                        }
+                      >
+                        <span className="outlineStageTreeToggle outlineStageTreeToggle--spacer" aria-hidden />
+                        <span className="outlineStageTreeLabelBtn trainingTreeLabelBtn">
+                          <span className="trainingTreeTitle">{ch.title}</span>
+                          {mark ? <span className="muted trainingTreeMeta">{mark}</span> : null}
+                        </span>
+                      </button>
+                    </div>
+                  );
+                })
+              : null}
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+function GroupSection(props: {
+  group: TrainingTreeGroup;
+  copybooks: CopybookListItem[];
+  selection: TrainingSelection | null;
+  expandedScenes: Set<string>;
+  expandedCopybooks: Set<string>;
+  onToggleScene: (sceneId: string) => void;
+  onToggleCopybook: (bookId: string) => void;
+  onSelect: (sel: TrainingSelection) => void;
+  disabled?: boolean;
+}) {
+  const isCopybookGroup = props.group.id === TRAINING_COPYBOOK_GROUP_ID;
+
+  function groupContainsSelection() {
+    const sel = props.selection;
+    if (!sel || sel.kind === "group") return sel?.groupId === props.group.id;
+    return sel.groupId === props.group.id;
+  }
+
+  const [expanded, setExpanded] = useState(groupContainsSelection);
 
   function isSceneSelected(sceneId: string) {
-    return (
-      props.selection?.kind === "scene" &&
-      props.selection.groupId === props.group.id &&
-      props.selection.sceneId === sceneId
-    );
+    if (props.selection?.kind === "scene") {
+      return props.selection.groupId === props.group.id && props.selection.sceneId === sceneId;
+    }
+    if (props.selection?.kind === "copybook") {
+      return props.selection.groupId === props.group.id && props.selection.sceneId === sceneId;
+    }
+    return false;
   }
 
   function isQSelected(qId: string) {
@@ -37,6 +154,13 @@ function GroupSection(props: {
 
   const groupSelected =
     props.selection?.kind === "group" && props.selection.groupId === props.group.id;
+
+  const copybookGroupActive =
+    isCopybookGroup &&
+    ((props.selection?.kind === "scene" &&
+      props.selection.groupId === props.group.id &&
+      props.selection.sceneId === TRAINING_COPYBOOK_SCENE_ID) ||
+      props.selection?.kind === "copybook");
 
   return (
     <div className="outlineStageTreeNode">
@@ -47,16 +171,24 @@ function GroupSection(props: {
           "outlineStageTreeRowBtn",
           "trainingTreeRowBtn",
           "trainingTreeGroupRow",
-          groupSelected ? "outlineStageTreeRow--selected" : ""
+          groupSelected || copybookGroupActive ? "outlineStageTreeRow--selected" : ""
         ]
           .filter(Boolean)
           .join(" ")}
-        style={{ paddingLeft: 8 }}
+        style={{ paddingLeft: 6 }}
         disabled={props.disabled}
         aria-expanded={expanded}
         onClick={() => {
           setExpanded((v) => !v);
-          props.onSelect({ kind: "group", groupId: props.group.id });
+          if (isCopybookGroup) {
+            props.onSelect({
+              kind: "scene",
+              groupId: props.group.id,
+              sceneId: TRAINING_COPYBOOK_SCENE_ID
+            });
+          } else {
+            props.onSelect({ kind: "group", groupId: props.group.id });
+          }
         }}
       >
         <span className="outlineStageTreeToggle outlineStageTreeToggle--decor" aria-hidden>
@@ -64,12 +196,30 @@ function GroupSection(props: {
         </span>
         <span className="outlineStageTreeLabelBtn trainingTreeLabelBtn">
           <span className="trainingTreeTitle">{props.group.title}</span>
+          {isCopybookGroup && props.copybooks.length > 0 ? (
+            <span className="muted trainingTreeMeta">{props.copybooks.length} 本</span>
+          ) : null}
         </span>
       </button>
-      {expanded
+      {expanded && isCopybookGroup ? (
+        <CopybookBookList
+          copybooks={props.copybooks}
+          groupId={props.group.id}
+          paddingLeft={12}
+          chapterPaddingLeft={24}
+          expandedCopybooks={props.expandedCopybooks}
+          selection={props.selection}
+          onToggleCopybook={props.onToggleCopybook}
+          onSelect={props.onSelect}
+          disabled={props.disabled}
+        />
+      ) : null}
+      {expanded && !isCopybookGroup
         ? props.group.scenes.map((scene) => {
             const open = props.expandedScenes.has(scene.id);
-            const hasQ = scene.questions.length > 0;
+            const hasQuestions = scene.questions.length > 0;
+            const expandable = hasQuestions;
+
             return (
               <div key={scene.id} className="outlineStageTreeNode">
                 <button
@@ -82,21 +232,21 @@ function GroupSection(props: {
                   ]
                     .filter(Boolean)
                     .join(" ")}
-                  style={{ paddingLeft: 20 }}
+                  style={{ paddingLeft: 12 }}
                   disabled={props.disabled}
-                  aria-expanded={hasQ ? open : undefined}
+                  aria-expanded={expandable ? open : undefined}
                   onClick={() => {
-                    if (hasQ) props.onToggleScene(scene.id);
+                    if (expandable) props.onToggleScene(scene.id);
                     props.onSelect({ kind: "scene", groupId: props.group.id, sceneId: scene.id });
                   }}
                 >
                   <span
                     className={`outlineStageTreeToggle outlineStageTreeToggle--decor${
-                      hasQ ? "" : " outlineStageTreeToggle--spacer"
+                      expandable ? "" : " outlineStageTreeToggle--spacer"
                     }`}
                     aria-hidden
                   >
-                    {hasQ ? (open ? "▾" : "▸") : ""}
+                    {expandable ? (open ? "▾" : "▸") : ""}
                   </span>
                   <span className="outlineStageTreeLabelBtn trainingTreeLabelBtn">
                     <span className="trainingTreeTitle">{scene.title}</span>
@@ -116,7 +266,7 @@ function GroupSection(props: {
                           ]
                             .filter(Boolean)
                             .join(" ")}
-                          style={{ paddingLeft: 40 }}
+                          style={{ paddingLeft: 24 }}
                           disabled={props.disabled}
                           onClick={() =>
                             props.onSelect({
@@ -150,7 +300,7 @@ function GroupSection(props: {
   );
 }
 
-export function TrainingSceneTree({ groups, selection, onSelect, disabled }: Props) {
+export function TrainingSceneTree({ groups, copybooks, selection, onSelect, disabled }: Props) {
   const [expandedScenes, setExpandedScenes] = useState<Set<string>>(() => {
     const initial = new Set<string>();
     if (selection?.kind === "scene") initial.add(selection.sceneId);
@@ -158,13 +308,29 @@ export function TrainingSceneTree({ groups, selection, onSelect, disabled }: Pro
     return initial;
   });
 
+  const [expandedCopybooks, setExpandedCopybooks] = useState<Set<string>>(() => {
+    const initial = new Set<string>();
+    if (selection?.kind === "copybook") initial.add(selection.bookId);
+    return initial;
+  });
+
   const expandedSet = useMemo(() => expandedScenes, [expandedScenes]);
+  const expandedBooksSet = useMemo(() => expandedCopybooks, [expandedCopybooks]);
 
   function toggleScene(sceneId: string) {
     setExpandedScenes((prev) => {
       const next = new Set(prev);
       if (next.has(sceneId)) next.delete(sceneId);
       else next.add(sceneId);
+      return next;
+    });
+  }
+
+  function toggleCopybook(bookId: string) {
+    setExpandedCopybooks((prev) => {
+      const next = new Set(prev);
+      if (next.has(bookId)) next.delete(bookId);
+      else next.add(bookId);
       return next;
     });
   }
@@ -176,9 +342,12 @@ export function TrainingSceneTree({ groups, selection, onSelect, disabled }: Pro
           <GroupSection
             key={group.id}
             group={group}
+            copybooks={copybooks}
             selection={selection}
             expandedScenes={expandedSet}
+            expandedCopybooks={expandedBooksSet}
             onToggleScene={toggleScene}
+            onToggleCopybook={toggleCopybook}
             onSelect={onSelect}
             disabled={disabled}
           />

@@ -151,6 +151,15 @@ export function assertTrainingReady(file: FeatureSettingsFile): { cfg: ModelConf
   return { cfg };
 }
 
+export function assertTrainingModuleEnabled(
+  file: FeatureSettingsFile
+): { ok: true } | { error: string } {
+  if (!file.features?.trainingModeEnabled) {
+    return { error: "训练模式未开启" };
+  }
+  return { ok: true };
+}
+
 export const MODEL_CONFIG_ID_SEP = "::";
 
 export function parseModelConfigId(

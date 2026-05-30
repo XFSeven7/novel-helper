@@ -1,6 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { listCategories } from "./categories.js";
+import { listTechniqueCategories, COPYBOOK_CATEGORY_ID } from "./categories.js";
 import { resolveTopicId } from "./legacy.js";
 import { listScenes } from "./scenes.js";
 import { getCategoryWithTeaching, getSceneWithTeaching } from "./teaching.js";
@@ -194,7 +194,7 @@ export async function buildTrainingTree(dataDir: string): Promise<TrainingTree> 
   );
 
   const categoryItems: TrainingTreeScene[] = await Promise.all(
-    listCategories().map(async (c) => {
+    listTechniqueCategories().map(async (c) => {
       const full = await getCategoryWithTeaching(dataDir, c.id);
       const stats = computeSceneStats(attempts, c.id);
       return {
@@ -207,6 +207,18 @@ export async function buildTrainingTree(dataDir: string): Promise<TrainingTree> 
     })
   );
 
+  const copybookScene: TrainingTreeScene = await (async () => {
+    const full = await getCategoryWithTeaching(dataDir, COPYBOOK_CATEGORY_ID);
+    const stats = computeSceneStats(attempts, COPYBOOK_CATEGORY_ID);
+    return {
+      ...full,
+      sceneBrief: "",
+      attemptCount: stats.attemptCount,
+      questionCount: 0,
+      questions: [] as TrainingTreeQuestion[]
+    };
+  })();
+
   const sceneGroup: TrainingTreeGroup = {
     id: "group-scene-practice",
     title: "场景练习",
@@ -217,9 +229,17 @@ export async function buildTrainingTree(dataDir: string): Promise<TrainingTree> 
     title: "文笔技法",
     scenes: categoryItems
   };
+  const copybookGroup: TrainingTreeGroup = {
+    id: "group-copybook",
+    title: "抄书练习",
+    scenes: [copybookScene]
+  };
 
   const byScene = new Map(sceneGroup.scenes.map((s) => [s.id, s]));
-  const byCat = new Map(techniqueGroup.scenes.map((s) => [s.id, s]));
+  const byCat = new Map([
+    ...techniqueGroup.scenes.map((s) => [s.id, s] as const),
+    [copybookScene.id, copybookScene] as const
+  ]);
   for (const q of await listAllQuestions(dataDir)) {
     const stats = computeQuestionStats(attempts, q.id);
     const node = byScene.get(q.sceneId) ?? byCat.get(q.sceneId);
@@ -227,11 +247,11 @@ export async function buildTrainingTree(dataDir: string): Promise<TrainingTree> 
     node.questions.push({ ...q, ...stats });
     node.questionCount += 1;
   }
-  for (const node of [...sceneGroup.scenes, ...techniqueGroup.scenes]) {
+  for (const node of [...sceneGroup.scenes, ...techniqueGroup.scenes, copybookScene]) {
     node.questions.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
-  return { groups: [sceneGroup, techniqueGroup] };
+  return { groups: [sceneGroup, techniqueGroup, copybookGroup] };
 }
 
 export type { TrainingGradingResult };

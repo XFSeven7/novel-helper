@@ -84,6 +84,18 @@
         "改后是否仍保留核心冲突"
       ],
       "exerciseDefaults": { "minChars": 150, "maxChars": 450 }
+    },
+    {
+      "id": "cat-copybook",
+      "title": "抄书练习",
+      "order": 7,
+      "teachingFile": "cat-copybook.md",
+      "rubricHints": [
+        "标点与段落是否随节奏",
+        "是否关注句长错落",
+        "是否逐字临摹而非改剧情"
+      ],
+      "exerciseDefaults": { "minChars": 50, "maxChars": 5000 }
     }
   ]
 }

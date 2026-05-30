@@ -10632,19 +10632,63 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   background: var(--accent, #6ea8fe);
 }
 
+.trainingTreeNavWrap {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  min-height: 0;
+  transition: flex-basis 0.15s ease, width 0.15s ease, opacity 0.15s ease;
+}
+
+.trainingTreeNavWrap--dragging {
+  transition: none;
+  user-select: none;
+  cursor: col-resize;
+}
+
+.trainingTreeNavWrap--hidden {
+  flex: 0 0 0 !important;
+  width: 0 !important;
+  min-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
 .trainingTreeNav {
-  flex: 0 0 240px;
-  width: 240px;
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-right: 1px solid var(--border);
+  border-right: 0;
   background: var(--panel);
+}
+
+.trainingTreeNavHandle {
+  flex: 0 0 6px;
+  cursor: col-resize;
+  background: var(--border);
+  transition: background 0.15s;
+}
+
+.trainingTreeNavHandle:hover {
+  background: var(--accent, #6ea8fe);
+}
+
+.trainingWorkbench--copybook {
+  /* 抄书时全宽工作台，不预留左侧目录 */
 }
 
 .trainingCategoryTree {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+}
+
+.trainingCategoryTree .outlineStageTreeRow {
+  min-height: 26px;
 }
 
 .trainingCategoryTree .outlineStageTreeRowBtn {
@@ -10656,6 +10700,8 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   font: inherit;
   text-align: left;
   cursor: pointer;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .trainingCategoryTree .outlineStageTreeRowBtn:hover:not(:disabled) {
@@ -10683,17 +10729,170 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
 
 .trainingTreeLabelBtn {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
 }
 
 .trainingTreeTitle {
-  font-size: 13px;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 
 .trainingTreeMeta {
   font-size: 11px;
+  flex-shrink: 0;
+}
+
+.trainingCopybookImportBtn {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+.trainingCopybookTreeEmpty {
+  font-size: 12px;
+  padding: 2px 8px 6px 24px;
+  margin: 0;
+}
+
+.trainingCopybookEmpty {
+  font-size: 12px;
+  padding: 8px 12px 12px;
+  margin: 0;
+}
+
+.trainingCopybookWorkbench {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.trainingCopybookWorkbenchHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  padding: 10px 16px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.trainingCopybookBackBtn {
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.trainingCopybookBackBtn:hover {
+  color: var(--text);
+}
+
+.trainingCopybookWorkbenchTitle {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trainingCopybookWorkbenchHeadActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.trainingCopybookSavingMark {
+  font-size: 12px;
+}
+
+.trainingCopybookLayoutBtn {
+  flex-shrink: 0;
+  font-size: 13px;
+  padding: 4px 10px;
+}
+
+.trainingCopybookPaneWrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 10px 12px 12px;
+}
+
+.trainingCopybookWorkbench .trainingWorkbenchSplit {
+  flex: 1;
+  min-height: 0;
+}
+
+.trainingCopybookWorkbench .trainingWorkbenchPane {
+  min-width: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.trainingCopybookLoading {
+  padding: 12px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.trainingCopybookMainInner {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
+}
+
+.trainingCopybookCol--fill {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.trainingCopybookScroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+.trainingCopybookSourceEdit,
+.trainingCopybookDraftEdit,
+.trainingCopybookEdit {
+  width: 100%;
+  min-height: 100%;
+  resize: none;
+  border: 0;
+  box-shadow: none;
+  font-size: 18px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  padding: 12px 14px;
+  background: transparent;
+  font-family: inherit;
+}
+
+.trainingCopybookCol .trainingPaneTitle {
+  flex-shrink: 0;
+  margin: 0 0 4px;
 }
 
 .trainingLearnHead {
@@ -11066,10 +11265,23 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
     flex-direction: column;
   }
 
+  .trainingTreeNavWrap {
+    flex: none !important;
+    width: 100% !important;
+    flex-direction: column;
+  }
+
+  .trainingTreeNavWrap--hidden {
+    display: none;
+  }
+
   .trainingTreeNav {
     max-height: 220px;
-    border-right: none;
     border-bottom: 1px solid var(--border);
+  }
+
+  .trainingTreeNavHandle {
+    display: none;
   }
 
   .trainingWorkbenchSplit {

@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import { z } from "zod";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -106,6 +107,7 @@ import { registerWritingBlockRescueRoutes } from "./writingBlockRescue/routes.js
 import { registerOutlineStageChatRoutes } from "./outlineStageChat/routes.js";
 import { registerReaderCommentsRoutes } from "./readerComments/routes.js";
 import { registerTrainingRoutes } from "./training/routes.js";
+import { registerCopybookRoutes } from "./training/copybooks/routes.js";
 import { registerReaderPersonaRoutes } from "./readerPersonas/routes.js";
 import { queueReaderCommentsOnSave } from "./readerComments/background.js";
 import {
@@ -164,6 +166,7 @@ await app.register(cors, {
   allowedHeaders: ["Content-Type", "Authorization"],
   preflightContinue: false
 });
+await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 } });
 
 const PORT = Number(process.env.PORT || 3177);
 initDataDir(resolveDataDir(process.env.NOVEL_HELPER_DATA_DIR));
@@ -4603,6 +4606,8 @@ registerTrainingRoutes(app, {
   createAiSdkModel: (cfg) => createAiSdkModel(cfg as ModelConfig),
   sseWrite
 });
+
+registerCopybookRoutes(app, { getDataDir });
 
 registerReaderPersonaRoutes(app, {
   getDataDir,

@@ -4,8 +4,13 @@ import { useLocalStorageState } from "./useLocalStorageState";
 
 const MIN_PANE_PX = 280;
 
-export function useTrainingWorkbenchSplit(mode: "learn" | "practice") {
-  const storageKey = mode === "learn" ? "training:splitRatio:learn" : "training:splitRatio:practice";
+export function useTrainingWorkbenchSplit(mode: "learn" | "practice" | "copybook") {
+  const storageKey =
+    mode === "learn"
+      ? "training:splitRatio:learn"
+      : mode === "copybook"
+        ? "training:splitRatio:copybook"
+        : "training:splitRatio:practice";
 
   const [ratio, setRatio] = useLocalStorageState<number>({
     key: storageKey,

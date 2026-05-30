@@ -2,7 +2,7 @@ import React from "react";
 import { useTrainingWorkbenchSplit } from "../../hooks/useTrainingWorkbenchSplit";
 
 export function TrainingWorkbenchSplit(props: {
-  mode: "learn" | "practice";
+  mode: "learn" | "practice" | "copybook";
   center: React.ReactNode;
   right: React.ReactNode;
 }) {

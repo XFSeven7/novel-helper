@@ -114,5 +114,7 @@ describe("training scene store", () => {
     expect(sceneGroup?.title).toBe("场景练习");
     expect(tree.groups.some((g) => g.id === "group-technique")).toBe(true);
     expect(tree.groups.find((g) => g.id === "group-technique")?.scenes.length).toBe(7);
+    expect(tree.groups.some((g) => g.id === "group-copybook")).toBe(true);
+    expect(tree.groups.find((g) => g.id === "group-copybook")?.title).toBe("抄书练习");
   });
 });

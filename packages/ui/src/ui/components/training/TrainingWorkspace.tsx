@@ -1,12 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   generateTrainingQuestions,
   getTrainingAttempt,
   getTrainingQuestion,
   getTrainingQuestionAttempts,
   getTrainingTree,
+  importTrainingCopybook,
   listTrainingAttempts,
+  listTrainingCopybooks,
   submitTrainingQuestion,
+  type CopybookListItem,
   type TrainingAttempt,
   type TrainingGradingMode,
   type TrainingGradingResult,
@@ -17,6 +20,11 @@ import {
 } from "../../api";
 import { TrainingAttemptHistory } from "./TrainingAttemptHistory";
 import { TrainingSceneTree, type TrainingSelection } from "./TrainingSceneTree";
+import { CopybookChapterWorkbench } from "./TrainingCopybookPane";
+import {
+  TRAINING_COPYBOOK_SCENE_ID,
+  TRAINING_COPYBOOK_GROUP_ID
+} from "./trainingCopybook";
 import { TrainingGenerateMenu } from "./TrainingGenerateMenu";
 import { TrainingLessonMarkdown } from "./TrainingLessonMarkdown";
 import { TrainingGradingModePicker } from "./TrainingGradingModePicker";
@@ -26,6 +34,7 @@ import { TrainingRecordsPage } from "./TrainingRecordsPage";
 import { TrainingSceneChat } from "./TrainingSceneChat";
 import { TrainingWorkbenchSplit } from "./TrainingWorkbenchSplit";
 import { TrainingTopBar } from "./TrainingTopBar";
+import { useTrainingTreeNavWidth } from "../../hooks/useTrainingTreeNavWidth";
 
 type Screen = "practice" | "records";
 
@@ -42,7 +51,7 @@ function formatApiError(e: unknown): string {
 }
 
 function sceneIdFromSelection(sel: TrainingSelection | null): string | null {
-  if (!sel || sel.kind === "group") return null;
+  if (!sel || sel.kind === "group" || sel.kind === "copybook") return null;
   return sel.sceneId;
 }
 
@@ -68,6 +77,49 @@ export function TrainingWorkspace(props: {
   const [submittingMode, setSubmittingMode] = useState<TrainingGradingMode | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [copybooks, setCopybooks] = useState<CopybookListItem[]>([]);
+  const [importBusy, setImportBusy] = useState(false);
+  const importInputRef = useRef<HTMLInputElement>(null);
+  const treeNav = useTrainingTreeNavWidth();
+  const copybookActive = selection?.kind === "copybook";
+
+  const isCopybookScene =
+    selection?.kind === "scene" && selection.sceneId === TRAINING_COPYBOOK_SCENE_ID;
+
+  const refreshCopybooks = useCallback(async () => {
+    const data = await listTrainingCopybooks();
+    setCopybooks(data.books);
+    return data.books;
+  }, []);
+
+  const copybookTreeRefreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleCopybookProgressSaved = useCallback(() => {
+    if (copybookTreeRefreshTimerRef.current) clearTimeout(copybookTreeRefreshTimerRef.current);
+    copybookTreeRefreshTimerRef.current = setTimeout(() => {
+      void refreshCopybooks();
+    }, 8000);
+  }, [refreshCopybooks]);
+
+  const handleCopybookBack = useCallback(() => {
+    if (copybookTreeRefreshTimerRef.current) {
+      clearTimeout(copybookTreeRefreshTimerRef.current);
+      copybookTreeRefreshTimerRef.current = null;
+    }
+    void refreshCopybooks();
+    setSelection({
+      kind: "scene",
+      groupId: TRAINING_COPYBOOK_GROUP_ID,
+      sceneId: TRAINING_COPYBOOK_SCENE_ID
+    });
+  }, [refreshCopybooks]);
+
+  useEffect(
+    () => () => {
+      if (copybookTreeRefreshTimerRef.current) clearTimeout(copybookTreeRefreshTimerRef.current);
+    },
+    []
+  );
 
   const scenes = useMemo(() => (tree ? allTreeScenes(tree) : []), [tree]);
 
@@ -99,7 +151,7 @@ export function TrainingWorkspace(props: {
   useEffect(() => {
     void (async () => {
       try {
-        const data = await refreshTree();
+        const [data] = await Promise.all([refreshTree(), refreshCopybooks()]);
         const technique = data.groups.find((g) => g.id === "group-technique");
         const group = technique ?? data.groups[0];
         const first = group?.scenes[0];
@@ -112,7 +164,30 @@ export function TrainingWorkspace(props: {
         setLoadError(formatApiError(e));
       }
     })();
-  }, [refreshTree]);
+  }, [refreshTree, refreshCopybooks]);
+
+  async function handleImportCopybook(file: File) {
+    setImportBusy(true);
+    try {
+      const res = await importTrainingCopybook(file);
+      await refreshCopybooks();
+      setSelection({
+        kind: "copybook",
+        groupId: TRAINING_COPYBOOK_GROUP_ID,
+        sceneId: TRAINING_COPYBOOK_SCENE_ID,
+        bookId: res.book.id,
+        chapterIndex: 0
+      });
+      if (res.singleChapterFallback) {
+        props.onStatus?.("未识别章节标题，已作为单章导入");
+      }
+    } catch (e: unknown) {
+      props.onStatus?.(formatApiError(e));
+    } finally {
+      setImportBusy(false);
+      if (importInputRef.current) importInputRef.current.value = "";
+    }
+  }
 
   useEffect(() => {
     if (!questionId) {
@@ -327,15 +402,57 @@ export function TrainingWorkspace(props: {
     <>
       <div className="trainingWorkspace">
         <TrainingTopBar onExit={props.onExit} onOpenHistory={() => void openRecords()} />
-        <div className="trainingWorkbench">
-          <aside className="trainingTreeNav">
-            <TrainingSceneTree
-              groups={tree.groups}
-              selection={selection}
-              disabled={busy}
-              onSelect={setSelection}
+        <div className={`trainingWorkbench${copybookActive ? " trainingWorkbench--copybook" : ""}`}>
+          <div
+            className={[
+              "trainingTreeNavWrap",
+              copybookActive ? "trainingTreeNavWrap--hidden" : "",
+              treeNav.dragging ? "trainingTreeNavWrap--dragging" : ""
+            ]
+              .filter(Boolean)
+              .join(" ")}
+            style={{ flex: `0 0 ${treeNav.width}px`, width: treeNav.width }}
+          >
+            <aside className="trainingTreeNav" aria-hidden={copybookActive}>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".txt,text/plain"
+                hidden
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void handleImportCopybook(file);
+                }}
+              />
+              <TrainingSceneTree
+                groups={tree.groups}
+                copybooks={copybooks}
+                selection={selection}
+                disabled={busy}
+                onSelect={setSelection}
+              />
+            </aside>
+            <div
+              className="trainingTreeNavHandle"
+              role="separator"
+              aria-orientation="vertical"
+              aria-valuenow={treeNav.width}
+              aria-valuemin={treeNav.minWidth}
+              aria-valuemax={treeNav.maxWidth}
+              aria-label="调整目录宽度"
+              onMouseDown={treeNav.startDrag}
             />
-          </aside>
+          </div>
+          {copybookActive ? (
+            <CopybookChapterWorkbench
+              bookId={selection.bookId}
+              chapterIndex={selection.chapterIndex}
+              disabled={busy}
+              onStatus={props.onStatus}
+              onProgressSaved={handleCopybookProgressSaved}
+              onBack={handleCopybookBack}
+            />
+          ) : (
           <TrainingWorkbenchSplit
             mode={selection?.kind === "question" ? "practice" : "learn"}
             center={
@@ -343,7 +460,22 @@ export function TrainingWorkspace(props: {
                 {selection?.kind === "scene" && sceneDetail ? (
                   <header className="trainingLearnHead">
                     <h3 className="trainingPaneTitle">学法</h3>
-                    <TrainingGenerateMenu disabled={busy} busy={busy} onGenerate={(c) => void handleGenerate(c)} />
+                    {isCopybookScene ? (
+                      <button
+                        type="button"
+                        className="btnModalPrimary trainingCopybookImportBtn"
+                        disabled={busy || importBusy}
+                        onClick={() => importInputRef.current?.click()}
+                      >
+                        {importBusy ? "导入中…" : "导入 txt"}
+                      </button>
+                    ) : (
+                      <TrainingGenerateMenu
+                        disabled={busy}
+                        busy={busy}
+                        onGenerate={(c) => void handleGenerate(c)}
+                      />
+                    )}
                   </header>
                 ) : (
                   <h3 className="trainingPaneTitle">{selection?.kind === "question" ? "题目" : "学法"}</h3>
@@ -376,7 +508,11 @@ export function TrainingWorkspace(props: {
                     </section>
                   </>
                 ) : selection?.kind === "scene" ? (
-                  <p className="muted">阅读学法后可在右侧咨询；点击上方「生成题目」或从左侧选择题目开始练习。</p>
+                  <p className="muted">
+                    {isCopybookScene
+                      ? "阅读学法后点击上方「导入 txt」，从左侧展开书目选择章节开始抄写。"
+                      : "阅读学法后可在右侧咨询；点击上方「生成题目」或从左侧选择题目开始练习。"}
+                  </p>
                 ) : selection?.kind !== "group" ? (
                   <p className="muted">请从左侧选择场景。</p>
                 ) : null}
@@ -426,6 +562,7 @@ export function TrainingWorkspace(props: {
               )
             }
           />
+          )}
         </div>
       </div>
       {gradingModal}
