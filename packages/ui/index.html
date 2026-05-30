@@ -17,13 +17,6 @@
           sepia: 1,
           meadow: 1
         };
-        function system() {
-          try {
-            return window.matchMedia("(prefers-color-scheme: light)").matches ? "paper" : "midnight";
-          } catch (e) {
-            return "midnight";
-          }
-        }
         function migrate(raw) {
           if (raw && IDS[raw]) return raw;
           if (raw === "light") return "paper";
@@ -35,7 +28,8 @@
           if (raw === "paper") return "paper";
           if (raw === "sepia" || raw === "clay" || raw === "village") return "sepia";
           if (raw === "meadow") return "meadow";
-          return system();
+          if (raw === "system" || !raw) return "midnight";
+          return "midnight";
         }
         var theme = "midnight";
         try {

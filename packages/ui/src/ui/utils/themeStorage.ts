@@ -6,14 +6,6 @@ export function isThemeId(v: string): v is ThemeId {
   return (THEME_IDS as string[]).includes(v);
 }
 
-function resolveSystemToPreset(): ThemeId {
-  try {
-    return window.matchMedia("(prefers-color-scheme: light)").matches ? "paper" : "midnight";
-  } catch {
-    return "midnight";
-  }
-}
-
 export function migrateLegacyTheme(raw: string | null): ThemeId {
   if (raw && isThemeId(raw)) return raw;
   if (raw === "light") return "paper";
@@ -25,7 +17,7 @@ export function migrateLegacyTheme(raw: string | null): ThemeId {
   if (raw === "paper") return "paper";
   if (raw === "sepia" || raw === "clay" || raw === "village") return "sepia";
   if (raw === "meadow") return "meadow";
-  if (raw === "system" || !raw) return resolveSystemToPreset();
+  if (raw === "system" || !raw) return "midnight";
   return "midnight";
 }
 
