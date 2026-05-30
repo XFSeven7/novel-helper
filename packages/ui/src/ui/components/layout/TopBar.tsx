@@ -80,7 +80,7 @@ export function TopBar({
         {trainingModeEnabled ? (
           <button
             type="button"
-            className="btnSort topbarTrainingBtn"
+            className="topbarTrainingBtn"
             disabled={busy || trainingEntryDisabled}
             title={trainingEntryTitle ?? "网文写作训练"}
             onClick={() => onOpenTraining?.()}

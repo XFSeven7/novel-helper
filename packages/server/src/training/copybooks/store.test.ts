@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  completeChapter,
   importCopybook,
   listCopybooks,
   readChapterText,
@@ -30,19 +29,13 @@ describe("copybook store", () => {
     expect(ch0.text).toContain("hello");
   });
 
-  it("saves progress and completes chapter", async () => {
+  it("saves progress", async () => {
     const buf = Buffer.from("第1章 A\nabc", "utf8");
     const book = await importCopybook(tmp, "p.txt", buf);
     await saveChapterProgress(tmp, book.id, 0, { draftText: "ab", cursorPos: 2 });
     const prog = await readCopybookProgress(tmp, book.id);
     expect(prog.chapters["0"]!.status).toBe("in_progress");
-    await completeChapter(tmp, book.id, 0, {
-      draftText: "abc",
-      durationSec: 10
-    });
-    const prog2 = await readCopybookProgress(tmp, book.id);
-    expect(prog2.chapters["0"]!.status).toBe("completed");
-    expect(prog2.chapters["0"]!.sessions).toHaveLength(1);
+    expect(prog.chapters["0"]!.draftText).toBe("ab");
   });
 
   it("lists books with chapter summaries", async () => {

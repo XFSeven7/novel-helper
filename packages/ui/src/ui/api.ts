@@ -1661,13 +1661,6 @@ export type CopybookListItem = {
 export type CopybookChapterProgress = CopybookChapterSummary & {
   draftText?: string;
   cursorPos?: number;
-  sessions?: Array<{
-    completedAt: string;
-    durationSec: number;
-    accuracy: number;
-    errorCount: number;
-    charCount: number;
-  }>;
 };
 
 export async function listTrainingCopybooks() {
@@ -1715,17 +1708,6 @@ export async function putTrainingCopybookProgress(
   return await http<{ ok: boolean }>(
     `/api/training/copybooks/${encodeURIComponent(bookId)}/chapters/${index}/progress`,
     { method: "PUT", body: JSON.stringify(body) }
-  );
-}
-
-export async function completeTrainingCopybookChapter(
-  bookId: string,
-  index: number,
-  body: { draftText: string; durationSec?: number }
-) {
-  return await http<{ progress: CopybookChapterProgress }>(
-    `/api/training/copybooks/${encodeURIComponent(bookId)}/chapters/${index}/complete`,
-    { method: "POST", body: JSON.stringify(body) }
   );
 }
 

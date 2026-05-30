@@ -2,7 +2,6 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { assertTrainingModuleEnabled, readFeatureSettings } from "../../featureSettings.js";
 import {
-  completeChapter,
   importCopybook,
   listCopybooksWithProgress,
   readChapterText,
@@ -107,29 +106,6 @@ export function registerCopybookRoutes(app: FastifyInstance, deps: CopybookRoute
     try {
       await saveChapterProgress(deps.getDataDir(), bookId, index, body);
       return { ok: true };
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return reply.code(400).send({ message: msg });
-    }
-  });
-
-  app.post("/api/training/copybooks/:bookId/chapters/:index/complete", async (req, reply) => {
-    if (!(await requireCopybookModule(reply))) return;
-    const { bookId, index } = z
-      .object({ bookId: z.string(), index: z.coerce.number().int().min(0) })
-      .parse((req as { params: unknown }).params);
-    const body = z
-      .object({
-        draftText: z.string(),
-        durationSec: z.number().int().min(0).optional()
-      })
-      .parse((req as { body: unknown }).body);
-    const meta = await readCopybookMeta(deps.getDataDir(), bookId);
-    if (!meta) return reply.code(404).send({ message: "书目不存在" });
-    if (!meta.chapters[index]) return reply.code(404).send({ message: "章节不存在" });
-    try {
-      const progress = await completeChapter(deps.getDataDir(), bookId, index, body);
-      return { progress: progress.chapters[String(index)] };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       return reply.code(400).send({ message: msg });

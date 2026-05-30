@@ -10039,7 +10039,42 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
 }
 
 .topbarTrainingBtn {
-  margin-right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  padding: 0 14px;
+  margin: 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: color-mix(in srgb, var(--accent) 85%, var(--text));
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.topbarTrainingBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 20%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  color: var(--text);
+}
+
+.topbarTrainingBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.topbarTrainingBtn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
 }
 
 .trainingBody {
@@ -10677,10 +10712,6 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   background: var(--accent, #6ea8fe);
 }
 
-.trainingWorkbench--copybook {
-  /* 抄书时全宽工作台，不预留左侧目录 */
-}
-
 .trainingCategoryTree {
   flex: 1;
   min-height: 0;
@@ -10758,12 +10789,6 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
 .trainingCopybookTreeEmpty {
   font-size: 12px;
   padding: 2px 8px 6px 24px;
-  margin: 0;
-}
-
-.trainingCopybookEmpty {
-  font-size: 12px;
-  padding: 8px 12px 12px;
   margin: 0;
 }
 
@@ -10851,13 +10876,6 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   font-size: 14px;
 }
 
-.trainingCopybookMainInner {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  height: 100%;
-}
-
 .trainingCopybookCol--fill {
   flex: 1;
   min-height: 0;
@@ -10888,11 +10906,6 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   padding: 12px 14px;
   background: transparent;
   font-family: inherit;
-}
-
-.trainingCopybookCol .trainingPaneTitle {
-  flex-shrink: 0;
-  margin: 0 0 4px;
 }
 
 .trainingLearnHead {

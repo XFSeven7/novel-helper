@@ -7,8 +7,7 @@ import type {
   CopybookChapterProgress,
   CopybookIndexEntry,
   CopybookMeta,
-  CopybookProgressFile,
-  CopybookSession
+  CopybookProgressFile
 } from "./types.js";
 import { COPYBOOK_MAX_BYTES } from "./types.js";
 
@@ -43,9 +42,7 @@ function defaultChapterProgress(
     draftText,
     cursorPos: prev?.cursorPos ?? 0,
     status,
-    bestAccuracy: prev?.bestAccuracy ?? null,
-    editedSourceText: prev?.editedSourceText,
-    sessions: prev?.sessions ?? []
+    editedSourceText: prev?.editedSourceText
   };
 }
 
@@ -224,42 +221,6 @@ export async function saveChapterProgress(
   progress.chapters[key] = next;
   await writeCopybookProgress(dataDir, bookId, progress);
   return next;
-}
-
-export async function completeChapter(
-  dataDir: string,
-  bookId: string,
-  index: number,
-  input: {
-    draftText: string;
-    durationSec?: number;
-  }
-): Promise<CopybookProgressFile> {
-  const meta = await readCopybookMeta(dataDir, bookId);
-  if (!meta) throw new Error("书目不存在");
-  const chapter = meta.chapters[index];
-  if (!chapter) throw new Error("章节不存在");
-  const { text: chapterText } = await readChapterText(dataDir, bookId, index);
-  const progress = await readCopybookProgress(dataDir, bookId);
-  const key = String(index);
-  const prev = progress.chapters[key];
-  const session: CopybookSession = {
-    completedAt: new Date().toISOString(),
-    durationSec: input.durationSec ?? 0,
-    accuracy: 0,
-    errorCount: 0,
-    charCount: chapterText.length
-  };
-  progress.chapters[key] = {
-    draftText: input.draftText,
-    cursorPos: input.draftText.length,
-    status: "completed",
-    bestAccuracy: prev?.bestAccuracy ?? null,
-    editedSourceText: prev?.editedSourceText,
-    sessions: [...(prev?.sessions ?? []), session]
-  };
-  await writeCopybookProgress(dataDir, bookId, progress);
-  return progress;
 }
 
 export async function listCopybooks(dataDir: string) {

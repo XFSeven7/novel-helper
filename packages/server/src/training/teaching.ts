@@ -5,45 +5,15 @@ import { getCategory } from "./categories.js";
 import { getScene } from "./scenes.js";
 import type { TrainingCategoryPublic, TrainingScenePublic } from "./types.js";
 
+/** 内置学法 Markdown，随应用版本发布；不写入 dataDir，避免用户数据目录残留旧文案。 */
 const BUNDLED_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), "teaching");
 
-export function trainingTeachingDir(dataDir: string) {
-  return path.join(dataDir, "_settings", "training", "teaching");
-}
-
-export async function ensureTeachingSeeded(dataDir: string): Promise<void> {
-  const dest = trainingTeachingDir(dataDir);
-  await fs.mkdir(dest, { recursive: true });
-  let names: string[];
-  try {
-    names = await fs.readdir(BUNDLED_DIR);
-  } catch {
-    return;
-  }
-  for (const name of names.filter((n) => n.endsWith(".md"))) {
-    const target = path.join(dest, name);
-    const bundled = path.join(BUNDLED_DIR, name);
-    let shouldCopy = false;
-    try {
-      await fs.access(target);
-      const existing = await fs.readFile(target, "utf8");
-      if (existing.includes("待扩写") || existing.includes("P0 占位")) {
-        shouldCopy = true;
-      }
-    } catch {
-      shouldCopy = true;
-    }
-    if (shouldCopy) {
-      await fs.copyFile(bundled, target);
-    }
-  }
-}
-
-export async function readTeachingMarkdown(dataDir: string, teachingFile: string): Promise<string> {
-  await ensureTeachingSeeded(dataDir);
+export async function readTeachingMarkdown(_dataDir: string, teachingFile: string): Promise<string> {
   const safe = path.basename(teachingFile);
-  const p = path.join(trainingTeachingDir(dataDir), safe);
-  return await fs.readFile(p, "utf8");
+  if (safe !== teachingFile) {
+    throw new Error("Invalid teaching file");
+  }
+  return await fs.readFile(path.join(BUNDLED_DIR, safe), "utf8");
 }
 
 export async function getSceneWithTeaching(dataDir: string, id: string): Promise<TrainingScenePublic> {

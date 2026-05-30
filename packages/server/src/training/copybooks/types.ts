@@ -26,21 +26,11 @@ export type CopybookIndexEntry = {
 
 export type CopybookChapterStatus = "not_started" | "in_progress" | "completed";
 
-export type CopybookSession = {
-  completedAt: string;
-  durationSec: number;
-  accuracy: number;
-  errorCount: number;
-  charCount: number;
-};
-
 export type CopybookChapterProgress = {
   draftText: string;
   cursorPos: number;
   status: CopybookChapterStatus;
-  bestAccuracy: number | null;
   editedSourceText?: string;
-  sessions: CopybookSession[];
 };
 
 export type CopybookProgressFile = {

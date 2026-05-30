@@ -176,7 +176,7 @@ export function SettingsFeaturesPanel(props: {
 
           <section className="settingsFeatureBlock">
             <div className="settingsFeatureBlockHead">
-              <h3 className="settingsFeatureBlockTitle">训练模式（实验功能）</h3>
+              <h3 className="settingsFeatureBlockTitle">训练模式</h3>
               <label className="settingsFeatureSwitch">
                 <input
                   type="checkbox"

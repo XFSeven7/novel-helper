@@ -251,7 +251,7 @@ export async function buildTrainingTree(dataDir: string): Promise<TrainingTree> 
     node.questions.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
-  return { groups: [sceneGroup, techniqueGroup, copybookGroup] };
+  return { groups: [techniqueGroup, sceneGroup, copybookGroup] };
 }
 
 export type { TrainingGradingResult };
