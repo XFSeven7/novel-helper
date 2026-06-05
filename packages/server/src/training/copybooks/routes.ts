@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { assertTrainingModuleEnabled, readFeatureSettings } from "../../featureSettings.js";
 import {
+  deleteCopybook,
   importCopybook,
   listCopybooksWithProgress,
   readChapterText,
@@ -27,6 +28,19 @@ export function registerCopybookRoutes(app: FastifyInstance, deps: CopybookRoute
   app.get("/api/training/copybooks", async (_req, reply) => {
     if (!(await requireCopybookModule(reply))) return;
     return listCopybooksWithProgress(deps.getDataDir());
+  });
+
+  app.delete("/api/training/copybooks/:bookId", async (req, reply) => {
+    if (!(await requireCopybookModule(reply))) return;
+    const { bookId } = z.object({ bookId: z.string() }).parse((req as { params: unknown }).params);
+    try {
+      await deleteCopybook(deps.getDataDir(), bookId);
+      return { ok: true };
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      const code = msg === "书目不存在" ? 404 : 400;
+      return reply.code(code).send({ message: msg });
+    }
   });
 
   app.post("/api/training/copybooks/import", async (req, reply) => {

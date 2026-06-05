@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  deleteTrainingCopybook,
   generateTrainingQuestions,
   getTrainingAttempt,
   getTrainingQuestion,
@@ -35,6 +36,7 @@ import { TrainingSceneChat } from "./TrainingSceneChat";
 import { TrainingWorkbenchSplit } from "./TrainingWorkbenchSplit";
 import { TrainingTopBar } from "./TrainingTopBar";
 import { useTrainingTreeNavWidth } from "../../hooks/useTrainingTreeNavWidth";
+import { appConfirm } from "../../dialog/dialog";
 
 type Screen = "practice" | "records";
 
@@ -79,6 +81,7 @@ export function TrainingWorkspace(props: {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [copybooks, setCopybooks] = useState<CopybookListItem[]>([]);
   const [importBusy, setImportBusy] = useState(false);
+  const [deleteCopybookBusy, setDeleteCopybookBusy] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
   const treeNav = useTrainingTreeNavWidth();
   const copybookActive = selection?.kind === "copybook";
@@ -165,6 +168,35 @@ export function TrainingWorkspace(props: {
       }
     })();
   }, [refreshTree, refreshCopybooks]);
+
+  async function handleDeleteCopybook(bookId: string) {
+    const book = copybooks.find((b) => b.id === bookId);
+    const title = book?.title ?? "此书";
+    const ok = await appConfirm({
+      title: "删除书目",
+      message: `确定删除「${title}」？将永久删除此书及全部抄写进度，且无法恢复。`,
+      confirmLabel: "删除",
+      variant: "danger"
+    });
+    if (!ok) return;
+    setDeleteCopybookBusy(true);
+    try {
+      await deleteTrainingCopybook(bookId);
+      await refreshCopybooks();
+      if (selection?.kind === "copybook" && selection.bookId === bookId) {
+        setSelection({
+          kind: "scene",
+          groupId: TRAINING_COPYBOOK_GROUP_ID,
+          sceneId: TRAINING_COPYBOOK_SCENE_ID
+        });
+      }
+      props.onStatus?.(`已删除「${title}」`);
+    } catch (e: unknown) {
+      props.onStatus?.(formatApiError(e));
+    } finally {
+      setDeleteCopybookBusy(false);
+    }
+  }
 
   async function handleImportCopybook(file: File) {
     setImportBusy(true);
@@ -428,8 +460,9 @@ export function TrainingWorkspace(props: {
                 groups={tree.groups}
                 copybooks={copybooks}
                 selection={selection}
-                disabled={busy}
+                disabled={busy || deleteCopybookBusy}
                 onSelect={setSelection}
+                onDeleteCopybook={(id) => void handleDeleteCopybook(id)}
               />
             </aside>
             <div

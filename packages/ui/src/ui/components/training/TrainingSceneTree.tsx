@@ -13,6 +13,7 @@ type Props = {
   copybooks: CopybookListItem[];
   selection: TrainingSelection | null;
   onSelect: (sel: TrainingSelection) => void;
+  onDeleteCopybook?: (bookId: string) => void;
   disabled?: boolean;
 };
 
@@ -31,6 +32,7 @@ function CopybookBookList(props: {
   selection: TrainingSelection | null;
   onToggleCopybook: (bookId: string) => void;
   onSelect: (sel: TrainingSelection) => void;
+  onDeleteCopybook?: (bookId: string) => void;
   disabled?: boolean;
 }) {
   function isCopybookChapterSelected(bookId: string, chapterIndex: number) {
@@ -55,22 +57,84 @@ function CopybookBookList(props: {
         const bookOpen = props.expandedCopybooks.has(book.id);
         return (
           <div key={book.id} className="outlineStageTreeNode">
-            <button
-              type="button"
-              className="outlineStageTreeRow outlineStageTreeRowBtn trainingTreeRowBtn"
+            <div
+              className="outlineStageTreeRow trainingCopybookBookRow"
               style={{ paddingLeft: props.paddingLeft }}
-              disabled={props.disabled}
-              aria-expanded={bookOpen}
-              onClick={() => props.onToggleCopybook(book.id)}
             >
-              <span className="outlineStageTreeToggle outlineStageTreeToggle--decor" aria-hidden>
-                {bookOpen ? "▾" : "▸"}
-              </span>
-              <span className="outlineStageTreeLabelBtn trainingTreeLabelBtn">
-                <span className="trainingTreeTitle">{book.title}</span>
-                <span className="muted trainingTreeMeta">{book.chapterCount} 章</span>
-              </span>
-            </button>
+              <button
+                type="button"
+                className="outlineStageTreeRowBtn trainingTreeRowBtn trainingCopybookBookRowMain"
+                disabled={props.disabled}
+                aria-expanded={bookOpen}
+                onClick={() => props.onToggleCopybook(book.id)}
+              >
+                <span className="outlineStageTreeToggle outlineStageTreeToggle--decor" aria-hidden>
+                  {bookOpen ? "▾" : "▸"}
+                </span>
+                <span className="outlineStageTreeLabelBtn trainingTreeLabelBtn">
+                  <span className="trainingTreeTitle">{book.title}</span>
+                  <span className="muted trainingTreeMeta">{book.chapterCount} 章</span>
+                </span>
+              </button>
+              {props.onDeleteCopybook && !props.disabled ? (
+                <span className="outlineStageTreeActions">
+                  <button
+                    type="button"
+                    className="outlineStageTreeAct outlineStageTreeAct--danger"
+                    title="删除书目"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      props.onDeleteCopybook?.(book.id);
+                    }}
+                  >
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                      aria-hidden="true"
+                    >
+                      <path
+                        d="M10 12V17"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M14 12V17"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M4 7H20"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M6 7V19C6 20 7 21 8 21H16C17 21 18 20 18 19V7"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                      <path
+                        d="M9 7V5C9 4 10 3 11 3H13C14 3 15 4 15 5V7"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </button>
+                </span>
+              ) : null}
+            </div>
             {bookOpen
               ? book.chapters.map((ch) => {
                   const mark = copybookStatusMark(ch.status);
@@ -126,6 +190,7 @@ function GroupSection(props: {
   onToggleScene: (sceneId: string) => void;
   onToggleCopybook: (bookId: string) => void;
   onSelect: (sel: TrainingSelection) => void;
+  onDeleteCopybook?: (bookId: string) => void;
   disabled?: boolean;
 }) {
   const isCopybookGroup = props.group.id === TRAINING_COPYBOOK_GROUP_ID;
@@ -211,6 +276,7 @@ function GroupSection(props: {
           selection={props.selection}
           onToggleCopybook={props.onToggleCopybook}
           onSelect={props.onSelect}
+          onDeleteCopybook={props.onDeleteCopybook}
           disabled={props.disabled}
         />
       ) : null}
@@ -300,7 +366,14 @@ function GroupSection(props: {
   );
 }
 
-export function TrainingSceneTree({ groups, copybooks, selection, onSelect, disabled }: Props) {
+export function TrainingSceneTree({
+  groups,
+  copybooks,
+  selection,
+  onSelect,
+  onDeleteCopybook,
+  disabled
+}: Props) {
   const [expandedScenes, setExpandedScenes] = useState<Set<string>>(() => {
     const initial = new Set<string>();
     if (selection?.kind === "scene") initial.add(selection.sceneId);
@@ -349,6 +422,7 @@ export function TrainingSceneTree({ groups, copybooks, selection, onSelect, disa
             onToggleScene={toggleScene}
             onToggleCopybook={toggleCopybook}
             onSelect={onSelect}
+            onDeleteCopybook={onDeleteCopybook}
             disabled={disabled}
           />
         ))}

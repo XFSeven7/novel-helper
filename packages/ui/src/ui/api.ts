@@ -1678,6 +1678,13 @@ export async function importTrainingCopybook(file: File) {
   };
 }
 
+export async function deleteTrainingCopybook(bookId: string) {
+  return await http<{ ok: boolean }>(
+    `/api/training/copybooks/${encodeURIComponent(bookId)}`,
+    { method: "DELETE" }
+  );
+}
+
 export async function getTrainingCopybookChapter(bookId: string, index: number) {
   return await http<{
     title: string;

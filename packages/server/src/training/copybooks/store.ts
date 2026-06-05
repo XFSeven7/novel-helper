@@ -226,3 +226,12 @@ export async function saveChapterProgress(
 export async function listCopybooks(dataDir: string) {
   return listCopybooksWithProgress(dataDir);
 }
+
+export async function deleteCopybook(dataDir: string, bookId: string): Promise<void> {
+  const index = await readIndex(dataDir);
+  const idx = index.books.findIndex((b) => b.id === bookId);
+  if (idx < 0) throw new Error("书目不存在");
+  index.books.splice(idx, 1);
+  await writeIndex(dataDir, index);
+  await fs.rm(bookDir(dataDir, bookId), { recursive: true, force: true });
+}

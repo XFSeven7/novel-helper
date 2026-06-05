@@ -3,9 +3,11 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  deleteCopybook,
   importCopybook,
   listCopybooks,
   readChapterText,
+  readCopybookMeta,
   readCopybookProgress,
   saveChapterProgress
 } from "./store.js";
@@ -44,5 +46,18 @@ describe("copybook store", () => {
     const { books } = await listCopybooks(tmp);
     expect(books).toHaveLength(1);
     expect(books[0]!.chapters[0]!.status).toBe("not_started");
+  });
+
+  it("deletes copybook and removes from index", async () => {
+    const buf = Buffer.from("第1章 A\nx", "utf8");
+    const book = await importCopybook(tmp, "del.txt", buf);
+    await deleteCopybook(tmp, book.id);
+    const { books } = await listCopybooks(tmp);
+    expect(books).toHaveLength(0);
+    expect(await readCopybookMeta(tmp, book.id)).toBeNull();
+  });
+
+  it("throws when deleting missing book", async () => {
+    await expect(deleteCopybook(tmp, "cb-missing")).rejects.toThrow("书目不存在");
   });
 });

@@ -10792,6 +10792,30 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   margin: 0;
 }
 
+.trainingCopybookBookRow {
+  gap: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-right: 0;
+}
+
+.trainingCopybookBookRow:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.trainingCopybookBookRow .trainingCopybookBookRowMain {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.trainingCopybookBookRow .trainingCopybookBookRowMain:hover:not(:disabled) {
+  background: transparent;
+}
+
 .trainingCopybookWorkbench {
   flex: 1;
   min-width: 0;
