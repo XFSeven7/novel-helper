@@ -8,6 +8,7 @@ export function useStageChat(opts: {
   modelConfigId: string | null;
   chatTurns: StageChatTurn[];
   aiBusy: boolean;
+  flushBeforeSend?: () => Promise<void>;
   onOutlineFromServer: (outline: OutlineIndex) => void;
   onError: (msg: string) => void;
 }) {
@@ -35,6 +36,7 @@ export function useStageChat(opts: {
     setComposer("");
     opts.onError("");
     try {
+      if (opts.flushBeforeSend) await opts.flushBeforeSend();
       const outline = await consumeStageChatStream(
         stageChatStreamUrl(opts.bookId, opts.stageId),
         { modelConfigId: opts.modelConfigId, userMessage: text },

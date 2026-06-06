@@ -12,6 +12,7 @@ type OutlineBookContextValue = {
   updateOutline: (updater: (prev: OutlineIndex) => OutlineIndex) => void;
   replaceOutlineFromServer: (next: OutlineIndex) => void;
   saveNow: (next: OutlineIndex) => Promise<void>;
+  flushPendingSave: () => Promise<void>;
   runAi: (input: {
     mode: OutlineAiMode;
     modelConfigId?: string | null;
@@ -48,6 +49,7 @@ export function OutlineBookProvider({
     updateOutline: ctl.updateOutline,
     replaceOutlineFromServer: ctl.replaceOutlineFromServer,
     saveNow: ctl.saveNow,
+    flushPendingSave: ctl.flushPendingSave,
     runAi: ctl.runAi,
     applyPreview: ctl.applyPreview
   };

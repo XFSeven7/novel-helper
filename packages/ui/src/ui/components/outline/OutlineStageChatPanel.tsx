@@ -34,7 +34,7 @@ export function OutlineStageChatPanel({
   onSend,
   chatScrollRef
 }: Props) {
-  const sendDisabled = chatDisabled || !modelOk;
+  const sendDisabled = chatDisabled || !modelOk || streaming;
 
   const messages = useMemo(() => {
     const items: React.ReactNode[] = turns.map((turn) => (

@@ -117,6 +117,7 @@ export function StageOutlineCenterBody({
           }
         }));
       }}
+      flushBeforeSend={ctx.flushPendingSave}
       onOutlineFromServer={ctx.replaceOutlineFromServer}
       onError={onStatus}
     />

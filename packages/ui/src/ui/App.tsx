@@ -1540,7 +1540,7 @@ export function App() {
   useEffect(() => {
     // 只允许选择"连接成功"的配置;如果当前 active 不在成功列表,自动回落
     if (!okModelConfigs.length) return;
-    if (activeModelId && okModelConfigs.some((c) => c.id === activeModelId)) return;
+    if (activeModelId && okModelConfigs.some((c) => modelConfigIdMatches(c.id, activeModelId))) return;
     setModelState((prev) => ({ ...prev, activeId: okModelConfigs[0].id }));
   }, [okModelConfigs, activeModelId]);
 

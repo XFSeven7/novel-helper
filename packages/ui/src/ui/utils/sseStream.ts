@@ -12,7 +12,17 @@ export async function consumeSseStream<TDone>(opts: {
   });
   if (!res.ok || !res.body) {
     const t = await res.text().catch(() => "");
-    throw new Error(t || `HTTP ${res.status}`);
+    let msg = t || `HTTP ${res.status}`;
+    try {
+      const j = JSON.parse(t) as { message?: string };
+      if (j?.message) msg = String(j.message);
+    } catch {
+      // ignore non-JSON body
+    }
+    if (res.status === 404) {
+      msg = "阶段未找到，请稍候或重新选中该阶段后再试";
+    }
+    throw new Error(msg);
   }
 
   const reader = res.body.getReader();

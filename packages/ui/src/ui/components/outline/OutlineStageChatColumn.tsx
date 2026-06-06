@@ -10,6 +10,7 @@ type Props = {
   chatDisabled: boolean;
   modelOk: boolean;
   activeModelId: string | null;
+  flushBeforeSend?: () => Promise<void>;
   onOutlineFromServer: (outline: OutlineIndex) => void;
   onError: (msg: string) => void;
 };
@@ -21,6 +22,7 @@ export const OutlineStageChatColumn = memo(function OutlineStageChatColumn({
   chatDisabled,
   modelOk,
   activeModelId,
+  flushBeforeSend,
   onOutlineFromServer,
   onError
 }: Props) {
@@ -30,6 +32,7 @@ export const OutlineStageChatColumn = memo(function OutlineStageChatColumn({
     modelConfigId: activeModelId,
     chatTurns,
     aiBusy: chatDisabled,
+    flushBeforeSend,
     onOutlineFromServer,
     onError
   });
