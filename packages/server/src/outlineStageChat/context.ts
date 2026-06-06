@@ -1,8 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { truncateForPrompt } from "../prompts/index.js";
-import type { OutlineIndex } from "../outlineStore.js";
+import type { OutlineIndex, OutlineStageNode } from "../outlineStore.js";
 import { findStageNode, stageRoots } from "./stageTree.js";
+import { MAX_PATCH_DEPTH } from "./patch.js";
 
 function truncate(s: string, max: number): string {
   return truncateForPrompt(String(s || "").trim(), max);
@@ -70,6 +71,14 @@ export async function buildStageChatContextBlock(
     lines.push("## 同级阶段", siblingLabels.map((l) => `- ${truncate(l, 120)}`).join("\n"));
   }
 
+  const children = found.node.children ?? [];
+  if (children.length) {
+    lines.push("## 当前阶段子树（拆树时请保留已有 id）");
+    lines.push(formatStageSubtreeForPrompt(children, 1));
+  } else {
+    lines.push("## 当前阶段子树", "（暂无子阶段）");
+  }
+
   const volumes = outline.volumes ?? [];
   if (volumes.length) {
     lines.push("## 分卷（摘要）");
@@ -81,4 +90,21 @@ export async function buildStageChatContextBlock(
   }
 
   return lines.filter(Boolean).join("\n");
+}
+
+function formatStageSubtreeForPrompt(nodes: OutlineStageNode[], depth: number): string {
+  if (depth > MAX_PATCH_DEPTH) return "";
+  const indent = "  ".repeat(depth - 1);
+  const rows: string[] = [];
+  for (const node of nodes) {
+    const label = truncate(node.label?.trim() || "未命名阶段", 120);
+    const note = node.note?.trim() ? `：${truncate(node.note, 400)}` : "";
+    rows.push(`${indent}- [id=${node.id}] ${label}${note}`);
+    const kids = node.children ?? [];
+    if (kids.length) {
+      const nested = formatStageSubtreeForPrompt(kids, depth + 1);
+      if (nested) rows.push(nested);
+    }
+  }
+  return rows.join("\n");
 }

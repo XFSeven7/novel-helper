@@ -2,7 +2,7 @@ export async function consumeSseStream<TDone>(opts: {
   url: string;
   body: Record<string, unknown>;
   onDelta?: (delta: string) => void;
-  onDone?: (payload: { assistantText: string; data: TDone }) => void;
+  onDone?: (payload: { assistantText: string; data: TDone; raw: Record<string, unknown> }) => void;
   parseDone: (payload: Record<string, unknown>) => TDone | null;
 }): Promise<TDone> {
   const res = await fetch(opts.url, {
@@ -55,7 +55,7 @@ export async function consumeSseStream<TDone>(opts: {
           const data = opts.parseDone(payload);
           if (data) {
             result = data;
-            opts.onDone?.({ assistantText, data });
+            opts.onDone?.({ assistantText, data, raw: payload });
           }
         }
         if (payload.type === "error") {

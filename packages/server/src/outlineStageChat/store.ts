@@ -11,6 +11,7 @@ import {
   type StageChatModelMessage,
   type StageChatTurn
 } from "./types.js";
+import { applyStagePatch, parseStagePatchFromAssistant, stripStagePatchBlock } from "./patch.js";
 import { findStageNode, stageRoots, updateStageNodeInTree } from "./stageTree.js";
 
 export { normalizeStageChatTurns } from "./normalize.js";
@@ -57,4 +58,72 @@ export async function appendStageChatTurn(
     book: { ...outline.book, mainlineStages: nextStages.length ? nextStages : undefined }
   };
   return writeOutlineIndex(dataDir, bookId, next);
+}
+
+export async function saveStageChatTurnWithPatch(
+  dataDir: string,
+  bookId: string,
+  stageId: string,
+  userContent: string,
+  assistantRaw: string
+): Promise<{
+  outline: OutlineIndex;
+  assistantDisplay: string;
+  patchApplied: boolean;
+  patchSkipped: boolean;
+  createdIds: string[];
+  warnings: string[];
+}> {
+  let outline = await readOutlineIndex(dataDir, bookId);
+  if (!outline) throw new Error("Not found");
+
+  const { patch, displayText } = parseStagePatchFromAssistant(assistantRaw);
+  const assistantDisplay = (displayText || stripStagePatchBlock(assistantRaw)).trim();
+  if (!assistantDisplay) throw new Error("模型未返回有效内容");
+
+  let patchApplied = false;
+  let patchSkipped = false;
+  let createdIds: string[] = [];
+  let warnings: string[] = [];
+
+  if (patch) {
+    const result = applyStagePatch(outline, stageId, patch);
+    outline = result.outline;
+    createdIds = result.createdIds;
+    warnings = result.warnings;
+    patchApplied = true;
+  } else if (assistantRaw.includes("```stagePatch")) {
+    patchSkipped = true;
+  }
+
+  const text = userContent.trim().slice(0, MAX_STAGE_CHAT_USER_LEN);
+  const assistant = assistantDisplay.slice(0, MAX_STAGE_CHAT_USER_LEN * 4);
+
+  const roots = stageRoots(outline.book.mainlineStages);
+  const found = findStageNode(roots, stageId);
+  if (!found) throw new Error("Not found");
+
+  const now = new Date().toISOString();
+  const turn: StageChatTurn = {
+    id: crypto.randomUUID(),
+    user: { content: text, createdAt: now },
+    assistant: { content: assistant, createdAt: now }
+  };
+  const prev = found.node.chatTurns ?? [];
+  const nextTurns = [...prev, turn].slice(-MAX_STAGE_CHAT_TURNS);
+  const nextStages = updateStageNodeInTree(roots, stageId, { chatTurns: nextTurns });
+  const next: OutlineIndex = {
+    ...outline,
+    book: { ...outline.book, mainlineStages: nextStages.length ? nextStages : undefined }
+  };
+  const saved = await writeOutlineIndex(dataDir, bookId, next);
+
+  return {
+    outline: saved,
+    assistantDisplay,
+    patchApplied,
+    patchSkipped,
+    createdIds,
+    warnings
+  };
 }

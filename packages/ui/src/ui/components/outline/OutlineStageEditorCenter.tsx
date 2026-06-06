@@ -16,6 +16,7 @@ type Props = {
   activeModelId: string | null;
   onUpdate: (id: string, patch: Partial<Pick<OutlineStageNode, "label" | "note" | "chatTurns">>) => void;
   flushBeforeSend?: () => Promise<void>;
+  onStagePatchApplied?: (createdIds: string[]) => void;
   onOutlineFromServer: (outline: OutlineIndex) => void;
   onError: (msg: string) => void;
 };
@@ -30,6 +31,7 @@ export function OutlineStageEditorCenter({
   activeModelId,
   onUpdate,
   flushBeforeSend,
+  onStagePatchApplied,
   onOutlineFromServer,
   onError
 }: Props) {
@@ -128,6 +130,12 @@ export function OutlineStageEditorCenter({
         modelOk={modelOk}
         activeModelId={activeModelId}
         flushBeforeSend={flushBeforeSend}
+        onApplyNote={(text) => {
+          if (!found) return;
+          onUpdate(found.node.id, { note: text.trim() });
+          onError("已应用到细纲");
+        }}
+        onStagePatchApplied={onStagePatchApplied}
         onOutlineFromServer={onOutlineFromServer}
         onError={onError}
       />

@@ -27,6 +27,8 @@ type Props = {
   onSelect: (id: string) => void;
   onStagesChange: (stages: OutlineStageNode[]) => void;
   onSelectionAfterDelete: (id: string | null) => void;
+  highlightIds?: string[];
+  ensureExpandedIds?: string[];
 };
 
 type DragSession = {
@@ -44,7 +46,9 @@ export function OutlineStageTree({
   selectedId,
   onSelect,
   onStagesChange,
-  onSelectionAfterDelete
+  onSelectionAfterDelete,
+  highlightIds = [],
+  ensureExpandedIds = []
 }: Props) {
   const roots = stageRoots(stagesProp);
   const storageKey = `novel-helper-stage-tree-expanded:${bookId}`;
@@ -53,6 +57,17 @@ export function OutlineStageTree({
     key: storageKey,
     defaultValue: []
   });
+
+  const highlightSet = useMemo(() => new Set(highlightIds), [highlightIds]);
+
+  useEffect(() => {
+    if (!ensureExpandedIds.length) return;
+    setExpandedIds((prev) => {
+      const set = new Set(prev);
+      for (const id of ensureExpandedIds) set.add(id);
+      return [...set];
+    });
+  }, [ensureExpandedIds, setExpandedIds]);
 
   const expandedSet = useMemo(() => new Set(expandedIds), [expandedIds]);
   const expandableIds = useMemo(() => collectExpandableStageIds(roots), [roots]);
@@ -344,6 +359,7 @@ export function OutlineStageTree({
           className={[
             "outlineStageTreeRow",
             selected ? "outlineStageTreeRow--selected" : "",
+            highlightSet.has(node.id) ? "outlineStageTreeRow--highlight" : "",
             isDragging ? "outlineStageTreeRow--dragging" : "",
             !disabled && !isRenaming ? "outlineStageTreeRow--draggable" : ""
           ]

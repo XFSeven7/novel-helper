@@ -229,6 +229,8 @@ export function App() {
   const [outlineRefreshKey, setOutlineRefreshKey] = useState(0);
   const [outlineSubTab, setOutlineSubTab] = useState<OutlineSubTab>("book");
   const [selectedStageNodeId, setSelectedStageNodeId] = useState<string | null>(null);
+  const [stageHighlightIds, setStageHighlightIds] = useState<string[]>([]);
+  const [stageEnsureExpandedIds, setStageEnsureExpandedIds] = useState<string[]>([]);
   const [chapterGapModalOpen, setChapterGapModalOpen] = useState(false);
   const [chapterGapModalBookSlug, setChapterGapModalBookSlug] = useState("");
   const [chapterGapModalIndexes, setChapterGapModalIndexes] = useState<number[]>([]);
@@ -1723,8 +1725,18 @@ export function App() {
   useEffect(() => {
     setOutlineSubTab("book");
     setSelectedStageNodeId(null);
+    setStageHighlightIds([]);
+    setStageEnsureExpandedIds([]);
     if (activeBook) setLeftTab("chapters");
   }, [activeBook]);
+
+  const handleStagePatchApplied = useCallback((createdIds: string[]) => {
+    if (createdIds.length) setStageHighlightIds(createdIds);
+    if (selectedStageNodeId) setStageEnsureExpandedIds([selectedStageNodeId]);
+    if (createdIds.length) {
+      window.setTimeout(() => setStageHighlightIds([]), 3000);
+    }
+  }, [selectedStageNodeId]);
 
   useEffect(() => {
     setChapterRenameDraft(selectedChapterMeta?.title ?? "");
@@ -3835,6 +3847,8 @@ export function App() {
                       onOutlineSubTabChange={setOutlineSubTab}
                       selectedStageNodeId={selectedStageNodeId}
                       onSelectedStageNodeIdChange={setSelectedStageNodeId}
+                      stageHighlightIds={stageHighlightIds}
+                      stageEnsureExpandedIds={stageEnsureExpandedIds}
                       onOpenChapter={(c) => void onOpenChapter(c)}
                       onStatus={setStatus}
                     />
@@ -4438,6 +4452,7 @@ export function App() {
               modelOk={okModelConfigs.length > 0}
               onClearSelection={() => setSelectedStageNodeId(null)}
               onStatus={setStatus}
+              onStagePatchApplied={handleStagePatchApplied}
             />
           ) : showBookOverview ? (
             <div className="centerBookStats">

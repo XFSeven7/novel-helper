@@ -22,6 +22,8 @@ export type OutlineWorkspaceProps = {
   onOutlineSubTabChange?: (tab: OutlineSubTab) => void;
   selectedStageNodeId?: string | null;
   onSelectedStageNodeIdChange?: (id: string | null) => void;
+  stageHighlightIds?: string[];
+  stageEnsureExpandedIds?: string[];
 };
 
 type SubTab = OutlineSubTab;
@@ -38,7 +40,9 @@ export function OutlineWorkspace({
   outlineSubTab: outlineSubTabProp,
   onOutlineSubTabChange,
   selectedStageNodeId = null,
-  onSelectedStageNodeIdChange
+  onSelectedStageNodeIdChange,
+  stageHighlightIds = [],
+  stageEnsureExpandedIds = []
 }: OutlineWorkspaceProps) {
   const outlineCtx = useOptionalOutlineBook();
   const internalOutline = useOutline(outlineCtx ? null : slug, refreshToken);
@@ -228,6 +232,8 @@ export function OutlineWorkspace({
           stages={outline.book.mainlineStages}
           disabled={disabled}
           selectedId={selectedStageNodeId}
+          highlightIds={stageHighlightIds}
+          ensureExpandedIds={stageEnsureExpandedIds}
           onSelect={(id) => onSelectedStageNodeIdChange?.(id)}
           onStagesChange={(stages: OutlineStageNode[]) =>
             updateOutline((prev) => ({

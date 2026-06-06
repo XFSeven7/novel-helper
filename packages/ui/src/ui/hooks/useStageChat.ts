@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { OutlineIndex, StageChatTurn } from "../api";
-import { consumeStageChatStream, stageChatStreamUrl } from "../utils/stageChatSseStream";
+import {
+  consumeStageChatStream,
+  stageChatStreamUrl,
+  type StageChatDoneMeta
+} from "../utils/stageChatSseStream";
+import { isChatNearBottom, scrollChatToBottom, scrollChatToBottomAfterPaint } from "../utils/chatScroll";
 
 export function useStageChat(opts: {
   bookId: string;
@@ -10,6 +15,7 @@ export function useStageChat(opts: {
   aiBusy: boolean;
   flushBeforeSend?: () => Promise<void>;
   onOutlineFromServer: (outline: OutlineIndex) => void;
+  onDoneMeta?: (meta: StageChatDoneMeta) => void;
   onError: (msg: string) => void;
 }) {
   const [streaming, setStreaming] = useState(false);
@@ -20,37 +26,49 @@ export function useStageChat(opts: {
   useEffect(() => {
     setStreamDraft("");
     setComposer("");
+    scrollChatToBottomAfterPaint(() => chatScrollRef.current, "auto");
   }, [opts.stageId]);
 
   useEffect(() => {
     const el = chatScrollRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    if (!el || !isChatNearBottom(el)) return;
+    scrollChatToBottom(el, "auto");
   }, [opts.chatTurns.length, streaming, streamDraft]);
+
+  const sendWithMessage = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || !opts.stageId || opts.aiBusy || streaming) return;
+      setStreaming(true);
+      setStreamDraft("");
+      setComposer("");
+      scrollChatToBottomAfterPaint(() => chatScrollRef.current, "auto");
+      opts.onError("");
+      try {
+        if (opts.flushBeforeSend) await opts.flushBeforeSend();
+        const meta = await consumeStageChatStream(
+          stageChatStreamUrl(opts.bookId, opts.stageId),
+          { modelConfigId: opts.modelConfigId, userMessage: trimmed },
+          { onDelta: (d) => setStreamDraft((prev) => prev + d) }
+        );
+        opts.onOutlineFromServer(meta.outline);
+        opts.onDoneMeta?.(meta);
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : String(e);
+        opts.onError(msg);
+      } finally {
+        setStreaming(false);
+        setStreamDraft("");
+      }
+    },
+    [opts, streaming]
+  );
 
   const send = useCallback(async () => {
     const text = composer.trim();
-    if (!text || !opts.stageId || opts.aiBusy || streaming) return;
-    setStreaming(true);
-    setStreamDraft("");
-    setComposer("");
-    opts.onError("");
-    try {
-      if (opts.flushBeforeSend) await opts.flushBeforeSend();
-      const outline = await consumeStageChatStream(
-        stageChatStreamUrl(opts.bookId, opts.stageId),
-        { modelConfigId: opts.modelConfigId, userMessage: text },
-        { onDelta: (d) => setStreamDraft((prev) => prev + d) }
-      );
-      opts.onOutlineFromServer(outline);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      opts.onError(msg);
-    } finally {
-      setStreaming(false);
-      setStreamDraft("");
-    }
-  }, [composer, opts]);
+    if (!text) return;
+    await sendWithMessage(text);
+  }, [composer, sendWithMessage]);
 
   return {
     streaming,
@@ -58,6 +76,7 @@ export function useStageChat(opts: {
     composer,
     setComposer,
     send,
+    sendWithMessage,
     chatScrollRef
   };
 }

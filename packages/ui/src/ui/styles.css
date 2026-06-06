@@ -8350,6 +8350,11 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   border-radius: 6px;
 }
 
+.outlineStageTreeRow--highlight {
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  transition: background 0.3s ease;
+}
+
 .outlineStageTreeRow--selected {
   background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
@@ -8708,10 +8713,21 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
 
 .outlineStageChatHead {
   flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 8px 12px;
   font-size: 12px;
   font-weight: 650;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+.outlineStageChatTurnActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .outlineStageChatScroll {

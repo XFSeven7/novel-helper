@@ -4,7 +4,7 @@ import { listChapters } from "../fsStore.js";
 import { ensureOutlineIndex } from "../outlineStore.js";
 import { performStageChat, type StageChatDeps } from "./chat.js";
 import { buildStageChatContextBlock } from "./context.js";
-import { appendStageChatTurn, turnsForModel } from "./store.js";
+import { saveStageChatTurnWithPatch, turnsForModel } from "./store.js";
 import { findStageNode, stageRoots } from "./stageTree.js";
 import { MAX_STAGE_CHAT_USER_LEN } from "./types.js";
 
@@ -68,14 +68,22 @@ export function registerOutlineStageChatRoutes(app: FastifyInstance, deps: Outli
         if (!assistantText.trim()) {
           throw new Error("模型未返回有效内容");
         }
-        const saved = await appendStageChatTurn(
+        const result = await saveStageChatTurnWithPatch(
           dataDir,
           params.bookId,
           params.stageId,
           body.userMessage,
           assistantText
         );
-        deps.sseWrite(reply.raw, { type: "done", assistantText, outline: saved });
+        deps.sseWrite(reply.raw, {
+          type: "done",
+          assistantText: result.assistantDisplay,
+          outline: result.outline,
+          patchApplied: result.patchApplied,
+          patchSkipped: result.patchSkipped,
+          createdIds: result.createdIds,
+          warnings: result.warnings
+        });
       } catch (e: unknown) {
         const message = e instanceof Error ? e.message : String(e);
         deps.sseWrite(reply.raw, { type: "error", message });

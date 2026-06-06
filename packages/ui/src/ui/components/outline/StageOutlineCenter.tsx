@@ -70,7 +70,8 @@ export function StageOutlineCenterBody({
   activeModelId,
   modelOk,
   onClearSelection,
-  onStatus
+  onStatus,
+  onStagePatchApplied
 }: {
   bookId: string;
   selectedId: string | null;
@@ -79,6 +80,7 @@ export function StageOutlineCenterBody({
   modelOk: boolean;
   onClearSelection: () => void;
   onStatus: (msg: string) => void;
+  onStagePatchApplied?: (createdIds: string[]) => void;
 }) {
   const ctx = useOptionalOutlineBook();
   const outline = ctx?.outline;
@@ -118,6 +120,7 @@ export function StageOutlineCenterBody({
         }));
       }}
       flushBeforeSend={ctx.flushPendingSave}
+      onStagePatchApplied={onStagePatchApplied}
       onOutlineFromServer={ctx.replaceOutlineFromServer}
       onError={onStatus}
     />
