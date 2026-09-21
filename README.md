@@ -1,3 +1,5 @@
+
+
 # novelHelper
 
 **本地优先的长篇写作工作台** —— 在浏览器里写章节、管设定、做章节分析；正文与资料以 Markdown / JSON 落在你的硬盘上，不绑网盘账号，AI 可选、可换、可本地。
@@ -96,7 +98,7 @@ novelHelper 的定位是：
 ### 环境要求
 
 - Node.js **18+**
-- [pnpm](https://pnpm.io)（推荐）
+- [pnpm](https://pnpm.io)（推荐；仓库通过 `packageManager` 固定为 pnpm@10.11.0）
 
 ### 安装与运行
 
