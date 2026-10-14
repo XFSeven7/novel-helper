@@ -17,6 +17,7 @@ import { ChapterEditorContent, type ChapterEditorContentProps } from "./ChapterE
 import { ChapterFindReplaceBar } from "./ChapterFindReplaceBar";
 import { clampMobileFontPx, readStoredMobileFontPx, storeMobileFontPx } from "./mobileFontSize";
 import { useChapterEditorShortcuts } from "../../hooks/useChapterEditorShortcuts";
+import { useMobilePhoneWidth } from "../../hooks/useMobilePhoneWidth";
 import { useSyncScrollPair } from "../../hooks/useSyncScrollPair";
 import { MobileRawView } from "./MobileRawView";
 import { MobileTopToolbar } from "./MobileTopToolbar";
@@ -53,6 +54,7 @@ export function ChapterEditorPanel({
 }: ChapterEditorPanelProps) {
   const [mobileCompareOn, setMobileCompareOn] = useState(false);
   const [mobileFontPx, setMobileFontPx] = useState(readStoredMobileFontPx);
+  const { width: phoneW, dragging: phoneWDragging, startDrag: startPhoneWDrag } = useMobilePhoneWidth();
   const [compareOriginal, setCompareOriginal] = useState("");
   const [localCompareDraft, setLocalCompareDraft] = useState("");
   const [compareRightSource, setCompareRightSource] = useState<CompareRightSource>(null);
@@ -346,9 +348,24 @@ export function ChapterEditorPanel({
   }
 
   const phoneStyle = {
-    width: `${mobileViewport.w}px`,
+    width: `${phoneW}px`,
     height: `${mobileViewport.h}px`
   };
+
+  const renderPhoneResizeHandles = () => (
+    <>
+      <div
+        className="mobilePhoneResizeHandle mobilePhoneResizeHandleLeft"
+        title={`拖动调整宽度（当前 ${phoneW}px）`}
+        onMouseDown={(e) => startPhoneWDrag("left", e)}
+      />
+      <div
+        className="mobilePhoneResizeHandle mobilePhoneResizeHandleRight"
+        title={`拖动调整宽度（当前 ${phoneW}px）`}
+        onMouseDown={(e) => startPhoneWDrag("right", e)}
+      />
+    </>
+  );
 
   const editorContent = (
     <ChapterEditorContent
@@ -463,7 +480,7 @@ export function ChapterEditorPanel({
 
   if (mobileReading) {
     return (
-      <div className="mobileStage">
+      <div className={`mobileStage${phoneWDragging ? " mobileStage--resizing" : ""}`}>
         <div className="mobileStageInner">
           <MobileTopToolbar
             fontSizePx={mobileFontPx}
@@ -484,6 +501,7 @@ export function ChapterEditorPanel({
                     className="mobileRawView"
                     fontSizePx={mobileFontPx}
                   />
+                  {renderPhoneResizeHandles()}
                 </div>
               </div>
               <div className="mobileCompareCol">
@@ -497,6 +515,7 @@ export function ChapterEditorPanel({
                     }`}
                     fontSizePx={mobileFontPx}
                   />
+                  {renderPhoneResizeHandles()}
                 </div>
               </div>
             </div>
@@ -505,6 +524,7 @@ export function ChapterEditorPanel({
               <div className="mobilePhone mobilePhoneEditor" style={phoneStyle}>
                 {findReplaceBar}
                 <div className="chapterSplitEditor">{editorContent}</div>
+                {renderPhoneResizeHandles()}
               </div>
             </div>
           )}

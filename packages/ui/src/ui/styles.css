@@ -5121,6 +5121,7 @@ code {
 }
 
 .mobilePhone {
+  position: relative;
   flex: none;
   border-radius: 28px;
   border: 1px solid rgba(255, 255, 255, 0.18);
@@ -5128,6 +5129,36 @@ code {
   background: rgba(0, 0, 0, 0.35);
   padding: 14px;
   overflow: hidden;
+}
+
+.mobilePhoneResizeHandle {
+  position: absolute;
+  top: 20px;
+  bottom: 20px;
+  width: 10px;
+  z-index: 3;
+  cursor: ew-resize;
+  touch-action: none;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.mobilePhoneResizeHandleLeft {
+  left: 0;
+}
+
+.mobilePhoneResizeHandleRight {
+  right: 0;
+}
+
+.mobilePhoneResizeHandle:hover,
+.mobileStage--resizing .mobilePhoneResizeHandle {
+  background: color-mix(in srgb, var(--accent, #8b5cf6) 45%, transparent);
+}
+
+.mobileStage--resizing {
+  cursor: ew-resize;
+  user-select: none;
 }
 
 .mobilePhoneEditor {
