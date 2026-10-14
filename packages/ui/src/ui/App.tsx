@@ -2142,7 +2142,13 @@ export function App() {
       await exportBookTxt(activeBook);
       setStatus("已导出合并 txt");
     } catch (e: any) {
-      setStatus(e?.message || String(e));
+      const raw = e?.message || String(e);
+      let msg: string;
+      if (raw === "Not found") msg = "导出失败：书籍不存在";
+      else if (raw === "No chapters") msg = "导出失败：暂无章节";
+      else if (raw.startsWith("导出失败：")) msg = raw;
+      else msg = `导出失败：${raw}`;
+      setStatus(msg);
     } finally {
       setExportingTxt(false);
     }

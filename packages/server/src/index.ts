@@ -1910,13 +1910,13 @@ app.get("/api/books/:bookId/export.txt", async (req, reply) => {
   );
   if (!book) return reply.code(404).send({ message: "Not found" });
 
-  const chapters = await listChapters(getDataDir(), params.bookId);
+  const chapters = await listChapters(getDataDir(), book.bookId);
   if (chapters.length === 0) return reply.code(400).send({ message: "No chapters" });
 
   const inputs = [];
   for (let i = 0; i < chapters.length; i++) {
     const ch = chapters[i];
-    const content = await readChapter(getDataDir(), params.bookId, ch.filename);
+    const content = await readChapter(getDataDir(), book.bookId, ch.filename);
     const m = ch.filename.match(/^(\d+)_/);
     const chapterNo = m ? parseInt(m[1], 10) : i + 1;
     inputs.push({ chapterNo, title: ch.title, content });
