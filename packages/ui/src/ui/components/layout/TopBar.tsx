@@ -4,6 +4,7 @@ import {
   IconFullscreenEnter,
   IconFullscreenExit,
   IconGitHub,
+  IconRefresh,
   IconSettings
 } from "./LayoutIcons";
 import { ThemePicker } from "./ThemePicker";
@@ -18,6 +19,7 @@ export type TopBarProps = {
   onGoHome: () => void;
   onFullscreenError: (message: string) => void;
   onOpenSettings: () => void;
+  onRefreshFromDisk?: () => void;
   navCollapsed: boolean;
   onToggleNav: () => void;
   rightCollapsed: boolean;
@@ -36,6 +38,7 @@ export function TopBar({
   onGoHome,
   onFullscreenError,
   onOpenSettings,
+  onRefreshFromDisk,
   navCollapsed,
   onToggleNav,
   rightCollapsed,
@@ -86,6 +89,18 @@ export function TopBar({
             onClick={() => onOpenTraining?.()}
           >
             训练
+          </button>
+        ) : null}
+        {onRefreshFromDisk ? (
+          <button
+            type="button"
+            className="btnSettingsToggle"
+            onClick={() => onRefreshFromDisk()}
+            disabled={busy}
+            title="从本地磁盘重新加载书架、当前书与章节（未保存的编辑会丢弃）"
+            aria-label="从磁盘刷新"
+          >
+            <IconRefresh />
           </button>
         ) : null}
         <ThemePicker busy={busy} themeId={themeId} onThemeChange={onThemeChange} />
