@@ -105,6 +105,7 @@ import {
   createCharacter,
   mergeCharacterCards,
   listChapters,
+  exportBookTxt,
   listBooks,
   listBookSetupPlans,
   discardBookSetupPlan,
@@ -214,6 +215,7 @@ export function App() {
   /** false:与服务端一致(书按创建时间升序、章节按序号升序);true:倒序展示 */
   const [bookShelfSortDesc, setBookShelfSortDesc] = useState(false);
   const [chapterSortDesc, setChapterSortDesc] = useState(false);
+  const [exportingTxt, setExportingTxt] = useState(false);
   const [chapters, setChapters] = useState<ChapterMeta[]>([]);
   const [statsRefreshKey, setStatsRefreshKey] = useState(0);
   const [selectedChapter, setSelectedChapter] = useState<SelectedChapter>(null);
@@ -2132,6 +2134,20 @@ export function App() {
     setChapterGapModalOpen(true);
   }
 
+  async function onExportBookTxt() {
+    if (!activeBook || exportingTxt) return;
+    setExportingTxt(true);
+    setStatus("");
+    try {
+      await exportBookTxt(activeBook);
+      setStatus("已导出合并 txt");
+    } catch (e: any) {
+      setStatus(e?.message || String(e));
+    } finally {
+      setExportingTxt(false);
+    }
+  }
+
   async function onCreateChapter() {
     if (!activeBook) return;
     if (!chapterTitle.trim()) return;
@@ -3853,6 +3869,8 @@ export function App() {
                       onChapterTitleChange={setChapterTitle}
                       onOpenChapter={(c) => void onOpenChapter(c)}
                       onCreateChapter={() => void onCreateChapter()}
+                      exportingTxt={exportingTxt}
+                      onExportTxt={() => void onExportBookTxt()}
                     />
                   ) : leftTab === "writingBlockRescue" && activeBook ? (
                     <WritingBlockRescueNavTree

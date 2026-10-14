@@ -15,6 +15,8 @@ export type ChapterNavProps = {
   onChapterTitleChange: (title: string) => void;
   onOpenChapter: (chapter: ChapterMeta) => void;
   onCreateChapter: () => void;
+  exportingTxt?: boolean;
+  onExportTxt: () => void;
 };
 
 export function ChapterNav({
@@ -30,7 +32,9 @@ export function ChapterNav({
   onToggleSort,
   onChapterTitleChange,
   onOpenChapter,
-  onCreateChapter
+  onCreateChapter,
+  exportingTxt,
+  onExportTxt
 }: ChapterNavProps) {
   return (
     <div className="chapterNavRoot">
@@ -43,6 +47,15 @@ export function ChapterNav({
           onClick={onToggleSort}
         >
           {chapterSortDesc ? "倒序" : "正序"}
+        </button>
+        <button
+          type="button"
+          className="btnSort"
+          disabled={busy || exportingTxt || chapters.length === 0}
+          title="导出合并正序 txt（通读校对）"
+          onClick={() => onExportTxt()}
+        >
+          {exportingTxt ? "导出中…" : "导出 txt"}
         </button>
       </div>
       <div className="navChapterBody">

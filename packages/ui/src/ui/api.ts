@@ -101,6 +101,37 @@ export async function listChapters(bookId: string) {
   return await http<{ chapters: ChapterMeta[] }>(`/api/books/${encodeURIComponent(bookId)}/chapters`);
 }
 
+export async function exportBookTxt(bookId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/books/${encodeURIComponent(bookId)}/export.txt`);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(parseHttpError(text) || `HTTP ${res.status}`);
+  }
+  const blob = await res.blob();
+  let filename = "book.txt";
+  const cd = res.headers.get("Content-Disposition") || "";
+  const star = cd.match(/filename\*=UTF-8''([^;]+)/i);
+  const plain = cd.match(/filename="([^"]+)"/i);
+  if (star?.[1]) {
+    try {
+      filename = decodeURIComponent(star[1]);
+    } catch {
+      filename = star[1];
+    }
+  } else if (plain?.[1]) {
+    filename = plain[1];
+  }
+  const url = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 export async function createChapter(
   bookId: string,
   input: { title: string; content?: string; chapterIndex?: number }
