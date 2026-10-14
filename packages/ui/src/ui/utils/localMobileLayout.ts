@@ -50,3 +50,10 @@ export function applyLocalMobileLayout(raw: string): string {
 
   return lines.join("\n\n");
 }
+
+/** 正文是否与 {@link applyLocalMobileLayout} 结果不一致；空串或仅空白为 false。 */
+export function needsLocalMobileLayout(raw: string): boolean {
+  const source = raw || "";
+  if (!source.trim()) return false;
+  return applyLocalMobileLayout(source) !== source;
+}

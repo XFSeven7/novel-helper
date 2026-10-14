@@ -2586,6 +2586,12 @@ code {
   color: var(--text);
 }
 
+.centerTop button.needsLayout {
+  border-color: color-mix(in srgb, var(--warning) 55%, var(--border));
+  background: color-mix(in srgb, var(--warning) 14%, var(--panel));
+  color: color-mix(in srgb, var(--warning) 88%, var(--text));
+}
+
 .toggle {
   display: inline-flex;
   align-items: center;

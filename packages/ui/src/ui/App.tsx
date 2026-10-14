@@ -18,7 +18,7 @@ import {
   formatMissingChapterList,
   normalizeChapterGapList
 } from "./utils/chapterFormat";
-import { applyLocalMobileLayout } from "./utils/localMobileLayout";
+import { applyLocalMobileLayout, needsLocalMobileLayout } from "./utils/localMobileLayout";
 import {
   emptyInspGenSlice,
   type InspGenSlice,
@@ -3201,15 +3201,70 @@ export function App() {
   }
 
   /** 顶部一键本地排版：直接写入正文，不进对照 */
-  function applyLocalLayoutToChapter() {
+  async function applyLocalLayoutToChapter() {
     if (!selectedChapter || busy) return;
-    const next = applyLocalMobileLayout(chapterContent);
-    if (next === chapterContent) {
-      setStatus("正文已是本地排版结果");
+    if (needsLocalMobileLayout(chapterContent)) {
+      setChapterContent(applyLocalMobileLayout(chapterContent));
+      setStatus("已应用本地排版到正文");
       return;
     }
-    setChapterContent(next);
-    setStatus("已应用本地排版到正文");
+
+    const currentFilename = selectedChapter.filename;
+    const bookSlug = selectedChapter.bookSlug;
+    const chapterList = chapters;
+    const contents: Array<{ meta: ChapterMeta; content: string } | undefined> = new Array(chapterList.length);
+    let nextIndex = 0;
+    setBusy(true);
+    setStatus("正在检测需要排版的章节…");
+    try {
+      const workers = Array.from({ length: Math.min(4, chapterList.length) }, async () => {
+        while (nextIndex < chapterList.length) {
+          const index = nextIndex++;
+          const meta = chapterList[index];
+          const content =
+            meta.filename === currentFilename
+              ? chapterContent
+              : (await readChapter(bookSlug, meta.filename)).content;
+          if (needsLocalMobileLayout(content)) contents[index] = { meta, content };
+        }
+      });
+      await Promise.all(workers);
+
+      const needing = contents.filter(
+        (item): item is { meta: ChapterMeta; content: string } => item !== undefined
+      );
+      if (!needing.length) {
+        setStatus("正文已是本地排版结果");
+        return;
+      }
+
+      const confirmed = await appConfirm({
+        title: "批量排版",
+        message: `检测到 ${needing.length} 章需要排版，是否批量处理？`,
+        confirmLabel: "批量排版",
+        cancelLabel: "取消"
+      });
+      if (!confirmed) {
+        setStatus("");
+        return;
+      }
+
+      for (let i = 0; i < needing.length; i += 1) {
+        const { meta, content } = needing[i];
+        const next = applyLocalMobileLayout(content);
+        await updateChapter(bookSlug, meta.filename, next);
+        if (meta.filename === currentFilename) {
+          setChapterContent(next);
+          chapterBaselineRef.current = next;
+        }
+        setStatus(`批量排版 ${i + 1}/${needing.length}`);
+      }
+      setStatus(`已批量排版 ${needing.length} 章`);
+    } catch (e: any) {
+      setStatus(e?.message || String(e));
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function onExpandWithTargetWords(targetWords: number, extraContext: string) {
@@ -4275,9 +4330,9 @@ export function App() {
                 </button>
                 <button
                   type="button"
-                  className="btnAuditRead"
-                  disabled={busy || polishModeOn || expandModeOn || !chapterContent.trim()}
-                  onClick={() => applyLocalLayoutToChapter()}
+                  className={`btnAuditRead${needsLocalMobileLayout(chapterContent) ? " needsLayout" : ""}`}
+                  disabled={busy || polishModeOn || expandModeOn}
+                  onClick={() => void applyLocalLayoutToChapter()}
                   title="段首补两个全角空格并去掉顶部章节名，不调用 AI，直接写入正文"
                 >
                   排版
