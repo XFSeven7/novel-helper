@@ -827,10 +827,12 @@ async function allocateChapterFilename(chaptersDir: string, index: number, stem:
   return allocateChapterFilenameExcept(chaptersDir, index, stem, null);
 }
 
+/** 汉字/标点等各算 1，连续英文数字算 1 词（与 UI 一致） */
 export function approximateWordCount(s: string): number {
-  const zh = (s.match(/[\u4e00-\u9fa5]/g) || []).length;
-  const en = (s.replace(/[\u4e00-\u9fa5]/g, " ").match(/[A-Za-z0-9]+/g) || []).length;
-  return zh + en;
+  const noSpace = (s || "").replace(/\s+/g, "");
+  const enWords = noSpace.match(/[A-Za-z0-9]+/g) || [];
+  const rest = noSpace.replace(/[A-Za-z0-9]+/g, "");
+  return rest.length + enWords.length;
 }
 
 function applyChapterHeadingTitle(raw: string, title: string): string {

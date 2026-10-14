@@ -637,9 +637,10 @@ const AUTOSAVE_DEBOUNCE_MS = 900;
 const CHAPTER_TITLE_RENAME_FILE_RE = /^(\d+)_.+\.md$/;
 
 function approximateWordCount(s: string): number {
-  const zh = (s.match(/[\u4e00-\u9fa5]/g) || []).length;
-  const en = (s.replace(/[\u4e00-\u9fa5]/g, " ").match(/[A-Za-z0-9]+/g) || []).length;
-  return zh + en;
+  const noSpace = (s || "").replace(/\s+/g, "");
+  const enWords = noSpace.match(/[A-Za-z0-9]+/g) || [];
+  const rest = noSpace.replace(/[A-Za-z0-9]+/g, "");
+  return rest.length + enWords.length;
 }
 
 function normalizeChapterGapList(raw: number[]): number[] {

@@ -4,11 +4,12 @@ export const AUTOSAVE_DEBOUNCE_MS = 900;
 /** 允许在线改标题的文件名:`序号_任意标题.md` */
 export const CHAPTER_TITLE_RENAME_FILE_RE = /^(\d+)_.+\.md$/;
 
-/** 与服务端一致的近似字数(列表与编辑器共用) */
+/** 与服务端一致的近似字数(列表与编辑器共用)：汉字/标点等各算 1，连续英文数字算 1 词 */
 export function approximateWordCount(s: string): number {
-  const zh = (s.match(/[\u4e00-\u9fa5]/g) || []).length;
-  const en = (s.replace(/[\u4e00-\u9fa5]/g, " ").match(/[A-Za-z0-9]+/g) || []).length;
-  return zh + en;
+  const noSpace = (s || "").replace(/\s+/g, "");
+  const enWords = noSpace.match(/[A-Za-z0-9]+/g) || [];
+  const rest = noSpace.replace(/[A-Za-z0-9]+/g, "");
+  return rest.length + enWords.length;
 }
 
 export function normalizeChapterGapList(raw: number[]): number[] {
