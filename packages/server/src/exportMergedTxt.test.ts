@@ -16,12 +16,12 @@ describe("stripLeadingTitleHeading", () => {
 });
 
 describe("buildMergedBookTxt", () => {
-  it("joins chapters in given order with blank line between", () => {
+  it("joins chapters with blank line after title and two blank lines between chapters", () => {
     const text = buildMergedBookTxt([
       { chapterNo: 1, title: "开端", content: "# 开端\n\n甲" },
       { chapterNo: 2, title: "转折", content: "# 转折\n\n乙" }
     ]);
-    expect(text).toBe("第1章 开端\n甲\n\n第2章 转折\n乙");
+    expect(text).toBe("第1章 开端\n\n甲\n\n\n第2章 转折\n\n乙");
   });
 
   it("keeps caller-provided order (even if numbers look descending)", () => {
@@ -29,7 +29,7 @@ describe("buildMergedBookTxt", () => {
       { chapterNo: 2, title: "后", content: "B" },
       { chapterNo: 1, title: "前", content: "A" }
     ]);
-    expect(text.startsWith("第2章 后\n")).toBe(true);
+    expect(text.startsWith("第2章 后\n\n")).toBe(true);
   });
 });
 

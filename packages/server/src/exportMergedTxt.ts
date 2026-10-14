@@ -18,9 +18,10 @@ export function buildMergedBookTxt(chapters: MergedChapterInput[]): string {
   return chapters
     .map((c) => {
       const body = stripLeadingTitleHeading(c.content, c.title).replace(/\s+$/u, "");
-      return `第${c.chapterNo}章 ${c.title}\n${body}`;
+      // ponytail: 标题与正文空 1 行；章与章空 2 行
+      return `第${c.chapterNo}章 ${c.title}\n\n${body}`;
     })
-    .join("\n\n");
+    .join("\n\n\n");
 }
 
 export function sanitizeExportFilename(bookTitle: string): string {

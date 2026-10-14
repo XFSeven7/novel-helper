@@ -2139,7 +2139,7 @@ export function App() {
     setExportingTxt(true);
     setStatus("");
     try {
-      await exportBookTxt(activeBook);
+      await exportBookTxt(activeBook, activeBookMeta?.title);
       setStatus("已导出合并 txt");
     } catch (e: any) {
       const raw = e?.message || String(e);

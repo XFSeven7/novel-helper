@@ -168,6 +168,7 @@ await app.register(cors, {
   origin: true,
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
+  exposedHeaders: ["Content-Disposition"],
   preflightContinue: false
 });
 await app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024 } });
