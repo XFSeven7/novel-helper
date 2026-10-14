@@ -66,6 +66,10 @@ import {
   listChapterFilenamesOutOfSyncWithLatestDraft
 } from "./chapterVersions.js";
 import {
+  buildMergedBookTxt,
+  sanitizeExportFilename
+} from "./exportMergedTxt.js";
+import {
   readAppConfigFile,
   writeAppConfigFile,
   resolveDataDirWithSource,
@@ -1895,6 +1899,39 @@ app.get("/api/books/:bookId/chapters", async (req) => {
   const params = paramsSchema.parse((req as any).params);
   const chapters = await listChapters(getDataDir(), params.bookId);
   return { chapters };
+});
+
+app.get("/api/books/:bookId/export.txt", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
+  const params = paramsSchema.parse((req as any).params);
+  const books = await listNovels(getDataDir());
+  const book = books.find(
+    (b) => b.bookId === params.bookId || String(b.slug || "").trim() === params.bookId
+  );
+  if (!book) return reply.code(404).send({ message: "Not found" });
+
+  const chapters = await listChapters(getDataDir(), params.bookId);
+  if (chapters.length === 0) return reply.code(400).send({ message: "No chapters" });
+
+  const inputs = [];
+  for (let i = 0; i < chapters.length; i++) {
+    const ch = chapters[i];
+    const content = await readChapter(getDataDir(), params.bookId, ch.filename);
+    const m = ch.filename.match(/^(\d+)_/);
+    const chapterNo = m ? parseInt(m[1], 10) : i + 1;
+    inputs.push({ chapterNo, title: ch.title, content });
+  }
+
+  const text = buildMergedBookTxt(inputs);
+  const downloadName = sanitizeExportFilename(book.title);
+  const asciiName =
+    downloadName.replace(/[^\x20-\x7E]/g, "_").replace(/^_+|_+$/g, "") || "book.txt";
+  const disposition = `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(downloadName)}`;
+
+  return reply
+    .type("text/plain; charset=utf-8")
+    .header("Content-Disposition", disposition)
+    .send(text);
 });
 
 app.post("/api/books/:bookId/chapters", async (req) => {
