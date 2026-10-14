@@ -18,6 +18,7 @@ import {
   formatMissingChapterList,
   normalizeChapterGapList
 } from "./utils/chapterFormat";
+import { applyLocalMobileLayout } from "./utils/localMobileLayout";
 import {
   emptyInspGenSlice,
   type InspGenSlice,
@@ -3199,6 +3200,18 @@ export function App() {
     setStatus("已应用 AI 排版到正文");
   }
 
+  /** 顶部一键本地排版：直接写入正文，不进对照 */
+  function applyLocalLayoutToChapter() {
+    if (!selectedChapter || busy) return;
+    const next = applyLocalMobileLayout(chapterContent);
+    if (next === chapterContent) {
+      setStatus("正文已是本地排版结果");
+      return;
+    }
+    setChapterContent(next);
+    setStatus("已应用本地排版到正文");
+  }
+
   async function onExpandWithTargetWords(targetWords: number, extraContext: string) {
     if (!activeBook || !selectedChapter) return;
     if (!okModelConfigs.length) {
@@ -4259,6 +4272,15 @@ export function App() {
                   title={mobileReading ? "退出移动端阅读预览" : "以手机尺寸预览本章"}
                 >
                   {mobileReading ? "退出移动预览" : "移动端预览"}
+                </button>
+                <button
+                  type="button"
+                  className="btnAuditRead"
+                  disabled={busy || polishModeOn || expandModeOn || !chapterContent.trim()}
+                  onClick={() => applyLocalLayoutToChapter()}
+                  title="段首补两个全角空格并去掉顶部章节名，不调用 AI，直接写入正文"
+                >
+                  排版
                 </button>
                 <button
                   type="button"
