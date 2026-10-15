@@ -102,6 +102,7 @@ import {
   StoryFile,
   createChapter,
   createBook,
+  importBookTxt as importBookTxtApi,
   createCharacter,
   mergeCharacterCards,
   listChapters,
@@ -294,6 +295,7 @@ export function App() {
   const [expandedAuditCharIds, setExpandedAuditCharIds] = useState<Record<string, boolean>>({});
   const [status, setStatus] = useState<string>("");
   const [busy, setBusy] = useState(false);
+  const [importBookTxtBusy, setImportBookTxtBusy] = useState(false);
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQ, setSearchQ] = useState("");
@@ -416,6 +418,7 @@ export function App() {
   );
   const chapterGapTitleInputRef = useRef<HTMLInputElement>(null);
   const createBookTitleInputRef = useRef<HTMLInputElement>(null);
+  const importBookTxtInputRef = useRef<HTMLInputElement | null>(null);
   const chapterTitleSkipBlurRef = useRef(false);
 
   const selectedChapterRef = useRef<SelectedChapter>(null);
@@ -1974,6 +1977,31 @@ export function App() {
       setStatus(e?.message || String(e));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleImportBookTxt(file: File) {
+    setImportBookTxtBusy(true);
+    setStatus("");
+    try {
+      const res = await importBookTxtApi(file);
+      await refreshBooks();
+      setActiveBook(res.book.bookId);
+      setNavHome(false);
+      setNavCollapsed(false);
+      setRightCollapsed(false);
+      setSelectedChapter(null);
+      setSelectedCard(null);
+      if (res.singleChapterFallback) {
+        setStatus("未识别章节标题，已作为单章导入");
+      } else {
+        setStatus(`已导入《${res.book.title}》，共 ${res.chapterCount} 章`);
+      }
+    } catch (e: unknown) {
+      setStatus(e instanceof Error ? e.message : String(e));
+    } finally {
+      setImportBookTxtBusy(false);
+      if (importBookTxtInputRef.current) importBookTxtInputRef.current.value = "";
     }
   }
 
@@ -4530,7 +4558,29 @@ export function App() {
                 shortcutsPanel={<SettingsShortcutsPanel />}
               />
             ) : (
-              <div className="empty centerBodyHint">从左侧书架选择一本书开始。</div>
+              <div className="empty centerBodyHint">
+                <div className="centerBodyHintStack">
+                  <div>从左侧书架选择一本书开始。</div>
+                  <input
+                    ref={importBookTxtInputRef}
+                    type="file"
+                    accept=".txt,text/plain"
+                    style={{ display: "none" }}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) void handleImportBookTxt(f);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="btn"
+                    disabled={importBookTxtBusy || busy}
+                    onClick={() => importBookTxtInputRef.current?.click()}
+                  >
+                    {importBookTxtBusy ? "导入中…" : "导入 txt"}
+                  </button>
+                </div>
+              </div>
             )
           ) : showRelationsCenter ? (
             <RelationsCenter

@@ -38,4 +38,5 @@ export type CopybookProgressFile = {
 };
 
 export const COPYBOOK_MAX_BYTES = 20 * 1024 * 1024;
-export const CHAPTER_HEADING_RE = /^第[一二三四五六七八九十百千万零\d]+章[^\n]*/gm;
+// ponytail: 允许行首空格/全角空格（不少合并 txt 标题前带缩进）
+export const CHAPTER_HEADING_RE = /^[ \t\u3000]*第[一二三四五六七八九十百千万零\d]+章[^\n]*/gm;

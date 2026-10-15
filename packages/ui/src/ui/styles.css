@@ -2756,6 +2756,14 @@ code {
   padding: 24px;
 }
 
+.centerBodyHintStack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  text-align: center;
+}
+
 .centerBookStats {
   flex: 1;
   min-height: 0;

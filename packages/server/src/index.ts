@@ -69,6 +69,7 @@ import {
   buildMergedBookTxt,
   sanitizeExportFilename
 } from "./exportMergedTxt.js";
+import { importBookTxt } from "./importBookTxt.js";
 import {
   readAppConfigFile,
   writeAppConfigFile,
@@ -1836,6 +1837,23 @@ app.post("/api/books", async (req, reply) => {
     return { book: novelSummaryFromMeta(meta, 0, []) };
   } catch (e: any) {
     return reply.code(409).send({ message: e?.message || "Conflict" });
+  }
+});
+
+app.post("/api/books/import-txt", async (req, reply) => {
+  const part = await req.file();
+  if (!part) return reply.code(400).send({ message: "缺少 file 字段" });
+  const chunks: Buffer[] = [];
+  for await (const chunk of part.file) chunks.push(chunk);
+  const buf = Buffer.concat(chunks);
+  try {
+    const result = await importBookTxt(getDataDir(), part.filename || "import.txt", buf);
+    return result;
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("20MB")) return reply.code(413).send({ message: msg });
+    if (msg === "文件为空" || msg.includes("缺少")) return reply.code(400).send({ message: msg });
+    return reply.code(500).send({ message: msg });
   }
 });
 

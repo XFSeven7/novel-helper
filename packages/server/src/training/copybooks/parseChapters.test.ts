@@ -19,4 +19,12 @@ describe("parseChapters", () => {
     const chapters = parseChapters(text);
     expect(chapters).toEqual([{ index: 0, title: "全文", start: 0, end: text.length }]);
   });
+
+  it("matches headings with leading whitespace", () => {
+    const text = " 第1章 无缘\naaa\n\n　第2章 断弦\nbbb";
+    const chapters = parseChapters(text);
+    expect(chapters).toHaveLength(2);
+    expect(chapters[0]!.title).toBe("第1章 无缘");
+    expect(chapters[1]!.title).toBe("第2章 断弦");
+  });
 });

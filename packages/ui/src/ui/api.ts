@@ -75,6 +75,18 @@ export async function createBook(input: { title: string; slug?: string; synopsis
   });
 }
 
+export async function importBookTxt(file: File) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await fetch(`${API_BASE}/api/books/import-txt`, { method: "POST", body: fd });
+  if (!res.ok) throw new Error(parseHttpError(await res.text()) || `HTTP ${res.status}`);
+  return (await res.json()) as {
+    book: BookMeta;
+    chapterCount: number;
+    singleChapterFallback?: boolean;
+  };
+}
+
 export async function patchBookSynopsis(bookId: string, synopsis: string) {
   return await http<{ book: BookMeta }>(`/api/books/${encodeURIComponent(bookId)}`, {
     method: "PATCH",
