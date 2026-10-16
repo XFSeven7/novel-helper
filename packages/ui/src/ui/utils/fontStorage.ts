@@ -1,0 +1,65 @@
+const STYLE_ID = "novel-helper-custom-font";
+
+const SYSTEM_STACK =
+  'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"';
+
+const SANS_STACK =
+  'system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif';
+
+const SERIF_STACK =
+  'ui-serif, "PingFang SC", "Noto Serif SC", "Songti SC", "Source Han Serif SC", serif';
+
+const SONG_STACK = '"Songti SC", SimSun, "Noto Serif SC", serif';
+
+const KAI_STACK = '"Kaiti SC", KaiTi, "STKaiti", serif';
+
+export const FONT_PRESET_STACKS: Record<string, string> = {
+  system: SYSTEM_STACK,
+  sans: SANS_STACK,
+  serif: SERIF_STACK,
+  song: SONG_STACK,
+  kai: KAI_STACK
+};
+
+export function customFontFamilyName(id: string): string {
+  return `NovelHelperCustom-${id}`;
+}
+
+export function customFontIdFromFontId(fontId: string): string | null {
+  if (!fontId.startsWith("custom:")) return null;
+  const id = fontId.slice("custom:".length).trim();
+  return id || null;
+}
+
+export function resolveFontFamily(fontId: string): string {
+  const customId = customFontIdFromFontId(fontId);
+  if (customId) return `"${customFontFamilyName(customId)}", ${SYSTEM_STACK}`;
+  return FONT_PRESET_STACKS[fontId] ?? FONT_PRESET_STACKS.system;
+}
+
+function apiBase(): string {
+  return (import.meta as any).env?.VITE_API_BASE || "http://127.0.0.1:3177";
+}
+
+export function fontFileUrl(id: string): string {
+  return `${apiBase()}/api/fonts/${encodeURIComponent(id)}/file`;
+}
+
+export function applyFontToDocument(fontId: string): void {
+  const root = document.documentElement;
+  const customId = customFontIdFromFontId(fontId);
+  let styleEl = document.getElementById(STYLE_ID) as HTMLStyleElement | null;
+  if (customId) {
+    if (!styleEl) {
+      styleEl = document.createElement("style");
+      styleEl.id = STYLE_ID;
+      document.head.appendChild(styleEl);
+    }
+    const url = fontFileUrl(customId);
+    const family = customFontFamilyName(customId);
+    styleEl.textContent = `@font-face{font-family:"${family}";src:url("${url}");font-display:swap;}`;
+  } else if (styleEl) {
+    styleEl.textContent = "";
+  }
+  root.style.setProperty("--app-font-family", resolveFontFamily(fontId || "system"));
+}
