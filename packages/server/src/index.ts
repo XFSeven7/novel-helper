@@ -1868,6 +1868,28 @@ app.get("/api/books/:bookId", async (req, reply) => {
   return { book };
 });
 
+app.post("/api/books/:bookId/open-directory", async (req, reply) => {
+  const paramsSchema = z.object({ bookId: z.string().min(1) });
+  const params = paramsSchema.parse((req as any).params);
+  const books = await listNovels(getDataDir());
+  const book = books.find(
+    (b) => b.bookId === params.bookId || String(b.slug || "").trim() === params.bookId
+  );
+  if (!book) return reply.code(404).send({ message: "Not found" });
+  const target = path.join(getDataDir(), book.bookId);
+  try {
+    const st = await fs.stat(target);
+    if (!st.isDirectory()) return reply.code(404).send({ message: "Not found" });
+  } catch {
+    return reply.code(404).send({ message: "Not found" });
+  }
+  try {
+    return await openPathInFileManager(target);
+  } catch (e: any) {
+    return reply.code(500).send({ error: e?.message || String(e) });
+  }
+});
+
 app.patch("/api/books/:bookId", async (req, reply) => {
   const paramsSchema = z.object({ bookId: z.string().min(1) });
   const bodySchema = z.object({

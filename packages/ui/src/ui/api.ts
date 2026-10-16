@@ -368,6 +368,13 @@ export async function openAppDataDirectory(dirPath?: string) {
   return result;
 }
 
+export async function openBookDirectory(bookId: string) {
+  return await http<OpenAppDataDirectoryResult>(
+    `/api/books/${encodeURIComponent(bookId)}/open-directory`,
+    { method: "POST" }
+  );
+}
+
 export async function auditChapter(bookId: string, filename: string, modelConfigId: string | null) {
   return await http<{ run: any }>(`/api/books/${encodeURIComponent(bookId)}/chapters/${encodeURIComponent(filename)}/audit`, {
     method: "POST",

@@ -181,6 +181,7 @@ import {
   getChapterReaderComments,
   getChapterVersion,
   restoreChapterVersion,
+  openBookDirectory,
   type ChapterVersionMeta
 } from "./api";
 import type { BookSearchGroup, BookSearchHit } from "./api";
@@ -4733,6 +4734,15 @@ export function App() {
             }}
             onDeleteBook={() => activeBookMeta && openDeleteBookModal(activeBookMeta)}
             onClearAudit={openClearBookAuditModal}
+            onOpenLocalFolder={async () => {
+              if (!activeBook) return;
+              try {
+                await openBookDirectory(activeBook);
+                setStatus("已在文件管理器中打开本书文件夹。");
+              } catch (e: any) {
+                setStatus(e?.message || String(e));
+              }
+            }}
             onOpenPlanning={openPlanningFromBook}
           />
         ) : !rightCollapsed ? (

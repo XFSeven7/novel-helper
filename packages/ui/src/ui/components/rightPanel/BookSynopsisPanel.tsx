@@ -11,6 +11,7 @@ export type BookSynopsisPanelProps = {
   onToggleCompleted: () => void | Promise<void>;
   onClearAudit: () => void;
   onDeleteBook: () => void;
+  onOpenLocalFolder: () => void | Promise<void>;
   onOpenPlanning?: () => void;
 };
 
@@ -24,6 +25,7 @@ export function BookSynopsisPanel({
   onToggleCompleted,
   onClearAudit,
   onDeleteBook,
+  onOpenLocalFolder,
   onOpenPlanning
 }: BookSynopsisPanelProps) {
   return (
@@ -44,6 +46,15 @@ export function BookSynopsisPanel({
               onClick={() => void onToggleCompleted()}
             >
               {activeBookMeta.completed ? "取消完结" : "完结书籍"}
+            </button>
+            <button
+              type="button"
+              className="btnSort"
+              disabled={busy || !activeBook}
+              onClick={() => void onOpenLocalFolder()}
+              title="在文件管理器中打开本书本地文件夹"
+            >
+              打开本地文件夹
             </button>
             <button
               type="button"
