@@ -2097,6 +2097,7 @@ export function App() {
       await refreshStory(bookSlug);
       await refreshTimelineIndex(bookSlug).catch(() => {});
       await refreshBooks();
+      setOutlineRefreshKey((k) => k + 1);
 
       setCurrentChapterEditorHash(null);
       currentChapterEditorHashRef.current = null;

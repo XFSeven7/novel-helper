@@ -1,5 +1,8 @@
-import React from "react";
+import React, { useMemo } from "react";
 import type { ChapterMeta } from "../../api";
+import { useOptionalOutlineBook } from "../../context/OutlineBookContext";
+import { useVolumeTreeCollapsed } from "../../hooks/useVolumeTreeCollapsed";
+import { groupChaptersByVolumes } from "../../utils/outlineVolumeGroups";
 
 export type ChapterNavProps = {
   chapters: ChapterMeta[];
@@ -19,6 +22,47 @@ export type ChapterNavProps = {
   onExportTxt: () => void;
 };
 
+function ChapterNavItem({
+  chapter,
+  selected,
+  busy,
+  isAudited,
+  hasChanges,
+  draftOut,
+  onOpen
+}: {
+  chapter: ChapterMeta;
+  selected: boolean;
+  busy: boolean;
+  isAudited: boolean;
+  hasChanges: boolean;
+  draftOut: boolean;
+  onOpen: (c: ChapterMeta) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`treeChild chapterNavItem ${selected ? "active" : ""}`}
+      onClick={() => void onOpen(chapter)}
+      disabled={busy}
+    >
+      <span className="chapterNavItemMain">
+        <span className="chapterNavDraftMark" title={draftOut ? "相对最新存稿有变动或尚未存稿" : undefined}>
+          {draftOut ? "*" : "\u00a0"}
+        </span>
+        <span className="chapterNavItemTitle">{chapter.id}</span>
+      </span>
+      <span className="chapterNavRightMeta">
+        <span className={`chapterNavAuditStatus ${isAudited ? "ok" : "miss"}`}>
+          {hasChanges ? <span className="chapterNavAuditChanged">有改动 </span> : null}
+          {isAudited ? "已分析" : "未分析"}
+        </span>
+        <span className="chapterNavWordCount">{chapter.wordCount ?? 0} 字</span>
+      </span>
+    </button>
+  );
+}
+
 export function ChapterNav({
   chapters,
   displayedChapters,
@@ -36,6 +80,28 @@ export function ChapterNav({
   exportingTxt,
   onExportTxt
 }: ChapterNavProps) {
+  const outlineCtx = useOptionalOutlineBook();
+  const outline = outlineCtx?.outline;
+  const { isExpanded, toggle } = useVolumeTreeCollapsed(outlineCtx?.bookId);
+
+  const groups = useMemo(
+    () => groupChaptersByVolumes(displayedChapters, outline),
+    [displayedChapters, outline]
+  );
+
+  const renderChapter = (c: ChapterMeta) => (
+    <ChapterNavItem
+      key={c.filename}
+      chapter={c}
+      selected={selectedChapterFilename === c.filename}
+      busy={busy}
+      isAudited={auditedChapterFilenames.has(c.filename)}
+      hasChanges={auditChangedChapterFilenames.has(c.filename)}
+      draftOut={chaptersDraftOutOfSync.has(c.filename)}
+      onOpen={onOpenChapter}
+    />
+  );
+
   return (
     <div className="chapterNavRoot">
       <div className="navSortBar">
@@ -63,42 +129,29 @@ export function ChapterNav({
           <div className="tree navListDense chapterNavList">
             {chapters.length === 0 ? (
               <div className="empty">暂无章节,请在下方新建。</div>
-            ) : (
-              displayedChapters.map((c) => {
-                const isAudited = auditedChapterFilenames.has(c.filename);
-                const hasChanges = auditChangedChapterFilenames.has(c.filename);
-                const draftOut = chaptersDraftOutOfSync.has(c.filename);
+            ) : groups ? (
+              groups.map((g) => {
+                const open = isExpanded(g.key);
                 return (
-                <button
-                  key={c.filename}
-                  type="button"
-                  className={`treeChild chapterNavItem ${selectedChapterFilename === c.filename ? "active" : ""}`}
-                  onClick={() => void onOpenChapter(c)}
-                  disabled={busy}
-                >
-                  <span className="chapterNavItemMain">
-                    <span
-                      className="chapterNavDraftMark"
-                      title={draftOut ? "相对最新存稿有变动或尚未存稿" : undefined}
+                  <div key={g.key} className="volumeTreeGroup">
+                    <button
+                      type="button"
+                      className="volumeTreeHeader"
+                      aria-expanded={open}
+                      onClick={() => toggle(g.key)}
                     >
-                      {draftOut ? "*" : "\u00a0"}
-                    </span>
-                    <span className="chapterNavItemTitle">{c.id}</span>
-                  </span>
-                  <span className="chapterNavRightMeta">
-                    <span
-                      className={`chapterNavAuditStatus ${
-                        isAudited ? "ok" : "miss"
-                      }`}
-                    >
-                      {hasChanges ? <span className="chapterNavAuditChanged">有改动 </span> : null}
-                      {isAudited ? "已分析" : "未分析"}
-                    </span>
-                    <span className="chapterNavWordCount">{c.wordCount ?? 0} 字</span>
-                  </span>
-                </button>
-              );
+                      <span className="volumeTreeChevron" aria-hidden>
+                        {open ? "▾" : "▸"}
+                      </span>
+                      <span className="volumeTreeTitle">{g.title}</span>
+                      <span className="volumeTreeCount">{g.chapters.length}</span>
+                    </button>
+                    {open ? <div className="volumeTreeChildren">{g.chapters.map(renderChapter)}</div> : null}
+                  </div>
+                );
               })
+            ) : (
+              displayedChapters.map(renderChapter)
             )}
           </div>
         </div>

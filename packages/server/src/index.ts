@@ -98,6 +98,7 @@ import { resolveDataDir, safeSlug } from "./paths.js";
 import { computeBookStats } from "./bookStats.js";
 import {
   ensureOutlineIndex,
+  ensureOutlineWithNewChapter,
   writeOutlineIndex,
   validateOutlineAgainstChapters,
   mergeOutlinePreview,
@@ -2003,7 +2004,7 @@ app.post("/api/books/:bookId/chapters", async (req) => {
   const body = bodySchema.parse((req as any).body);
   const chapter = await createChapter(getDataDir(), params.bookId, body.title, body.content, body.chapterIndex);
   const allChapters = await listChapters(getDataDir(), params.bookId);
-  await ensureOutlineIndex(getDataDir(), params.bookId, allChapters);
+  await ensureOutlineWithNewChapter(getDataDir(), params.bookId, allChapters, chapter.filename);
   return { chapter };
 });
 

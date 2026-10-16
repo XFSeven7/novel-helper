@@ -1205,6 +1205,89 @@ code {
   min-height: 0;
 }
 
+.volumeTreeGroup {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.volumeTreeHeader {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 6px 10px;
+  border: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  border-radius: 0;
+  background: color-mix(in srgb, var(--panel2, var(--panel)) 55%, transparent);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.volumeTreeHeader:hover {
+  background: color-mix(in srgb, var(--panel2, var(--panel)) 80%, transparent);
+}
+
+.volumeTreeChevron {
+  flex-shrink: 0;
+  width: 1em;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1;
+}
+
+.volumeTreeTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.volumeTreeCount {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.volumeTreeChildren {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.outlineVolumeTreeHeader {
+  margin: 4px 0 2px;
+  padding: 4px 6px;
+  border: none;
+  border-radius: 4px;
+  border-bottom: none;
+  background: transparent;
+}
+
+.outlineVolumeTreeHeader:hover {
+  background: color-mix(in srgb, var(--border) 40%, transparent);
+}
+
+.outlineSplitLeft .volumeTreeChildren .treeChild {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 3px 4px 3px 14px;
+  font-size: 11px;
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tree.navListDense {
   gap: 0;
 }
@@ -6631,6 +6714,63 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   justify-content: space-between;
   gap: 6px;
   padding: 2px 0;
+}
+
+.outlineChapterFromVol {
+  flex-shrink: 0;
+  font-size: 10px;
+  margin-left: 6px;
+}
+
+.outlineChapterName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.outlineChapterAddBtn {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 2px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.25;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.outlineChapterAddBtn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--border) 45%, transparent);
+}
+
+.outlineChapterAddBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.outlineChapterList li:has(.outlineChapterAddBtn) {
+  justify-content: flex-start;
+  gap: 4px;
+}
+
+.outlineSplitLeft .treeChild {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  width: 100%;
 }
 
 .outlineAiJson,

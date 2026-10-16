@@ -2,6 +2,14 @@ import React, { useMemo, useState } from "react";
 import type { ChapterMeta, OutlineAiMode, OutlineIndex, OutlineStageNode, VolumeOutline } from "../../api";
 import { useOptionalOutlineBook } from "../../context/OutlineBookContext";
 import { useOutline } from "../../hooks/useOutline";
+import { useVolumeTreeCollapsed } from "../../hooks/useVolumeTreeCollapsed";
+import { UNGROUPED_VOLUME_KEY } from "../../utils/outlineVolumeGroups";
+import {
+  assignAllContiguousToVolume,
+  assignableFilenamesForVolume,
+  assignContiguousToVolume,
+  removeContiguousFromVolume
+} from "../../utils/outlineVolumeAssign";
 import { OutlineAiPreviewModal } from "./OutlineAiPreviewModal";
 import { OutlineStageTree } from "./OutlineStageTree";
 import { OutlineTextarea } from "./OutlineTextarea";
@@ -83,7 +91,8 @@ export function OutlineWorkspace({
     return <OutlineEmpty>{err || "无法加载大纲"}</OutlineEmpty>;
   }
 
-  const disabled = busy || saving || aiBusy;
+  // ponytail: autosave must not disable inputs — HTML disabled blurs the focused field
+  const disabled = busy || aiBusy;
 
   const triggerAi = async (mode: OutlineAiMode, extra?: { volumeId?: string; chapterFilename?: string }) => {
     setLastAiMode(mode);
@@ -135,28 +144,19 @@ export function OutlineWorkspace({
     setSubTab("volumes");
   };
 
+  const chapterOrder = useMemo(() => chapters.map((c) => c.filename), [chapters]);
+
+  // ponytail: volumes are sequential contiguous blocks along chapterOrder
   const assignToVolume = (volumeId: string, filename: string) => {
-    updateOutline((prev) => {
-      const volumes = prev.volumes.map((v) => {
-        const without = v.chapterFilenames.filter((f) => f !== filename);
-        if (v.id === volumeId) return { ...v, chapterFilenames: [...without, filename] };
-        return { ...v, chapterFilenames: without };
-      });
-      const ungroupedFilenames = prev.ungroupedFilenames.filter((f) => f !== filename);
-      return { ...prev, volumes, ungroupedFilenames };
-    });
+    updateOutline((prev) => assignContiguousToVolume(prev, volumeId, filename, chapterOrder));
+  };
+
+  const assignAllUngroupedToVolume = (volumeId: string) => {
+    updateOutline((prev) => assignAllContiguousToVolume(prev, volumeId, chapterOrder));
   };
 
   const removeFromVolume = (volumeId: string, filename: string) => {
-    updateOutline((prev) => {
-      const volumes = prev.volumes.map((v) =>
-        v.id === volumeId ? { ...v, chapterFilenames: v.chapterFilenames.filter((f) => f !== filename) } : v
-      );
-      const ungroupedFilenames = prev.ungroupedFilenames.includes(filename)
-        ? prev.ungroupedFilenames
-        : [...prev.ungroupedFilenames, filename];
-      return { ...prev, volumes, ungroupedFilenames };
-    });
+    updateOutline((prev) => removeContiguousFromVolume(prev, volumeId, filename, chapterOrder));
   };
 
   const updateChapterPlan = (filename: string, patch: Partial<OutlineIndex["chapterPlans"][string]>) => {
@@ -259,7 +259,9 @@ export function OutlineWorkspace({
               volumes: prev.volumes.map((v) => (v.id === vol.id ? vol : v))
             }))
           }
+          chapterOrder={chapterOrder}
           onAssign={assignToVolume}
+          onAssignAllUngrouped={assignAllUngroupedToVolume}
           onRemove={removeFromVolume}
           onDeleteVolume={deleteVolume}
           onBatchPlans={(volumeId) => void triggerAi("volumeChapterPlans", { volumeId })}
@@ -268,6 +270,7 @@ export function OutlineWorkspace({
 
       {subTab === "chapters" ? (
         <ChaptersPanel
+          bookId={slug}
           outline={outline}
           chapterByFilename={chapterByFilename}
           chapterCount={chapters.length}
@@ -460,12 +463,14 @@ function BookPanel(props: {
 function VolumesPanel(props: {
   outline: OutlineIndex;
   chapters: ChapterMeta[];
+  chapterOrder: string[];
   selectedVolume: VolumeOutline | null;
   disabled: boolean;
   onSelectVolume: (id: string) => void;
   onAddVolume: () => void;
   onUpdateVolume: (vol: VolumeOutline) => void;
   onAssign: (volumeId: string, filename: string) => void;
+  onAssignAllUngrouped: (volumeId: string) => void;
   onRemove: (volumeId: string, filename: string) => void;
   onDeleteVolume: (volumeId: string) => void;
   onBatchPlans: (volumeId: string) => void;
@@ -473,18 +478,40 @@ function VolumesPanel(props: {
   const {
     outline,
     chapters,
+    chapterOrder,
     selectedVolume,
     disabled,
     onSelectVolume,
     onAddVolume,
     onUpdateVolume,
     onAssign,
+    onAssignAllUngrouped,
     onRemove,
     onDeleteVolume,
     onBatchPlans
   } = props;
   const vol = selectedVolume;
-  const inVol = new Set(vol?.chapterFilenames || []);
+  const chapterByFilename = useMemo(() => new Map(chapters.map((c) => [c.filename, c])), [chapters]);
+  const inAnyVolume = useMemo(() => {
+    const s = new Set<string>();
+    for (const v of outline.volumes) for (const f of v.chapterFilenames) s.add(f);
+    return s;
+  }, [outline.volumes]);
+  const ungroupedChapters = useMemo(
+    () => chapterOrder.map((f) => chapterByFilename.get(f)).filter((c): c is ChapterMeta => Boolean(c) && !inAnyVolume.has(c.filename)),
+    [chapterOrder, chapterByFilename, inAnyVolume]
+  );
+  const assignableFiles = useMemo(
+    () => (vol ? assignableFilenamesForVolume(outline, vol.id, chapterOrder) : []),
+    [vol, outline, chapterOrder]
+  );
+  const volTitleById = useMemo(() => new Map(outline.volumes.map((v) => [v.id, v.title])), [outline.volumes]);
+  const ownerByFile = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const v of outline.volumes) for (const f of v.chapterFilenames) m.set(f, v.id);
+    return m;
+  }, [outline.volumes]);
+
   return (
     <div className="outlineSplit">
       <div className="outlineSplitLeft">
@@ -500,9 +527,13 @@ function VolumesPanel(props: {
               onClick={() => onSelectVolume(v.id)}
             >
               {v.title}
+              <span className="volumeTreeCount">{v.chapterFilenames.length}</span>
             </button>
           ))}
         </div>
+        <p className="outlineVolumeLabel">
+          未分卷 <span className="volumeTreeCount">{ungroupedChapters.length}</span>
+        </p>
       </div>
       <div className="outlineSplitRight">
         {vol ? (
@@ -534,36 +565,81 @@ function VolumesPanel(props: {
                 删除本卷
               </button>
             </div>
-            <p className="outlineLabel">卷内章节</p>
+            <p className="outlineLabel">卷内章节（{vol.chapterFilenames.length}）</p>
             <ul className="outlineChapterList">
-              {vol.chapterFilenames.map((f) => {
-                const c = chapters.find((x) => x.filename === f);
-                return (
-                  <li key={f}>
-                    {c?.id || f}
-                    <button type="button" disabled={disabled} onClick={() => onRemove(vol.id, f)}>
-                      移出
-                    </button>
-                  </li>
-                );
-              })}
+              {vol.chapterFilenames.length === 0 ? (
+                <li className="muted">暂无章节</li>
+              ) : (
+                vol.chapterFilenames.map((f) => {
+                  const c = chapterByFilename.get(f);
+                  return (
+                    <li key={f}>
+                      <span className="outlineChapterName">{c?.id || f}</span>
+                      <button
+                        type="button"
+                        className="outlineStageTreeAct outlineStageTreeAct--danger"
+                        disabled={disabled}
+                        title="移出本章及之后各章"
+                        aria-label="移出本章及之后各章"
+                        onClick={() => onRemove(vol.id, f)}
+                      >
+                        ×
+                      </button>
+                    </li>
+                  );
+                })
+              )}
             </ul>
-            <p className="outlineLabel">未分卷（点击加入本卷）</p>
+            <p className="outlineLabel">按顺序可加入（点到哪章，中间一并加入）</p>
+            <button
+              type="button"
+              className="btnSort"
+              disabled={disabled || assignableFiles.length === 0}
+              onClick={() => onAssignAllUngrouped(vol.id)}
+            >
+              全部加入「{vol.title}」
+            </button>
             <ul className="outlineChapterList">
-              {outline.ungroupedFilenames.map((f) => {
-                const c = chapters.find((x) => x.filename === f);
-                return (
-                  <li key={f}>
-                    <button type="button" disabled={disabled || inVol.has(f)} onClick={() => onAssign(vol.id, f)}>
-                      + {c?.id || f}
-                    </button>
-                  </li>
-                );
-              })}
+              {assignableFiles.length === 0 ? (
+                <li className="muted">没有可按顺序加入的章节（需接在本卷之后）</li>
+              ) : (
+                assignableFiles.map((f) => {
+                  const c = chapterByFilename.get(f);
+                  const fromId = ownerByFile.get(f);
+                  const fromTitle = fromId && fromId !== vol.id ? volTitleById.get(fromId) : null;
+                  return (
+                    <li key={f}>
+                      <button
+                        type="button"
+                        className="outlineChapterAddBtn"
+                        disabled={disabled}
+                        onClick={() => onAssign(vol.id, f)}
+                      >
+                        + {c?.id || f}
+                      </button>
+                      {fromTitle ? <span className="muted outlineChapterFromVol">{fromTitle}</span> : null}
+                    </li>
+                  );
+                })
+              )}
             </ul>
           </>
         ) : (
-          <p className="muted">请新建或选择分卷</p>
+          <>
+            <p className="muted">请新建或选择分卷以分配章节（须按全书顺序连续分卷）</p>
+            <p className="outlineLabel">未分卷（{ungroupedChapters.length}）</p>
+            <ul className="outlineChapterList">
+              {ungroupedChapters.length === 0 ? (
+                <li className="muted">暂无未分卷章节</li>
+              ) : (
+                ungroupedChapters.map((c) => (
+                  <li key={c.filename}>
+                    <span className="outlineChapterName">{c.id}</span>
+                  </li>
+                ))
+              )}
+            </ul>
+          </>
         )}
       </div>
     </div>
@@ -571,6 +647,7 @@ function VolumesPanel(props: {
 }
 
 function ChaptersPanel(props: {
+  bookId: string;
   outline: OutlineIndex;
   chapterByFilename: Map<string, ChapterMeta>;
   chapterCount: number;
@@ -584,6 +661,7 @@ function ChaptersPanel(props: {
   onFromChapters: () => void;
 }) {
   const {
+    bookId,
     outline,
     chapterByFilename,
     chapterCount,
@@ -627,7 +705,7 @@ function ChaptersPanel(props: {
         </p>
       </div>
       <div className="outlineSplit">
-      <ChapterTree outline={outline} treeChapters={treeChapters} />
+      <ChapterTree bookId={bookId} outline={outline} treeChapters={treeChapters} />
       <div className="outlineSplitRight">
         {filename && ch ? (
           <>
@@ -766,28 +844,49 @@ function SnowflakeDialog({
 }
 
 function ChapterTree({
+  bookId,
   outline,
   treeChapters
 }: {
+  bookId: string;
   outline: OutlineIndex;
   treeChapters: (filenames: string[]) => React.ReactNode;
 }) {
+  const { isExpanded, toggle } = useVolumeTreeCollapsed(bookId);
+  const volumes = useMemo(
+    () => [...outline.volumes].sort((a, b) => a.order - b.order || a.title.localeCompare(b.title, "zh")),
+    [outline.volumes]
+  );
+
+  const renderGroup = (key: string, title: string, filenames: string[]) => {
+    const open = isExpanded(key);
+    return (
+      <div key={key} className="volumeTreeGroup">
+        <button
+          type="button"
+          className="volumeTreeHeader outlineVolumeTreeHeader"
+          aria-expanded={open}
+          onClick={() => toggle(key)}
+        >
+          <span className="volumeTreeChevron" aria-hidden>
+            {open ? "▾" : "▸"}
+          </span>
+          <span className="volumeTreeTitle">{title}</span>
+          <span className="volumeTreeCount">{filenames.length}</span>
+        </button>
+        {open ? <div className="volumeTreeChildren">{treeChapters(filenames)}</div> : null}
+      </div>
+    );
+  };
+
   return (
     <div className="outlineSplitLeft tree">
-      {outline.volumes.map((v) => (
-        <div key={v.id}>
-          <VolumeLabel>{v.title}</VolumeLabel>
-          {treeChapters(v.chapterFilenames)}
-        </div>
-      ))}
-      <VolumeLabel>未分卷</VolumeLabel>
-      {treeChapters(outline.ungroupedFilenames)}
+      {volumes.map((v) => renderGroup(v.id, v.title, v.chapterFilenames))}
+      {outline.ungroupedFilenames.length
+        ? renderGroup(UNGROUPED_VOLUME_KEY, "未分卷", outline.ungroupedFilenames)
+        : null}
     </div>
   );
-}
-
-function VolumeLabel({ children }: { children: React.ReactNode }) {
-  return <div className="outlineVolumeLabel">{children}</div>;
 }
 
 function ChapterPlanHeader({

@@ -308,6 +308,40 @@ export async function ensureOutlineIndex(
   return existing;
 }
 
+/** Append a chapter to the highest-order volume (no-op if no volumes or already assigned). */
+export function appendChapterToLatestVolume(idx: OutlineIndex, filename: string): OutlineIndex {
+  const fn = String(filename || "").trim();
+  if (!fn || !idx.volumes.length) return idx;
+  if (idx.volumes.some((v) => v.chapterFilenames.includes(fn))) return idx;
+
+  const latest = [...idx.volumes].sort(
+    (a, b) => a.order - b.order || a.title.localeCompare(b.title, "zh")
+  )[idx.volumes.length - 1]!;
+
+  return {
+    ...idx,
+    volumes: idx.volumes.map((v) =>
+      v.id === latest.id
+        ? { ...v, chapterFilenames: [...v.chapterFilenames.filter((f) => f !== fn), fn] }
+        : { ...v, chapterFilenames: v.chapterFilenames.filter((f) => f !== fn) }
+    ),
+    ungroupedFilenames: idx.ungroupedFilenames.filter((f) => f !== fn)
+  };
+}
+
+/** After creating a chapter file: reconcile outline, then put it on the latest volume. */
+export async function ensureOutlineWithNewChapter(
+  dataDir: string,
+  novelSlug: string,
+  chapters: ChapterMeta[],
+  newFilename: string
+): Promise<OutlineIndex> {
+  const base = await ensureOutlineIndex(dataDir, novelSlug, chapters);
+  const next = appendChapterToLatestVolume(base, newFilename);
+  if (next === base) return base;
+  return writeOutlineIndex(dataDir, novelSlug, next);
+}
+
 export function validateOutlineAgainstChapters(idx: OutlineIndex, chapterFilenames: string[]): string[] {
   const valid = new Set(chapterFilenames);
   const warnings: string[] = [];

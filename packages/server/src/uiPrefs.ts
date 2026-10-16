@@ -23,6 +23,8 @@ export type UiPrefsBookSlice = {
   outline?: {
     stageSplitRatio?: number;
     stageTreeExpandedIds?: string[];
+    /** volume ids (and `__ungrouped__`) that are collapsed; default = all expanded */
+    volumeTreeCollapsedIds?: string[];
   };
 };
 
@@ -138,7 +140,8 @@ function normalizeBookSlice(raw: unknown): UiPrefsBookSlice | undefined {
     const ratio = asFiniteNumber(ol.stageSplitRatio);
     out.outline = {
       stageSplitRatio: ratio === undefined ? undefined : clamp(ratio, 0.32, 0.68),
-      stageTreeExpandedIds: asStringArray(ol.stageTreeExpandedIds)
+      stageTreeExpandedIds: asStringArray(ol.stageTreeExpandedIds),
+      volumeTreeCollapsedIds: asStringArray(ol.volumeTreeCollapsedIds)
     };
   }
 

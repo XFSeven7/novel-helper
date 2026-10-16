@@ -18,7 +18,8 @@ export function StageOutlineCenterTop({
   const ctx = useOptionalOutlineBook();
   const outline = ctx?.outline;
   const saving = ctx?.saving ?? false;
-  const disabled = busy || saving || (ctx?.aiBusy ?? false);
+  // ponytail: autosave must not disable inputs — HTML disabled blurs the focused field
+  const disabled = busy || (ctx?.aiBusy ?? false);
   const roots = stageRoots(outline?.book.mainlineStages);
   const found = selectedId ? findStageNode(roots, selectedId) : null;
 
@@ -84,9 +85,9 @@ export function StageOutlineCenterBody({
 }) {
   const ctx = useOptionalOutlineBook();
   const outline = ctx?.outline;
-  const saving = ctx?.saving ?? false;
   const noteDisabled = busy || (ctx?.aiBusy ?? false);
-  const chatDisabled = busy || saving || (ctx?.aiBusy ?? false);
+  // ponytail: same as title — don't blur chat while autosave runs
+  const chatDisabled = busy || (ctx?.aiBusy ?? false);
 
   useEffect(() => {
     if (!selectedId || !outline) return;

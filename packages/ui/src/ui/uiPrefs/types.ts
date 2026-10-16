@@ -19,6 +19,8 @@ export type UiPrefsBookSlice = {
   outline?: {
     stageSplitRatio?: number;
     stageTreeExpandedIds?: string[];
+    /** volume ids (and `__ungrouped__`) that are collapsed; default = all expanded */
+    volumeTreeCollapsedIds?: string[];
   };
 };
 
