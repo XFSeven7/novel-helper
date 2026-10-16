@@ -1,34 +1,47 @@
 import { useEffect, useRef, useState } from "react";
-import { LAYOUT3_SPLIT_STORAGE_KEY } from "../constants";
 import { clamp } from "../utils/math";
-import { useLocalStorageState } from "./useLocalStorageState";
+import { useUiPrefField } from "../uiPrefs/UiPrefsContext";
+import type { UiPrefsLayout3Splits } from "../uiPrefs/types";
 
 const GUIDANCE_W_MIN = 280;
 const GUIDANCE_W_MAX = 560;
 const GUIDANCE_W_DEFAULT = 400;
 const RIGHT_W_MIN = 320;
 
+const DEFAULT_SPLITS: UiPrefsLayout3Splits = {
+  navW: 320,
+  guidanceW: GUIDANCE_W_DEFAULT,
+  rightW: 420
+};
+
+function clampSplits(s: UiPrefsLayout3Splits): UiPrefsLayout3Splits {
+  return {
+    navW: clamp(s.navW, 240, 560),
+    guidanceW: clamp(s.guidanceW, GUIDANCE_W_MIN, GUIDANCE_W_MAX),
+    rightW: clamp(s.rightW, RIGHT_W_MIN, 720)
+  };
+}
+
 export function useLayout3Splitters() {
-  const [splits, setSplits] = useLocalStorageState<{ navW: number; guidanceW: number; rightW: number }>({
-    key: LAYOUT3_SPLIT_STORAGE_KEY,
-    defaultValue: { navW: 320, guidanceW: GUIDANCE_W_DEFAULT, rightW: 420 },
-    parse: (raw) => {
-      try {
-        const parsed = raw ? JSON.parse(raw) : null;
-        const navW = typeof parsed?.navW === "number" ? parsed.navW : 320;
-        const guidanceW =
-          typeof parsed?.guidanceW === "number" ? parsed.guidanceW : GUIDANCE_W_DEFAULT;
-        const rightW = typeof parsed?.rightW === "number" ? parsed.rightW : 420;
-        return {
-          navW: clamp(navW, 240, 560),
-          guidanceW: clamp(guidanceW, GUIDANCE_W_MIN, GUIDANCE_W_MAX),
-          rightW: clamp(rightW, RIGHT_W_MIN, 720)
-        };
-      } catch {
-        return { navW: 320, guidanceW: GUIDANCE_W_DEFAULT, rightW: 420 };
-      }
-    }
+  const [splitsRaw, setSplitsRaw] = useUiPrefField("layout3Splits", DEFAULT_SPLITS);
+  const splits = clampSplits({
+    navW: typeof splitsRaw.navW === "number" ? splitsRaw.navW : DEFAULT_SPLITS.navW,
+    guidanceW: typeof splitsRaw.guidanceW === "number" ? splitsRaw.guidanceW : DEFAULT_SPLITS.guidanceW,
+    rightW: typeof splitsRaw.rightW === "number" ? splitsRaw.rightW : DEFAULT_SPLITS.rightW
   });
+  const setSplits = (
+    updater: UiPrefsLayout3Splits | ((prev: UiPrefsLayout3Splits) => UiPrefsLayout3Splits)
+  ) => {
+    setSplitsRaw((prev) => {
+      const base = clampSplits({
+        navW: typeof prev?.navW === "number" ? prev.navW : DEFAULT_SPLITS.navW,
+        guidanceW: typeof prev?.guidanceW === "number" ? prev.guidanceW : DEFAULT_SPLITS.guidanceW,
+        rightW: typeof prev?.rightW === "number" ? prev.rightW : DEFAULT_SPLITS.rightW
+      });
+      const next = typeof updater === "function" ? updater(base) : updater;
+      return clampSplits(next);
+    });
+  };
 
   const [dragging, setDragging] = useState<null | "nav" | "guidance" | "right">(null);
   const dragStartRef = useRef<{
@@ -66,7 +79,7 @@ export function useLayout3Splitters() {
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [dragging, setSplits]);
+  }, [dragging]);
 
   return {
     navW: splits.navW,

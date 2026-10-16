@@ -6,7 +6,7 @@ import {
   sortGuidanceSessions,
   useWritingGuidance
 } from "../../hooks/useWritingGuidance";
-import { useLocalStorageState } from "../../hooks/useLocalStorageState";
+import { EMPTY_STRING_ARR, useBookUiPrefField } from "../../uiPrefs/UiPrefsContext";
 import {
   isChatNearBottom,
   scrollChatToBottom,
@@ -90,16 +90,13 @@ function WritingGuidanceProviderInner({
   children: React.ReactNode;
 }) {
   const guidance = useWritingGuidance(bookId);
-  const [sortDesc, setSortDesc] = useLocalStorageState<boolean>({
-    key: `novel-helper-writing-guidance-sort-${bookId}`,
-    defaultValue: true,
-    parse: (raw) => raw === "desc",
-    serialize: (v) => (v ? "desc" : "asc")
-  });
-  const [activeNotebookId, setActiveNotebookId] = useLocalStorageState<string>({
-    key: `novel-helper-writing-guidance-active-notebook-${bookId}`,
-    defaultValue: BUILT_IN_NOTEBOOK_ID
-  });
+  const [sortDesc, setSortDesc] = useBookUiPrefField(bookId, "writingGuidance", "sortDesc", true);
+  const [activeNotebookId, setActiveNotebookId] = useBookUiPrefField(
+    bookId,
+    "writingGuidance",
+    "activeNotebookId",
+    BUILT_IN_NOTEBOOK_ID
+  );
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [composer, setComposer] = useState("");
   const [streaming, setStreaming] = useState(false);
@@ -112,24 +109,19 @@ function WritingGuidanceProviderInner({
   const chatScrollRef = useRef<HTMLDivElement>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const turnAnchorsRef = useRef<Map<string, HTMLElement>>(new Map());
-  const [expandedRaw, setExpandedRaw] = useLocalStorageState<string>({
-    key: `novel-helper-writing-guidance-expanded-${bookId}`,
-    defaultValue: "[]"
-  });
-  const expandedSessionIds = useMemo(() => {
-    try {
-      const arr = JSON.parse(expandedRaw) as unknown;
-      return new Set(Array.isArray(arr) ? arr.filter((x) => typeof x === "string") : []);
-    } catch {
-      return new Set<string>();
-    }
-  }, [expandedRaw]);
-  const [showStarredOnly, setShowStarredOnly] = useLocalStorageState<boolean>({
-    key: `novel-helper-writing-guidance-starred-only-${bookId}`,
-    defaultValue: false,
-    parse: (raw) => raw === "1",
-    serialize: (v) => (v ? "1" : "0")
-  });
+  const [expandedIds, setExpandedIds] = useBookUiPrefField(
+    bookId,
+    "writingGuidance",
+    "expandedSessionIds",
+    EMPTY_STRING_ARR
+  );
+  const expandedSessionIds = useMemo(() => new Set(expandedIds), [expandedIds]);
+  const [showStarredOnly, setShowStarredOnly] = useBookUiPrefField(
+    bookId,
+    "writingGuidance",
+    "showStarredOnly",
+    false
+  );
   const [revealAllTurnsSessionId, setRevealAllTurnsSessionId] = useState<string | null>(null);
   const [showHiddenInChat, setShowHiddenInChat] = useState(false);
   const [hiddenBucketOpen, setHiddenBucketOpen] = useState<Set<string>>(new Set());
@@ -155,9 +147,9 @@ function WritingGuidanceProviderInner({
       const next = new Set(expandedSessionIds);
       if (next.has(sessionId)) next.delete(sessionId);
       else next.add(sessionId);
-      setExpandedRaw(JSON.stringify([...next]));
+      setExpandedIds([...next]);
     },
-    [expandedSessionIds, setExpandedRaw]
+    [expandedSessionIds, setExpandedIds]
   );
 
   const applyExpandedToSessions = useCallback(
@@ -167,9 +159,9 @@ function WritingGuidanceProviderInner({
         if (expand) next.add(id);
         else next.delete(id);
       }
-      setExpandedRaw(JSON.stringify([...next]));
+      setExpandedIds([...next]);
     },
-    [expandedSessionIds, setExpandedRaw]
+    [expandedSessionIds, setExpandedIds]
   );
 
   const toggleHiddenBucket = useCallback((sessionId: string) => {
@@ -235,7 +227,7 @@ function WritingGuidanceProviderInner({
       setSelectedSessionId(sessionId);
       const nextExpanded = new Set(expandedSessionIds);
       nextExpanded.add(sessionId);
-      setExpandedRaw(JSON.stringify([...nextExpanded]));
+      setExpandedIds([...nextExpanded]);
       onStatus?.("已新建指导");
       queueMicrotask(() => composerRef.current?.focus());
     } catch (e: unknown) {
@@ -246,7 +238,7 @@ function WritingGuidanceProviderInner({
     activeNotebook,
     guidance,
     expandedSessionIds,
-    setExpandedRaw,
+    setExpandedIds,
     setShowStarredOnly,
     onStatus
   ]);
@@ -269,7 +261,7 @@ function WritingGuidanceProviderInner({
       setRevealAllTurnsSessionId(sessionId);
       const nextExpanded = new Set(expandedSessionIds);
       nextExpanded.add(sessionId);
-      setExpandedRaw(JSON.stringify([...nextExpanded]));
+      setExpandedIds([...nextExpanded]);
       setComposer("");
       setStreaming(true);
       setStreamDraft("");
@@ -294,7 +286,7 @@ function WritingGuidanceProviderInner({
     activeModelId,
     onStatus,
     expandedSessionIds,
-    setExpandedRaw
+    setExpandedIds
   ]);
 
   const startRenameNotebook = (nb: { id: string; name: string }) => {

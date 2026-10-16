@@ -1,32 +1,24 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
 import {
   DEFAULT_TRAINING_GRADING_MODE,
   type TrainingGradingMode
 } from "../components/training/gradingModeLabels";
+import { useUiPrefField } from "../uiPrefs/UiPrefsContext";
 
-const STORAGE_KEY = "novel-helper.trainingGradingMode";
-
-function readStored(): TrainingGradingMode {
-  try {
-    const v = localStorage.getItem(STORAGE_KEY);
-    if (v === "infernal" || v === "strict" || v === "honest") return v;
-  } catch {
-    /* */
-  }
+function asMode(v: string | undefined): TrainingGradingMode {
+  if (v === "infernal" || v === "strict" || v === "honest") return v;
   return DEFAULT_TRAINING_GRADING_MODE;
 }
 
 export function useTrainingGradingMode() {
-  const [mode, setModeState] = useState<TrainingGradingMode>(() => readStored());
-
-  const setMode = useCallback((next: TrainingGradingMode) => {
-    setModeState(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      /* */
-    }
-  }, []);
+  const [raw, setRaw] = useUiPrefField("trainingGradingMode", DEFAULT_TRAINING_GRADING_MODE);
+  const mode = asMode(raw);
+  const setMode = useCallback(
+    (next: TrainingGradingMode) => {
+      setRaw(next);
+    },
+    [setRaw]
+  );
 
   return { mode, setMode };
 }

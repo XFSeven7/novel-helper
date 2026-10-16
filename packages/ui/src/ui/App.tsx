@@ -4,8 +4,6 @@ import {
   type CharacterRole,
   MODEL_ACTIVE_ID_STORAGE_KEY,
   MODEL_CONFIGS_STORAGE_KEY,
-  NAV_COLLAPSED_STORAGE_KEY,
-  RIGHT_COLLAPSED_STORAGE_KEY,
   type ThemeId
 } from "./constants";
 import { auditCharacterNewBadgeClass, auditCharacterRoleClass } from "./utils/auditCharacters";
@@ -36,7 +34,7 @@ import {
   parseModelConfigId,
   resolveModelSelectLabel
 } from "./utils/modelSelectOptions";
-import { applyThemeToDocument, loadThemeId, saveThemeId } from "./utils/themeStorage";
+import { applyThemeToDocument, loadThemeId, isThemeId } from "./utils/themeStorage";
 import { clamp } from "./utils/math";
 import {
   auditDirtyIgnoreKey,
@@ -95,7 +93,7 @@ import { WritingBlockRescueOpsPanel } from "./components/writingBlockRescue/Writ
 import { postWritingBlockRescue } from "./api";
 import { appConfirm } from "./dialog/dialog";
 import { useLayout3Splitters } from "./hooks/useLayout3Splitters";
-import { useLocalStorageState } from "./hooks/useLocalStorageState";
+import { useUiPrefField } from "./uiPrefs/UiPrefsContext";
 import {
   ChapterMeta,
   BookMeta,
@@ -215,8 +213,8 @@ export function App() {
   /** true:左侧显示书架;false:左侧显示当前书的章节 */
   const [navHome, setNavHome] = useState(true);
   /** false:与服务端一致(书按创建时间升序、章节按序号升序);true:倒序展示 */
-  const [bookShelfSortDesc, setBookShelfSortDesc] = useState(false);
-  const [chapterSortDesc, setChapterSortDesc] = useState(false);
+  const [bookShelfSortDesc, setBookShelfSortDesc] = useUiPrefField("bookShelfSortDesc", false);
+  const [chapterSortDesc, setChapterSortDesc] = useUiPrefField("chapterSortDesc", false);
   const [exportingTxt, setExportingTxt] = useState(false);
   const [chapters, setChapters] = useState<ChapterMeta[]>([]);
   const [statsRefreshKey, setStatsRefreshKey] = useState(0);
@@ -225,10 +223,9 @@ export function App() {
 
   const [createBookModalOpen, setCreateBookModalOpen] = useState(false);
   const [bookSetupWizardOpen, setBookSetupWizardOpen] = useState(false);
-  const [shelfTab, setShelfTab] = useLocalStorageState<BookShelfTabId>({
-    key: "novel-helper-shelf-tab",
-    defaultValue: "books"
-  });
+  const [shelfTabRaw, setShelfTabRaw] = useUiPrefField("shelfTab", "books");
+  const shelfTab: BookShelfTabId = shelfTabRaw === "planning" ? "planning" : "books";
+  const setShelfTab = (tab: BookShelfTabId) => setShelfTabRaw(tab);
   const [bookSetupPlans, setBookSetupPlans] = useState<BookSetupPlanEntry[]>([]);
   const [bookSetupSessionId, setBookSetupSessionId] = useState<string | null>(null);
   const [outlineRefreshKey, setOutlineRefreshKey] = useState(0);
@@ -334,7 +331,9 @@ export function App() {
   const serverDraftOutOfSyncRef = useRef<string[]>([]);
   const latestHistoryHashByChapterRef = useRef<Record<string, string | null>>({});
   const currentChapterEditorHashRef = useRef<string | null>(null);
-  const [themeId, setThemeId] = useState<ThemeId>(() => loadThemeId());
+  const [themeIdRaw, setThemeIdRaw] = useUiPrefField("themeId", loadThemeId());
+  const themeId: ThemeId = isThemeId(themeIdRaw) ? themeIdRaw : loadThemeId();
+  const setThemeId = (id: ThemeId) => setThemeIdRaw(id);
   const [fullscreenOn, setFullscreenOn] = useState(false);
   const [{ configs: modelConfigs, activeId: activeModelId }, setModelState] = useState(() =>
     loadModelConfigs()
@@ -348,18 +347,8 @@ export function App() {
   const [featureSettings, setFeatureSettings] = useState<FeatureModelsResponse | null>(null);
   const [featureSettingsDraft, setFeatureSettingsDraft] = useState<FeatureModelsResponse | null>(null);
   const [featureSaveBusy, setFeatureSaveBusy] = useState(false);
-  const [navCollapsed, setNavCollapsed] = useLocalStorageState<boolean>({
-    key: NAV_COLLAPSED_STORAGE_KEY,
-    defaultValue: false,
-    parse: (raw) => raw === "1",
-    serialize: (v) => (v ? "1" : "0")
-  });
-  const [rightCollapsed, setRightCollapsed] = useLocalStorageState<boolean>({
-    key: RIGHT_COLLAPSED_STORAGE_KEY,
-    defaultValue: false,
-    parse: (raw) => raw === "1",
-    serialize: (v) => (v ? "1" : "0")
-  });
+  const [navCollapsed, setNavCollapsed] = useUiPrefField("navCollapsed", false);
+  const [rightCollapsed, setRightCollapsed] = useUiPrefField("rightCollapsed", false);
 
   const {
     navW: layout3NavW,
@@ -1002,10 +991,6 @@ export function App() {
 
   useLayoutEffect(() => {
     applyThemeToDocument(themeId);
-  }, [themeId]);
-
-  useEffect(() => {
-    saveThemeId(themeId);
   }, [themeId]);
 
   useEffect(() => {
@@ -1807,7 +1792,7 @@ export function App() {
     await flushCardSave();
     await flushSynopsisSave();
     setNavHome(true);
-    setRightCollapsed(false);
+    // ponytail: 不碰 rightCollapsed——已是服务端 UI 偏好，返回书架不应改写
     setHomeCenterTab("welcome");
     setActiveBook("");
     setSelectedChapter(null);
@@ -1828,8 +1813,6 @@ export function App() {
     await flushSynopsisSave();
     setActiveBook(b.bookId);
     setNavHome(false);
-    setNavCollapsed(false);
-    setRightCollapsed(false);
     setSelectedChapter(null);
     setSelectedCard(null);
     setChapterContent("");
@@ -1952,8 +1935,6 @@ export function App() {
     setShelfTab("books");
     setActiveBook(book.bookId);
     setNavHome(false);
-    setNavCollapsed(false);
-    setRightCollapsed(false);
     setStatus(`已创建书籍：${book.title}`);
   }
 
@@ -1971,8 +1952,6 @@ export function App() {
       await refreshBooks();
       setActiveBook(book.bookId);
       setNavHome(false);
-      setNavCollapsed(false);
-      setRightCollapsed(false);
       setStatus(`已创建书籍:${book.title}`);
     } catch (e: any) {
       setStatus(e?.message || String(e));
@@ -1989,8 +1968,6 @@ export function App() {
       await refreshBooks();
       setActiveBook(res.book.bookId);
       setNavHome(false);
-      setNavCollapsed(false);
-      setRightCollapsed(false);
       setSelectedChapter(null);
       setSelectedCard(null);
       if (res.singleChapterFallback) {
@@ -2111,8 +2088,6 @@ export function App() {
       if (bookSlug !== activeBook) {
         setActiveBook(bookSlug);
         setNavHome(false);
-        setNavCollapsed(false);
-        setRightCollapsed(false);
         setSelectedCard(null);
         setCardContent("");
         cardBaselineRef.current = "";

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { OutlineStageNode } from "../../api";
-import { useLocalStorageState } from "../../hooks/useLocalStorageState";
+import { EMPTY_STRING_ARR, useBookUiPrefField } from "../../uiPrefs/UiPrefsContext";
 import { appConfirm } from "../../dialog/dialog";
 import {
   findStageNode,
@@ -51,12 +51,13 @@ export function OutlineStageTree({
   ensureExpandedIds = []
 }: Props) {
   const roots = stageRoots(stagesProp);
-  const storageKey = `novel-helper-stage-tree-expanded:${bookId}`;
 
-  const [expandedIds, setExpandedIds] = useLocalStorageState<string[]>({
-    key: storageKey,
-    defaultValue: []
-  });
+  const [expandedIds, setExpandedIds] = useBookUiPrefField(
+    bookId,
+    "outline",
+    "stageTreeExpandedIds",
+    EMPTY_STRING_ARR
+  );
 
   const highlightSet = useMemo(() => new Set(highlightIds), [highlightIds]);
 

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import type { BookNoteEntry, BookNotebook } from "../../api";
 import { appAlert, appConfirm } from "../../dialog/dialog";
 import { sortNoteEntries, useBookNotes } from "../../hooks/useBookNotes";
-import { useLocalStorageState } from "../../hooks/useLocalStorageState";
+import { EMPTY_BOOL_RECORD, useBookUiPrefField } from "../../uiPrefs/UiPrefsContext";
 
 const BUILT_IN_NOTEBOOK_ID = "planning";
 const PREVIEW_LEN = 80;
@@ -38,20 +38,19 @@ export type BookNotesPanelProps = {
 
 export function BookNotesPanel({ bookId, busy, onStatus, focusRequest = 0 }: BookNotesPanelProps) {
   const notes = useBookNotes(bookId);
-  const [sortDesc, setSortDesc] = useLocalStorageState<boolean>({
-    key: `novel-helper-notes-sort-${bookId}`,
-    defaultValue: true,
-    parse: (raw) => raw === "desc",
-    serialize: (v) => (v ? "desc" : "asc")
-  });
-  const [collapsed, setCollapsed] = useLocalStorageState<Record<string, boolean>>({
-    key: `novel-helper-notes-collapsed-${bookId}`,
-    defaultValue: {}
-  });
-  const [activeNotebookId, setActiveNotebookId] = useLocalStorageState<string>({
-    key: `novel-helper-notes-active-notebook-${bookId}`,
-    defaultValue: BUILT_IN_NOTEBOOK_ID
-  });
+  const [sortDesc, setSortDesc] = useBookUiPrefField(bookId, "notes", "sortDesc", true);
+  const [collapsed, setCollapsed] = useBookUiPrefField(
+    bookId,
+    "notes",
+    "collapsed",
+    EMPTY_BOOL_RECORD
+  );
+  const [activeNotebookId, setActiveNotebookId] = useBookUiPrefField(
+    bookId,
+    "notes",
+    "activeNotebookId",
+    BUILT_IN_NOTEBOOK_ID
+  );
 
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);

@@ -1,26 +1,28 @@
 import { useEffect, useRef, useState } from "react";
 import { clamp } from "../utils/math";
-import { useLocalStorageState } from "./useLocalStorageState";
+import { useUiPrefs } from "../uiPrefs/UiPrefsContext";
 
 const MIN_PANE_PX = 280;
 
 export function useTrainingWorkbenchSplit(mode: "learn" | "practice" | "copybook") {
-  const storageKey =
-    mode === "learn"
-      ? "training:splitRatio:learn"
-      : mode === "copybook"
-        ? "training:splitRatio:copybook"
-        : "training:splitRatio:practice";
-
-  const [ratio, setRatio] = useLocalStorageState<number>({
-    key: storageKey,
-    defaultValue: 0.5,
-    parse: (raw) => {
-      const n = raw ? Number(raw) : 0.5;
-      return clamp(Number.isFinite(n) ? n : 0.5, 0.25, 0.75);
-    },
-    serialize: (v) => String(v)
-  });
+  const { prefs, patch } = useUiPrefs();
+  const ratioRaw = prefs.trainingSplitRatio?.[mode];
+  const ratio = clamp(Number.isFinite(ratioRaw) ? (ratioRaw as number) : 0.5, 0.25, 0.75);
+  const setRatio = (updater: number | ((prev: number) => number)) => {
+    const prev = clamp(
+      Number.isFinite(prefs.trainingSplitRatio?.[mode])
+        ? (prefs.trainingSplitRatio![mode] as number)
+        : 0.5,
+      0.25,
+      0.75
+    );
+    const next = typeof updater === "function" ? updater(prev) : updater;
+    patch({
+      trainingSplitRatio: {
+        [mode]: clamp(next, 0.25, 0.75)
+      }
+    });
+  };
 
   const [dragging, setDragging] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -46,7 +48,7 @@ export function useTrainingWorkbenchSplit(mode: "learn" | "practice" | "copybook
       window.removeEventListener("mousemove", onMove);
       window.removeEventListener("mouseup", onUp);
     };
-  }, [dragging, setRatio]);
+  }, [dragging]);
 
   function startDrag(ev: React.MouseEvent) {
     const el = containerRef.current;

@@ -79,6 +79,7 @@ import {
 } from "./appConfig.js";
 import { pickDataDirectory } from "./nativeFolderPicker.js";
 import { openPathInFileManager } from "./openPathInFileManager.js";
+import { patchUiPrefs, readUiPrefs, type UiPrefsFile } from "./uiPrefs.js";
 import {
   clearDataDirCaches,
   getDataDir,
@@ -1713,6 +1714,22 @@ app.get("/api/settings/app", async (): Promise<AppSettingsResponse> => {
     ...base,
     fileDataDir: base.envLocked ? null : fileDataDir
   };
+});
+
+app.get("/api/settings/ui-prefs", async () => {
+  return await readUiPrefs();
+});
+
+app.patch("/api/settings/ui-prefs", async (req, reply) => {
+  const body = (req as any).body;
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return reply.code(400).send({ error: "Expected object body" });
+  }
+  try {
+    return await patchUiPrefs(body as Partial<UiPrefsFile>);
+  } catch (e: any) {
+    return reply.code(500).send({ error: e?.message || String(e) });
+  }
 });
 
 app.put("/api/settings/app", async (req, reply) => {

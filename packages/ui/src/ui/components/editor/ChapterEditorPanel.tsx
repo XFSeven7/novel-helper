@@ -15,9 +15,10 @@ import { insertNewlineAtTextarea } from "../../utils/chapterEditorShortcutUtils"
 import { applyLocalMobileLayout } from "../../utils/localMobileLayout";
 import { ChapterEditorContent, type ChapterEditorContentProps } from "./ChapterEditorContent";
 import { ChapterFindReplaceBar } from "./ChapterFindReplaceBar";
-import { clampMobileFontPx, readStoredMobileFontPx, storeMobileFontPx } from "./mobileFontSize";
+import { clampMobileFontPx, MOBILE_FONT_PX_DEFAULT } from "./mobileFontSize";
 import { useChapterEditorShortcuts } from "../../hooks/useChapterEditorShortcuts";
 import { useMobilePhoneWidth } from "../../hooks/useMobilePhoneWidth";
+import { useUiPrefField } from "../../uiPrefs/UiPrefsContext";
 import { useSyncScrollPair } from "../../hooks/useSyncScrollPair";
 import { MobileRawView } from "./MobileRawView";
 import { MobileTopToolbar } from "./MobileTopToolbar";
@@ -53,7 +54,8 @@ export function ChapterEditorPanel({
   ...contentProps
 }: ChapterEditorPanelProps) {
   const [mobileCompareOn, setMobileCompareOn] = useState(false);
-  const [mobileFontPx, setMobileFontPx] = useState(readStoredMobileFontPx);
+  const [mobileFontPxRaw, setMobileFontPx] = useUiPrefField("mobileFontPx", MOBILE_FONT_PX_DEFAULT);
+  const mobileFontPx = clampMobileFontPx(mobileFontPxRaw);
   const { width: phoneW, dragging: phoneWDragging, startDrag: startPhoneWDrag } = useMobilePhoneWidth();
   const [compareOriginal, setCompareOriginal] = useState("");
   const [localCompareDraft, setLocalCompareDraft] = useState("");
@@ -244,12 +246,8 @@ export function ChapterEditorPanel({
   }, [mobileLayout?.original]);
 
   const changeFontSize = useCallback((delta: number) => {
-    setMobileFontPx((prev) => {
-      const next = clampMobileFontPx(prev + delta);
-      storeMobileFontPx(next);
-      return next;
-    });
-  }, []);
+    setMobileFontPx((prev) => clampMobileFontPx(prev + delta));
+  }, [setMobileFontPx]);
 
   const showHistory =
     historyPaneOpen && !mobileReading && !contentProps.polishModeOn && !contentProps.expandModeOn;

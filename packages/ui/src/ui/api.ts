@@ -1,3 +1,6 @@
+import type { UiPrefsFile, UiPrefsPatch } from "./uiPrefs/types";
+export type { UiPrefsFile, UiPrefsPatch };
+
 export type BookMeta = {
   bookId: string;
   title: string;
@@ -373,6 +376,17 @@ export async function openBookDirectory(bookId: string) {
     `/api/books/${encodeURIComponent(bookId)}/open-directory`,
     { method: "POST" }
   );
+}
+
+export async function getUiPrefs() {
+  return await http<UiPrefsFile>(`/api/settings/ui-prefs`);
+}
+
+export async function patchUiPrefsApi(patch: UiPrefsPatch) {
+  return await http<UiPrefsFile>(`/api/settings/ui-prefs`, {
+    method: "PATCH",
+    body: JSON.stringify(patch)
+  });
 }
 
 export async function auditChapter(bookId: string, filename: string, modelConfigId: string | null) {

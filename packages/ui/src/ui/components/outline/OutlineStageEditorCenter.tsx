@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import type { OutlineIndex, OutlineStageNode } from "../../api";
-import { useLocalStorageState } from "../../hooks/useLocalStorageState";
+import { useBookUiPrefField } from "../../uiPrefs/UiPrefsContext";
 import { clamp } from "../../utils/math";
 import { collectStagePathLabels, findStageNode, stageRoots } from "../../utils/outlineStageTree";
 import { OutlineStageChatColumn } from "./OutlineStageChatColumn";
@@ -38,15 +38,24 @@ export function OutlineStageEditorCenter({
   const roots = stageRoots(stages);
   const found = selectedId ? findStageNode(roots, selectedId) : null;
 
-  const [leftRatio, setLeftRatio] = useLocalStorageState<number>({
-    key: `novel-helper-stage-split-ratio:${bookId}`,
-    defaultValue: 0.58,
-    parse: (raw) => {
-      const n = Number(raw);
-      return Number.isFinite(n) ? clamp(n, 0.32, 0.68) : 0.58;
-    },
-    serialize: (v) => String(clamp(v, 0.32, 0.68))
-  });
+  const [leftRatioRaw, setLeftRatioRaw] = useBookUiPrefField(
+    bookId,
+    "outline",
+    "stageSplitRatio",
+    0.58
+  );
+  const leftRatio = clamp(
+    Number.isFinite(leftRatioRaw) ? leftRatioRaw : 0.58,
+    0.32,
+    0.68
+  );
+  const setLeftRatio = (updater: number | ((prev: number) => number)) => {
+    setLeftRatioRaw((prev) => {
+      const base = clamp(Number.isFinite(prev) ? prev : 0.58, 0.32, 0.68);
+      const next = typeof updater === "function" ? updater(base) : updater;
+      return clamp(next, 0.32, 0.68);
+    });
+  };
 
   const [dragging, setDragging] = useState(false);
   const splitRef = useRef<HTMLDivElement>(null);

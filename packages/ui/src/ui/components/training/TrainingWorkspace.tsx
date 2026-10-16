@@ -36,6 +36,7 @@ import { TrainingSceneChat } from "./TrainingSceneChat";
 import { TrainingWorkbenchSplit } from "./TrainingWorkbenchSplit";
 import { TrainingTopBar } from "./TrainingTopBar";
 import { useTrainingTreeNavWidth } from "../../hooks/useTrainingTreeNavWidth";
+import { useTrainingGradingMode } from "../../hooks/useTrainingGradingMode";
 import { appConfirm } from "../../dialog/dialog";
 
 type Screen = "practice" | "records";
@@ -84,6 +85,7 @@ export function TrainingWorkspace(props: {
   const [deleteCopybookBusy, setDeleteCopybookBusy] = useState(false);
   const importInputRef = useRef<HTMLInputElement>(null);
   const treeNav = useTrainingTreeNavWidth();
+  const { setMode: setTrainingGradingMode } = useTrainingGradingMode();
   const copybookActive = selection?.kind === "copybook";
 
   const isCopybookScene =
@@ -283,11 +285,7 @@ export function TrainingWorkspace(props: {
         gradingMode: res.attempt.gradingMode ?? mode,
         answerText: res.attempt.text ?? answer
       });
-      try {
-        localStorage.setItem("novel-helper.trainingGradingMode", mode);
-      } catch {
-        /* */
-      }
+      setTrainingGradingMode(mode);
       await refreshTree();
       const { attempts: list } = await getTrainingQuestionAttempts(question.id);
       setAttempts(list);
