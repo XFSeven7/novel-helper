@@ -17,7 +17,7 @@ export type FontPreset = { id: string; displayName: string };
 
 export const FONT_PRESETS: FontPreset[] = [
   { id: "system", displayName: "系统默认" },
-  { id: "harmony", displayName: "鸿蒙黑体（近苹方）" },
+  { id: "harmony", displayName: "鸿蒙黑体" },
   { id: "sourceHan", displayName: "思源黑体" },
   { id: "noto", displayName: "Noto Sans SC" },
   { id: "yahei", displayName: "微软雅黑" },
