@@ -54,6 +54,9 @@ code {
 }
 
 .topbar {
+  /* backdrop-filter 会自成层叠上下文；无 z-index 时下拉会被下方 layout 盖住 */
+  position: relative;
+  z-index: 100;
   padding: 14px 18px;
   display: flex;
   align-items: center;
