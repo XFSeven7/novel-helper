@@ -60,4 +60,34 @@ describe("fontStorage", () => {
       });
     }
   });
+
+  it.each([undefined, "", "system"])("clears the app font for %s", (fontId) => {
+    const properties = new Map([["--app-font-family", "stale-font"]]);
+    const styleElement = { id: "novel-helper-custom-font", textContent: "stale-face" };
+    const previousDocument = globalThis.document;
+    Object.defineProperty(globalThis, "document", {
+      configurable: true,
+      value: {
+        documentElement: {
+          style: {
+            removeProperty: (name: string) => properties.delete(name),
+            setProperty: (name: string, value: string) => properties.set(name, value)
+          }
+        },
+        getElementById: (id: string) =>
+          id === "novel-helper-custom-font" ? styleElement : null
+      }
+    });
+
+    try {
+      fontStorage.applyFontToDocument(fontId);
+      expect(properties.has("--app-font-family")).toBe(false);
+      expect(styleElement.textContent).toBe("");
+    } finally {
+      Object.defineProperty(globalThis, "document", {
+        configurable: true,
+        value: previousDocument
+      });
+    }
+  });
 });

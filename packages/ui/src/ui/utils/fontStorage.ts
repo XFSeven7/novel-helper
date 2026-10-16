@@ -61,9 +61,9 @@ export function ensureCustomFontFaces(ids: string[]): void {
     .join("\n");
 }
 
-export function applyFontToDocument(fontId: string): void {
+export function applyFontToDocument(fontId?: string): void {
   const root = document.documentElement;
-  const customId = customFontIdFromFontId(fontId);
+  const customId = fontId ? customFontIdFromFontId(fontId) : null;
   let styleEl = document.getElementById(STYLE_ID) as HTMLStyleElement | null;
   if (customId) {
     if (!styleEl) {
@@ -77,5 +77,9 @@ export function applyFontToDocument(fontId: string): void {
   } else if (styleEl) {
     styleEl.textContent = "";
   }
-  root.style.setProperty("--app-font-family", resolveFontFamily(fontId || "system"));
+  if (!fontId || fontId === "system") {
+    root.style.removeProperty("--app-font-family");
+  } else {
+    root.style.setProperty("--app-font-family", resolveFontFamily(fontId));
+  }
 }

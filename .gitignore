@@ -11,6 +11,7 @@ out/
 *.tsbuildinfo
 
 docs/superpowers/
+.superpowers/
 
 # 本地应用配置（数据目录路径等）
 .novel-helper/

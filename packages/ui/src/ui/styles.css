@@ -11,16 +11,29 @@ body {
   height: 100%;
 }
 
-:root {
-  --app-font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial,
-    "Apple Color Emoji", "Segoe UI Emoji";
-}
-
 body {
   margin: 0;
-  font-family: var(--app-font-family);
+  font-family: var(
+    --app-font-family,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    Segoe UI,
+    Roboto,
+    Helvetica,
+    Arial,
+    "Apple Color Emoji",
+    "Segoe UI Emoji"
+  );
   background: var(--bg);
   color: var(--text);
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
 }
 
 *::-webkit-scrollbar {
@@ -2976,7 +2989,7 @@ code {
   outline: none;
   color: var(--text);
   background: rgba(255, 255, 255, 0.05);
-  font-family: var(--app-font-family), ui-serif, "PingFang SC", "Noto Serif SC", "Songti SC", "Source Han Serif SC", serif;
+  font-family: var(--app-font-family, ui-serif, "PingFang SC", "Noto Serif SC", "Songti SC", "Source Han Serif SC", serif);
 }
 
 .bookOverviewTopRow {
@@ -3583,7 +3596,7 @@ code {
 
 .chapterTextareaHighlight.mobileTextarea {
   padding: 12px;
-  font-family: var(--app-font-family), ui-serif, "PingFang SC", "Noto Serif SC", "Songti SC", "Source Han Serif SC", serif;
+  font-family: var(--app-font-family, ui-serif, "PingFang SC", "Noto Serif SC", "Songti SC", "Source Han Serif SC", serif);
 }
 
 .chapterTextareaHighlight mark.findHighlight {
@@ -5203,7 +5216,7 @@ code {
   color: var(--text);
   font-size: 17px;
   line-height: 1.85;
-  font-family: var(--app-font-family), ui-serif, "PingFang SC", "Noto Serif SC", "Songti SC", "Source Han Serif SC", serif;
+  font-family: var(--app-font-family, ui-serif, "PingFang SC", "Noto Serif SC", "Songti SC", "Source Han Serif SC", serif);
   overflow-wrap: anywhere;
   word-break: break-word;
   -webkit-overflow-scrolling: touch;
@@ -5253,7 +5266,7 @@ code {
   color: var(--text);
   font-size: 17px;
   line-height: 1.88;
-  font-family: var(--app-font-family), ui-serif, "PingFang SC", "Noto Serif SC", "Songti SC", "Source Han Serif SC", serif;
+  font-family: var(--app-font-family, ui-serif, "PingFang SC", "Noto Serif SC", "Songti SC", "Source Han Serif SC", serif);
   overflow-wrap: anywhere;
   word-break: break-word;
   -webkit-overflow-scrolling: touch;
@@ -5371,7 +5384,7 @@ code {
   outline: none;
   color: var(--text);
   background: rgba(255, 255, 255, 0.06);
-  font-family: var(--app-font-family), ui-serif, "PingFang SC", "Noto Serif SC", "Songti SC", "Source Han Serif SC", serif;
+  font-family: var(--app-font-family, ui-serif, "PingFang SC", "Noto Serif SC", "Songti SC", "Source Han Serif SC", serif);
 }
 
 .auditReader {
