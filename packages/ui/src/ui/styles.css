@@ -133,6 +133,80 @@ code {
   overflow-x: hidden;
 }
 
+.settingsAppearance {
+  max-width: 720px;
+  padding: 14px;
+}
+
+.settingsAppearance .settingsSection + .settingsSection {
+  margin-top: 20px;
+}
+
+.settingsAppearance .settingsSectionTitle {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settingsAppearance .fontPickList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settingsAppearance .fontPickItem {
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.settingsAppearance .fontPickItem.active {
+  border-color: var(--accent);
+}
+
+.settingsAppearance .fontPickRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.settingsAppearance .fontPickRow .fontPickItem {
+  flex: 1;
+}
+
+.settingsAppearance .fontUploadRow {
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.settingsAppearance .fontUploadInput {
+  display: none;
+}
+
+.settingsAppearance .fontPreviewBox {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.settingsAppearance .fontPreviewSmall {
+  font-size: 14px;
+}
+
+.settingsAppearance .fontPreviewMedium {
+  font-size: 16px;
+}
+
+.settingsAppearance .fontPreviewLarge {
+  font-size: 20px;
+}
+
 .settingsDataDirPanel {
   display: flex;
   flex-direction: column;

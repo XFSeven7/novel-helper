@@ -68,6 +68,7 @@ import { getFullscreenElement, isAltEnter, toggleDocumentFullscreen } from "./co
 import { TopBar } from "./components/layout/TopBar";
 import { TrainingWorkspace } from "./components/training/TrainingWorkspace";
 import { SettingsPage, type SettingsTabId } from "./components/settings/SettingsPage";
+import { SettingsAppearancePanel } from "./components/settings/SettingsAppearancePanel";
 import { SettingsFeaturesPanel } from "./components/settings/SettingsFeaturesPanel";
 import { SettingsShortcutsPanel } from "./components/settings/SettingsShortcutsPanel";
 import { SettingsModelsPanel } from "./components/settings/SettingsModelsPanel";
@@ -4528,6 +4529,7 @@ export function App() {
                     setStatus={setStatus}
                   />
                 }
+                appearancePanel={<SettingsAppearancePanel />}
                 dataDirPanel={
                   <SettingsDataDirPanel
                     busy={busy}

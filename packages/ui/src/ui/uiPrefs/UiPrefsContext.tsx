@@ -10,6 +10,7 @@ import React, {
   type SetStateAction
 } from "react";
 import { getUiPrefs, patchUiPrefsApi } from "../api";
+import { applyFontToDocument } from "../utils/fontStorage";
 import { applyThemeToDocument, isThemeId, saveThemeId } from "../utils/themeStorage";
 import {
   clearMigratedLocalStorageKeys,
@@ -57,6 +58,7 @@ export function UiPrefsProvider({ children }: { children: React.ReactNode }) {
         saveThemeId(saved.themeId);
         applyThemeToDocument(saved.themeId);
       }
+      if (saved.fontId) applyFontToDocument(saved.fontId);
     } catch {
       // 保留乐观本地态
     }
@@ -71,6 +73,7 @@ export function UiPrefsProvider({ children }: { children: React.ReactNode }) {
         saveThemeId(p.themeId);
         applyThemeToDocument(p.themeId);
       }
+      if (p.fontId) applyFontToDocument(p.fontId);
 
       if (timerRef.current != null) window.clearTimeout(timerRef.current);
       timerRef.current = window.setTimeout(() => {
@@ -99,6 +102,7 @@ export function UiPrefsProvider({ children }: { children: React.ReactNode }) {
               saveThemeId(saved.themeId);
               applyThemeToDocument(saved.themeId);
             }
+            if (saved.fontId) applyFontToDocument(saved.fontId);
           } else {
             setPrefs(server);
           }
@@ -108,6 +112,7 @@ export function UiPrefsProvider({ children }: { children: React.ReactNode }) {
             saveThemeId(server.themeId);
             applyThemeToDocument(server.themeId);
           }
+          if (server.fontId) applyFontToDocument(server.fontId);
         }
       } catch {
         // 保持乐观本地种子

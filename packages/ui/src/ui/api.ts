@@ -90,6 +90,32 @@ export async function importBookTxt(file: File) {
   };
 }
 
+export type FontPresetDto = { id: string; displayName: string };
+export type CustomFontDto = {
+  id: string;
+  displayName: string;
+  originalName: string;
+  mime: string;
+  relativePath: string;
+  uploadedAt: string;
+};
+
+export async function listFonts() {
+  return await http<{ presets: FontPresetDto[]; custom: CustomFontDto[] }>("/api/fonts");
+}
+
+export async function uploadFont(file: File) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const res = await fetch(`${API_BASE}/api/fonts`, { method: "POST", body: fd });
+  if (!res.ok) throw new Error(parseHttpError(await res.text()) || `HTTP ${res.status}`);
+  return (await res.json()) as { font: CustomFontDto };
+}
+
+export async function deleteFont(id: string) {
+  return await http<{ ok: true }>(`/api/fonts/${encodeURIComponent(id)}`, { method: "DELETE" });
+}
+
 export async function patchBookSynopsis(bookId: string, synopsis: string) {
   return await http<{ book: BookMeta }>(`/api/books/${encodeURIComponent(bookId)}`, {
     method: "PATCH",

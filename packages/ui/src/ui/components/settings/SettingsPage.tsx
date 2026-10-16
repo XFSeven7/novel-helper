@@ -1,12 +1,13 @@
 import React from "react";
 
-export type SettingsTabId = "models" | "features" | "data" | "shortcuts";
+export type SettingsTabId = "models" | "features" | "appearance" | "data" | "shortcuts";
 
 export function SettingsPage(props: {
   tab: SettingsTabId;
   onTabChange: (t: SettingsTabId) => void;
   modelsPanel: React.ReactNode;
   featuresPanel: React.ReactNode;
+  appearancePanel: React.ReactNode;
   dataDirPanel: React.ReactNode;
   shortcutsPanel: React.ReactNode;
 }) {
@@ -35,6 +36,15 @@ export function SettingsPage(props: {
           <button
             type="button"
             role="tab"
+            className={`browserTab ${props.tab === "appearance" ? "active" : ""}`}
+            aria-selected={props.tab === "appearance"}
+            onClick={() => props.onTabChange("appearance")}
+          >
+            外观
+          </button>
+          <button
+            type="button"
+            role="tab"
             className={`browserTab ${props.tab === "data" ? "active" : ""}`}
             aria-selected={props.tab === "data"}
             onClick={() => props.onTabChange("data")}
@@ -57,9 +67,11 @@ export function SettingsPage(props: {
           ? props.modelsPanel
           : props.tab === "features"
             ? props.featuresPanel
-            : props.tab === "data"
-              ? props.dataDirPanel
-              : props.shortcutsPanel}
+            : props.tab === "appearance"
+              ? props.appearancePanel
+              : props.tab === "data"
+                ? props.dataDirPanel
+                : props.shortcutsPanel}
       </div>
     </div>
   );
