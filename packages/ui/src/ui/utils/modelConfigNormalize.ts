@@ -36,6 +36,24 @@ export function normalizeCustomModelConfig(cfg: ModelConfig): ModelConfig {
   return { ...cfg, baseUrl, testUrl };
 }
 
+function clampRequestTimeoutSec(raw: unknown): number | undefined {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return undefined;
+  const n = Math.floor(raw);
+  if (n <= 0) return undefined;
+  return Math.min(Math.max(n, 30), 3600);
+}
+
 export function normalizeModelConfig(cfg: ModelConfig): ModelConfig {
-  return normalizeCustomModelConfig(cfg);
+  const next = normalizeCustomModelConfig(cfg);
+  if (next.provider !== "ollama" && next.provider !== "lmstudio") {
+    if (next.requestTimeoutSec == null) return next;
+    const { requestTimeoutSec: _drop, ...rest } = next;
+    return rest;
+  }
+  const requestTimeoutSec = clampRequestTimeoutSec(next.requestTimeoutSec);
+  if (requestTimeoutSec == null) {
+    const { requestTimeoutSec: _drop, ...rest } = next;
+    return rest;
+  }
+  return { ...next, requestTimeoutSec };
 }

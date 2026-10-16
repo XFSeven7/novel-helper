@@ -121,7 +121,9 @@ import {
   assertReaderCommentsReady,
   findModelConfig,
   normalizeModelConfigs,
+  parseModelConfigId,
   readFeatureSettings,
+  resolveModelRequestTimeoutMs,
   resolveOrganizeModelId,
   writeFeatureSettings,
   type FeatureSettingsFile
@@ -182,7 +184,19 @@ void migrateBookIds(getDataDir()).catch((e) => {
   console.warn("[migrateBookIds]", e instanceof Error ? e.message : e);
 });
 
-type ModelProviderId = "openai" | "deepseek" | "gemini" | "qwen" | "ollama" | "custom";
+type ModelProviderId =
+  | "openai"
+  | "deepseek"
+  | "gemini"
+  | "qwen"
+  | "ollama"
+  | "lmstudio"
+  | "custom";
+
+/** 本地 OpenAI 兼容服务：不传 reasoning（多数本地后端不支持） */
+function isLocalLlmProvider(provider: string): boolean {
+  return provider === "ollama" || provider === "lmstudio";
+}
 type ModelConfig = {
   id: string;
   label: string;
@@ -191,6 +205,7 @@ type ModelConfig = {
   apiKey: string;
   testUrl: string;
   model?: string;
+  requestTimeoutSec?: number;
   extraHeadersJson?: string;
 };
 
@@ -231,14 +246,26 @@ async function readModelSettings(): Promise<{ configs: ModelConfig[]; activeId: 
 
 async function writeModelSettings(v: { configs: ModelConfig[]; activeId: string | null }) {
   const current = await readFeatureSettings();
-  // 注意：`activeId` 是「全局活动配置」概念；而 `featureModels.organize` 允许用户在功能页选择到具体模型（configId::modelName）。
-  // 若这里强行把 `organize` 覆盖成 `activeId`（通常仅 configId），会导致刷新后回退为配置默认模型。
-  // 仅 patch configs/activeId/organize，features 由 read-merge-write 保留，避免与功能设置保存竞态互覆盖。
+  const idSet = new Set(v.configs.map((c) => c.id));
+  const keepOrActive = (raw: string | null | undefined): string | null => {
+    if (!raw) return null;
+    const configId = parseModelConfigId(raw)?.configId ?? raw;
+    if (idSet.has(configId)) return raw;
+    const active = v.activeId;
+    if (active) {
+      const activeConfigId = parseModelConfigId(active)?.configId ?? active;
+      if (idSet.has(activeConfigId)) return active;
+    }
+    return null;
+  };
+  // 注意：`activeId` 与 `featureModels.organize` 独立；仅在 organize 指向已删除配置时回退到 activeId。
   await writeFeatureSettings({
     configs: v.configs as FeatureSettingsFile["configs"],
     activeId: v.activeId,
     featureModels: {
-      organize: current.featureModels?.organize ?? v.activeId ?? null
+      organize: keepOrActive(current.featureModels?.organize) ?? v.activeId ?? null,
+      readerComments: keepOrActive(current.featureModels?.readerComments),
+      training: keepOrActive(current.featureModels?.training)
     }
   });
 }
@@ -872,7 +899,7 @@ async function callModel(cfg: ModelConfig, prompt: string): Promise<string> {
     return text;
   }
 
-  if (provider === "openai" || provider === "deepseek" || provider === "custom") {
+  if (provider === "openai" || provider === "deepseek" || provider === "custom" || provider === "lmstudio") {
     if (!model) throw new Error("请填写模型名");
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -949,10 +976,10 @@ function createAiSdkModel(cfg: ModelConfig): { model: any; providerOptions: any 
     });
     model = openaiClient(modelName);
     providerOptions = { openai: { reasoningSummary: "detailed" } };
-  } else if (provider === "deepseek" || provider === "custom") {
+  } else if (provider === "deepseek" || provider === "custom" || provider === "lmstudio") {
     const client = createOpenAICompatible({
       name: provider,
-      apiKey: cfg.apiKey?.trim() || undefined,
+      apiKey: cfg.apiKey?.trim() || (provider === "lmstudio" ? "lm-studio" : undefined),
       baseURL: normalizeBaseUrlForOpenAICompatible(cfg.baseUrl)
     } as any);
     model = (client as any)(modelName);
@@ -981,7 +1008,7 @@ async function generateCharacterCardMarkdownWithAiSdk(input: { cfg: ModelConfig;
     model,
     messages: [{ role: "user", content: prompt }],
     temperature: 0.2,
-    ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
+    ...(isLocalLlmProvider(cfg.provider) ? {} : { reasoning: "medium" as const }),
     providerOptions
   } as any);
   return String(text || "");
@@ -995,7 +1022,7 @@ async function generateAuditCharacterMergeDraftWithAiSdk(input: { cfg: ModelConf
     model,
     messages: [{ role: "user", content: prompt }],
     temperature: 0.2,
-    ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
+    ...(isLocalLlmProvider(cfg.provider) ? {} : { reasoning: "medium" as const }),
     providerOptions
   } as any);
   const jsonText = stripJsonFence(String(text || ""));
@@ -1029,7 +1056,7 @@ async function streamThinkingTraceWithAiSdk(input: {
       model,
       // 用 messages 走 chat/completions 流式；Ollama 的流式输出更稳定
       messages: [{ role: "user", content: prompt }],
-      ...(cfg.provider === "ollama" ? {} : { reasoning: "high" as const }),
+      ...(isLocalLlmProvider(cfg.provider) ? {} : { reasoning: "high" as const }),
       providerOptions,
       abortSignal: controller.signal
     } as any);
@@ -1144,8 +1171,8 @@ async function generateAuditJsonWithAiSdk(input: {
   );
 
   const controller = new AbortController();
-  // 章节审计 prompt 可能很长，且不同本地/云模型速度差异很大：放宽超时，避免频繁 AbortError。
-  const timeoutMs = 180_000;
+  // 章节审计 prompt 可能很长；本地模型用配置/默认超时（默认 10 分钟），云端仍 180s。
+  const timeoutMs = resolveModelRequestTimeoutMs(cfg, 180_000);
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   let text: string | undefined = "";
   try {
@@ -1153,7 +1180,7 @@ async function generateAuditJsonWithAiSdk(input: {
       model,
       messages: [{ role: "user", content: prompt }],
       temperature: 0.2,
-      ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
+      ...(isLocalLlmProvider(cfg.provider) ? {} : { reasoning: "medium" as const }),
       providerOptions,
       abortSignal: controller.signal
     } as any);
@@ -1194,7 +1221,7 @@ async function generateTimelineUpdateWithAiSdk(input: { cfg: ModelConfig; prompt
     model,
     messages: [{ role: "user", content: prompt }],
     temperature: 0.2,
-    ...(cfg.provider === "ollama" ? {} : { reasoning: "low" as const }),
+    ...(isLocalLlmProvider(cfg.provider) ? {} : { reasoning: "low" as const }),
     providerOptions
   } as any);
   const jsonText = stripJsonFence(text || "");
@@ -1442,7 +1469,7 @@ async function updateProgressIndexAfterAudit(input: { cfg: ModelConfig; slug: st
     model,
     messages: [{ role: "user", content: prompt }],
     temperature: 0.2,
-    ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
+    ...(isLocalLlmProvider(cfg.provider) ? {} : { reasoning: "medium" as const }),
     providerOptions
   } as any);
 
@@ -1619,11 +1646,12 @@ app.put("/api/settings/model-configs", async (req) => {
         z.object({
           id: z.string().min(1),
           label: z.string().min(1),
-          provider: z.enum(["openai", "deepseek", "gemini", "qwen", "ollama", "custom"]),
+          provider: z.enum(["openai", "deepseek", "gemini", "qwen", "ollama", "lmstudio", "custom"]),
           baseUrl: z.string(),
           apiKey: z.string(),
           testUrl: z.string(),
           model: z.string().optional(),
+          requestTimeoutSec: z.number().optional(),
           extraHeadersJson: z.string().optional(),
           lastTestOk: z.boolean().optional(),
           lastModels: z.array(z.string()).optional()
@@ -1637,6 +1665,30 @@ app.put("/api/settings/model-configs", async (req) => {
     activeId: body.activeId
   });
   return { ok: true };
+});
+
+/** 浏览器测连接会撞 CORS（如 LM Studio）；改由服务端代发 */
+app.post("/api/settings/model-configs/probe", async (req) => {
+  const bodySchema = z.object({
+    testUrl: z.string().min(1),
+    headers: z.record(z.string()).optional()
+  });
+  const body = bodySchema.parse((req as any).body);
+  let url: URL;
+  try {
+    url = new URL(body.testUrl);
+  } catch {
+    throw new Error("测试地址不是合法 URL");
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    throw new Error("测试地址仅支持 http/https");
+  }
+  const res = await fetch(url.toString(), {
+    method: "GET",
+    headers: body.headers || {}
+  });
+  const text = await res.text().catch(() => "");
+  return { status: res.status, text: text.slice(0, 200_000) };
 });
 
 app.get("/api/settings/model-benchmark/history", async (req) => {
@@ -3305,7 +3357,7 @@ app.post("/api/books/:bookId/audit/places/merge/preview", async (req, reply) => 
       model,
       messages: [{ role: "user", content: prompt }],
       temperature: 0.2,
-      ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
+      ...(isLocalLlmProvider(cfg.provider) ? {} : { reasoning: "medium" as const }),
       providerOptions
     } as any);
     const parsed = JSON.parse(stripJsonFence(String(text || "")));
@@ -3691,7 +3743,7 @@ app.post("/api/books/:bookId/writing-pack/generate", async (req, reply) => {
       model,
       messages: [{ role: "user", content: prompt }],
       temperature: 0.2,
-      ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
+      ...(isLocalLlmProvider(cfg.provider) ? {} : { reasoning: "medium" as const }),
       providerOptions
     } as any);
 
@@ -3777,7 +3829,7 @@ app.post("/api/books/:bookId/chapters/:filename/title/suggest", async (req, repl
       model,
       messages: [{ role: "user", content: prompt }],
       temperature: 0.6,
-      ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
+      ...(isLocalLlmProvider(cfg.provider) ? {} : { reasoning: "medium" as const }),
       providerOptions
     } as any);
     const parsed = JSON.parse(stripJsonFence(String(text || "")));
@@ -3850,7 +3902,7 @@ app.post("/api/books/:bookId/chapters/:filename/title/suggest/batch", async (req
         model,
         messages: [{ role: "user", content: prompt }],
         temperature: 0.7,
-        ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
+        ...(isLocalLlmProvider(cfg.provider) ? {} : { reasoning: "medium" as const }),
         providerOptions
       } as any);
 
@@ -4107,7 +4159,7 @@ app.post("/api/books/:bookId/timeline/compress", async (req, reply) => {
     model,
     messages: [{ role: "user", content: prompt }],
     temperature: 0.2,
-    ...(cfg.provider === "ollama" ? {} : { reasoning: "low" as const }),
+    ...(isLocalLlmProvider(cfg.provider) ? {} : { reasoning: "low" as const }),
     providerOptions
   } as any);
 
@@ -4283,7 +4335,7 @@ app.post("/api/books/:bookId/inspiration/generate", async (req, reply) => {
     model,
     messages: [{ role: "user", content: prompt }],
     temperature: 0.7,
-    ...(cfg.provider === "ollama" ? {} : { reasoning: "low" as const }),
+    ...(isLocalLlmProvider(cfg.provider) ? {} : { reasoning: "low" as const }),
     providerOptions
   } as any);
 
@@ -4415,7 +4467,7 @@ app.post("/api/books/:bookId/inspiration/generate-preview", async (req, reply) =
     model,
     messages: [{ role: "user", content: prompt }],
     temperature: 0.7,
-    ...(cfg.provider === "ollama" ? {} : { reasoning: "low" as const }),
+    ...(isLocalLlmProvider(cfg.provider) ? {} : { reasoning: "low" as const }),
     providerOptions
   } as any);
 
@@ -4522,7 +4574,7 @@ app.post("/api/books/:bookId/inspiration/variant", async (req, reply) => {
     model,
     messages: [{ role: "user", content: prompt }],
     temperature: 0.7,
-    ...(cfg.provider === "ollama" ? {} : { reasoning: "low" as const }),
+    ...(isLocalLlmProvider(cfg.provider) ? {} : { reasoning: "low" as const }),
     providerOptions
   } as any);
 

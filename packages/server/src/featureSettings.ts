@@ -3,7 +3,14 @@ import path from "node:path";
 import { getDataDir } from "./dataDirContext.js";
 import { clampCommentsPerChapterRange } from "./readerPersonas/commentsRange.js";
 
-export type ModelProviderId = "openai" | "deepseek" | "gemini" | "qwen" | "ollama" | "custom";
+export type ModelProviderId =
+  | "openai"
+  | "deepseek"
+  | "gemini"
+  | "qwen"
+  | "ollama"
+  | "lmstudio"
+  | "custom";
 
 export type ModelConfig = {
   id: string;
@@ -13,9 +20,35 @@ export type ModelConfig = {
   apiKey: string;
   testUrl: string;
   model?: string;
+  /** 本地模型请求超时（秒）；章节分析等长任务使用 */
+  requestTimeoutSec?: number;
   extraHeadersJson?: string;
   lastTestOk?: boolean;
 };
+
+const REQUEST_TIMEOUT_SEC_MIN = 30;
+const REQUEST_TIMEOUT_SEC_MAX = 3600;
+const DEFAULT_LOCAL_REQUEST_TIMEOUT_MS = 600_000;
+
+export function clampRequestTimeoutSec(raw: unknown): number | undefined {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return undefined;
+  const n = Math.floor(raw);
+  if (n <= 0) return undefined;
+  return Math.min(Math.max(n, REQUEST_TIMEOUT_SEC_MIN), REQUEST_TIMEOUT_SEC_MAX);
+}
+
+/** 未配置时：本地默认 10 分钟，云端用调用方 fallback */
+export function resolveModelRequestTimeoutMs(
+  cfg: { provider: string; requestTimeoutSec?: number },
+  fallbackMs: number
+): number {
+  const sec = clampRequestTimeoutSec(cfg.requestTimeoutSec);
+  if (sec != null) return sec * 1000;
+  if (cfg.provider === "ollama" || cfg.provider === "lmstudio") {
+    return Math.max(fallbackMs, DEFAULT_LOCAL_REQUEST_TIMEOUT_MS);
+  }
+  return fallbackMs;
+}
 
 export type ReaderCommentsOptions = {
   maxAiCommentsPerChapter: number;
@@ -122,14 +155,18 @@ export async function writeFeatureSettings(patch: Partial<FeatureSettingsFile>):
       ...(patch.readerComments ?? {})
     })
   });
-  if (merged.featureModels?.organize) merged.activeId = merged.featureModels.organize;
+  // ponytail: activeId（全局当前）与 featureModels.organize（内容整理）独立；勿互相同步覆盖
   await fs.mkdir(settingsDir(), { recursive: true });
   await fs.writeFile(settingsPath(), JSON.stringify(merged, null, 2), "utf8");
   return merged;
 }
 
 export function resolveOrganizeModelId(file: FeatureSettingsFile): string | null {
-  return file.featureModels?.organize ?? file.activeId ?? null;
+  const organize = file.featureModels?.organize ?? null;
+  if (organize && findModelConfig(file, organize)) return organize;
+  // ponytail: organize 指向已删配置时回退 activeId，避免静默落到 configs[0]（常为无 key 的 OpenAI）
+  if (file.activeId && findModelConfig(file, file.activeId)) return file.activeId;
+  return file.configs[0]?.id ?? null;
 }
 
 export function resolveReaderCommentsModelId(file: FeatureSettingsFile): string | null {
@@ -214,7 +251,16 @@ export function normalizeCustomModelConfig(cfg: ModelConfig): ModelConfig {
 }
 
 export function normalizeModelConfigs(configs: ModelConfig[]): ModelConfig[] {
-  return configs.map((c) => normalizeCustomModelConfig(c));
+  return configs.map((c) => {
+    const next = normalizeCustomModelConfig(c);
+    const requestTimeoutSec = clampRequestTimeoutSec(next.requestTimeoutSec);
+    if (requestTimeoutSec === next.requestTimeoutSec) return next;
+    if (requestTimeoutSec == null) {
+      const { requestTimeoutSec: _drop, ...rest } = next;
+      return rest;
+    }
+    return { ...next, requestTimeoutSec };
+  });
 }
 
 export function assertReaderCommentsReady(file: FeatureSettingsFile): { cfg: ModelConfig } | { error: string } {

@@ -122,6 +122,7 @@ import {
   clearBookAudit,
   restoreBook,
   putModelConfigs,
+  probeModelTestUrl,
   getFeatureModels,
   putFeatureModels,
   type FeatureModelsResponse,
@@ -3598,8 +3599,9 @@ export function App() {
           return;
         }
       }
-      const res = await fetch(cfg.testUrl, { method: "GET", headers });
-      const text = await res.text().catch(() => "");
+      // ponytail: probe via server — LM Studio etc. block browser CORS
+      const probed = await probeModelTestUrl({ testUrl: cfg.testUrl, headers });
+      const text = probed.text || "";
       let lastModels: string[] | undefined = undefined;
       const parseModelNames = (raw: string): string[] => {
         try {
@@ -3624,7 +3626,11 @@ export function App() {
             prev ? { ...prev, lastModels, baseUrl: cfg.baseUrl, testUrl: cfg.testUrl } : prev
           );
         }
-      } else if (cfg.provider === "custom" || cfg.testUrl.includes("/models")) {
+      } else if (
+        cfg.provider === "custom" ||
+        cfg.provider === "lmstudio" ||
+        cfg.testUrl.includes("/models")
+      ) {
         lastModels = parseModelNames(text);
         if (lastModels.length) {
           setModelEditorDraft((prev) =>
@@ -3632,24 +3638,28 @@ export function App() {
           );
         }
       }
-      const ok = res.status >= 200 && res.status < 300;
-      let statusLine = `HTTP ${res.status}`;
+      const ok = probed.status >= 200 && probed.status < 300;
+      let statusLine = `HTTP ${probed.status}`;
       if (lastModels?.length) {
         statusLine += ` · 共 ${lastModels.length} 个模型（见下方列表，点击可填入模型名）`;
       } else if (text && !ok) {
         statusLine += ` · ${text.slice(0, 200)}`;
       }
-      setModelEditorDraft((prev) => (prev ? { ...prev, lastTestOk: ok, baseUrl: cfg.baseUrl, testUrl: cfg.testUrl } : prev));
-      const nextConfigs = modelConfigs.map((c) =>
-        c.id === cfg.id ? { ...cfg, lastTestOk: ok, lastModels: lastModels ?? c.lastModels } : c
-      );
+      const patched = {
+        ...cfg,
+        lastTestOk: ok,
+        lastModels: lastModels ?? cfg.lastModels,
+        baseUrl: cfg.baseUrl,
+        testUrl: cfg.testUrl
+      };
+      setModelEditorDraft((prev) => (prev ? { ...prev, ...patched } : prev));
+      const nextConfigs = modelConfigs.map((c) => (c.id === cfg.id ? patched : c));
+      const nextActive = ok ? cfg.id : activeModelId;
       setModelState((prev) => ({
-        ...prev,
-        configs: prev.configs.map((c) =>
-          c.id === cfg.id ? { ...c, lastTestOk: ok, lastModels: lastModels ?? c.lastModels } : c
-        )
+        configs: prev.configs.map((c) => (c.id === cfg.id ? patched : c)),
+        activeId: ok ? cfg.id : prev.activeId
       }));
-      void putModelConfigs({ configs: nextConfigs as any, activeId: activeModelId ?? null }).catch(() => {});
+      void putModelConfigs({ configs: nextConfigs as any, activeId: nextActive ?? null }).catch(() => {});
       setModelTestStatus(statusLine);
     } catch (e: any) {
       setModelTestStatus(e?.message || String(e));

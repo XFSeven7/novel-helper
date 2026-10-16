@@ -238,7 +238,7 @@ export async function runOutlineAi(input: {
     model,
     messages: [{ role: "user", content: prompt }],
     temperature: mode === "snowflake" ? 0.45 : 0.25,
-    ...(cfg.provider === "ollama" ? {} : { reasoning: "medium" as const }),
+    ...(cfg.provider === "ollama" || cfg.provider === "lmstudio" ? {} : { reasoning: "medium" as const }),
     providerOptions
   } as any);
 

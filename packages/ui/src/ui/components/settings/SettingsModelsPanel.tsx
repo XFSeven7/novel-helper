@@ -197,21 +197,33 @@ export function SettingsModelsPanel(props: SettingsModelsPanelProps) {
             <input
               value={modelEditorDraft.apiKey}
               onChange={(e) => setModelEditorDraft({ ...modelEditorDraft, apiKey: e.target.value })}
-              placeholder="可留空(如 Ollama)"
+              placeholder="可留空(如 Ollama / LM Studio)"
               disabled={busy}
             />
           </div>
-          {modelEditorDraft.provider === "custom" ? (
+          {modelEditorDraft.provider === "custom" ||
+          modelEditorDraft.provider === "ollama" ||
+          modelEditorDraft.provider === "lmstudio" ? (
             <div className="modelField">
               <div className="navSubtitle">API 基址</div>
               <input
                 value={modelEditorDraft.baseUrl}
                 onChange={(e) => setModelEditorDraft({ ...modelEditorDraft, baseUrl: e.target.value })}
-                placeholder="例如 https://openrouter.ai/api/v1"
+                placeholder={
+                  modelEditorDraft.provider === "lmstudio"
+                    ? "例如 http://127.0.0.1:1234/v1"
+                    : modelEditorDraft.provider === "ollama"
+                      ? "例如 http://127.0.0.1:11434"
+                      : "例如 https://openrouter.ai/api/v1"
+                }
                 disabled={busy}
               />
               <p className="muted settingsFeatureInlineDesc" style={{ marginTop: 6 }}>
-                实际调用地址；OpenRouter 等 OpenAI 兼容网关填到 /v1 即可。
+                {modelEditorDraft.provider === "lmstudio"
+                  ? "LM Studio 需先 Local Server 启动；默认端口 1234，OpenAI 兼容填到 /v1。"
+                  : modelEditorDraft.provider === "ollama"
+                    ? "Ollama 本地地址（不含路径）；对话走其 OpenAI 兼容 /v1。"
+                    : "实际调用地址；OpenRouter 等 OpenAI 兼容网关填到 /v1 即可。"}
               </p>
             </div>
           ) : null}
@@ -241,6 +253,35 @@ export function SettingsModelsPanel(props: SettingsModelsPanelProps) {
               disabled={busy}
             />
           </div>
+          {modelEditorDraft.provider === "ollama" || modelEditorDraft.provider === "lmstudio" ? (
+            <div className="modelField">
+              <div className="navSubtitle">请求超时（秒）</div>
+              <input
+                type="number"
+                min={30}
+                max={3600}
+                step={30}
+                value={modelEditorDraft.requestTimeoutSec ?? ""}
+                onChange={(e) => {
+                  const raw = e.target.value.trim();
+                  if (!raw) {
+                    setModelEditorDraft({ ...modelEditorDraft, requestTimeoutSec: undefined });
+                    return;
+                  }
+                  const n = Number(raw);
+                  setModelEditorDraft({
+                    ...modelEditorDraft,
+                    requestTimeoutSec: Number.isFinite(n) ? n : undefined
+                  });
+                }}
+                placeholder="600"
+                disabled={busy}
+              />
+              <p className="muted settingsFeatureInlineDesc" style={{ marginTop: 6 }}>
+                章节分析等长任务超时；本地默认 600 秒（10 分钟），范围 30–3600。
+              </p>
+            </div>
+          ) : null}
           {modelEditorDraft.provider === "custom" ? (
             <div className="modelField">
               <div className="navSubtitle">额外 Headers(JSON,可选)</div>
@@ -295,9 +336,9 @@ export function SettingsModelsPanel(props: SettingsModelsPanelProps) {
             {BUILTIN_MODEL_PROVIDERS_NO_CUSTOM.map((p) => {
               const c = modelConfigs.find((x) => x.provider === p.id) ?? defaultConfigFor(p.id);
               const configured =
-                p.id === "ollama"
+                p.id === "ollama" || p.id === "lmstudio"
                   ? Boolean(c.baseUrl?.trim())
-                    : Boolean(c.apiKey?.trim());
+                  : Boolean(c.apiKey?.trim());
               const statusText = c.lastTestOk ? "已连接" : configured ? "已配置" : "未配置";
               return (
                 <button

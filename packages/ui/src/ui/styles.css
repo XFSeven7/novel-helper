@@ -3933,16 +3933,25 @@ code {
 
 .contentOrganizeHeader {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
   margin-bottom: 10px;
+  min-width: 0;
 }
 
 .contentOrganizeTitle {
   margin-bottom: 0 !important;
-  flex: 1;
   min-width: 0;
+}
+
+.contentOrganizeHeader .organizeModelHint {
+  margin-bottom: 0;
+  text-align: left;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  overflow-wrap: anywhere;
 }
 
 .timelinePanel {

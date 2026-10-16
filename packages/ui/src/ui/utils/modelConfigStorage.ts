@@ -7,6 +7,7 @@ export const BUILTIN_MODEL_PROVIDERS: Array<{ id: ModelProviderId; label: string
   { id: "gemini", label: "Gemini" },
   { id: "qwen", label: "千问(通义千问)" },
   { id: "ollama", label: "Ollama(本地)" },
+  { id: "lmstudio", label: "LM Studio(本地)" },
   { id: "custom", label: "自定义服务" }
 ];
 
@@ -62,7 +63,19 @@ export function defaultConfigFor(provider: ModelProviderId): ModelConfig {
       baseUrl: "http://127.0.0.1:11434",
       apiKey: "",
       testUrl: "http://127.0.0.1:11434/api/tags",
-      model: ""
+      model: "",
+      requestTimeoutSec: 600
+    };
+  if (provider === "lmstudio")
+    return {
+      id,
+      label: "LM Studio(本地)",
+      provider,
+      baseUrl: "http://127.0.0.1:1234/v1",
+      apiKey: "",
+      testUrl: "http://127.0.0.1:1234/v1/models",
+      model: "",
+      requestTimeoutSec: 600
     };
   return {
     id,

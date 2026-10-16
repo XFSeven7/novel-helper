@@ -213,7 +213,14 @@ export async function deleteChapter(bookId: string, filename: string) {
   );
 }
 
-export type ModelProviderId = "openai" | "deepseek" | "gemini" | "qwen" | "ollama" | "custom";
+export type ModelProviderId =
+  | "openai"
+  | "deepseek"
+  | "gemini"
+  | "qwen"
+  | "ollama"
+  | "lmstudio"
+  | "custom";
 export type ModelConfig = {
   id: string;
   label: string;
@@ -222,6 +229,8 @@ export type ModelConfig = {
   apiKey: string;
   testUrl: string;
   model?: string;
+  /** 本地模型请求超时（秒）；章节分析等长任务使用 */
+  requestTimeoutSec?: number;
   extraHeadersJson?: string;
   lastTestOk?: boolean;
   lastModels?: string[];
@@ -231,6 +240,14 @@ export async function putModelConfigs(input: { configs: ModelConfig[]; activeId:
   return await http<{ ok: true }>(`/api/settings/model-configs`, {
     method: "PUT",
     body: JSON.stringify({ configs: input.configs, activeId: input.activeId })
+  });
+}
+
+/** 经服务端探测测试地址，避免浏览器 CORS（LM Studio / 部分本地服务） */
+export async function probeModelTestUrl(input: { testUrl: string; headers?: Record<string, string> }) {
+  return await http<{ status: number; text: string }>(`/api/settings/model-configs/probe`, {
+    method: "POST",
+    body: JSON.stringify(input)
   });
 }
 
