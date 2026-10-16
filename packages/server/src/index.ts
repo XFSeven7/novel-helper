@@ -81,6 +81,13 @@ import { pickDataDirectory } from "./nativeFolderPicker.js";
 import { openPathInFileManager } from "./openPathInFileManager.js";
 import { patchUiPrefs, readUiPrefs, type UiPrefsFile } from "./uiPrefs.js";
 import {
+  deleteCustomFont,
+  FONT_PRESETS,
+  listCustomFonts,
+  resolveFontFilePath,
+  saveUploadedFont
+} from "./fontsStore.js";
+import {
   clearDataDirCaches,
   getDataDir,
   initDataDir,
@@ -1783,6 +1790,56 @@ app.patch("/api/settings/ui-prefs", async (req, reply) => {
   } catch (e: any) {
     return reply.code(500).send({ error: e?.message || String(e) });
   }
+});
+
+app.get("/api/fonts", async () => {
+  const custom = await listCustomFonts();
+  return { presets: FONT_PRESETS, custom };
+});
+
+app.post("/api/fonts", async (req, reply) => {
+  const part = await req.file();
+  if (!part) return reply.code(400).send({ message: "缺少 file 字段" });
+  const chunks: Buffer[] = [];
+  for await (const chunk of part.file) chunks.push(chunk);
+  const buf = Buffer.concat(chunks);
+  try {
+    const entry = await saveUploadedFont({
+      originalName: part.filename || "font.ttf",
+      mime: part.mimetype || "application/octet-stream",
+      buf
+    });
+    return { font: entry };
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes("不支持") || msg.includes("过大")) return reply.code(400).send({ message: msg });
+    return reply.code(500).send({ message: msg });
+  }
+});
+
+app.delete("/api/fonts/:id", async (req, reply) => {
+  const params = z.object({ id: z.string().min(1) }).parse((req as any).params);
+  const result = await deleteCustomFont(params.id);
+  if (!result.deleted) return reply.code(404).send({ message: "Not found" });
+  return { ok: true as const };
+});
+
+app.get("/api/fonts/:id/file", async (req, reply) => {
+  const params = z.object({ id: z.string().min(1) }).parse((req as any).params);
+  const resolved = await resolveFontFilePath(params.id);
+  if (!resolved) return reply.code(404).send({ message: "Not found" });
+  const ext = path.extname(resolved.entry.relativePath).toLowerCase();
+  const type =
+    ext === ".woff2"
+      ? "font/woff2"
+      : ext === ".woff"
+        ? "font/woff"
+        : ext === ".otf"
+          ? "font/otf"
+          : "font/ttf";
+  reply.header("Content-Type", type);
+  reply.header("Cache-Control", "public, max-age=31536000, immutable");
+  return reply.send(await fs.readFile(resolved.absPath));
 });
 
 app.put("/api/settings/app", async (req, reply) => {
