@@ -17,13 +17,15 @@ export type FontPreset = { id: string; displayName: string };
 
 export const FONT_PRESETS: FontPreset[] = [
   { id: "system", displayName: "系统默认" },
+  { id: "harmony", displayName: "鸿蒙黑体（近苹方）" },
   { id: "sans", displayName: "无衬线" },
   { id: "serif", displayName: "衬线" },
   { id: "song", displayName: "宋体风格" },
   { id: "kai", displayName: "楷体风格" }
 ];
 
-export const MAX_FONT_BYTES = 8 * 1024 * 1024;
+/** ponytail: CJK 全字重约 8–10MB；略抬上限方便本机上传完整黑体 */
+export const MAX_FONT_BYTES = 12 * 1024 * 1024;
 
 const ALLOWED_EXT = new Set([".ttf", ".otf", ".woff", ".woff2"]);
 

@@ -4,6 +4,9 @@ const FACES_STYLE_ID = "novel-helper-custom-font-faces";
 const SYSTEM_STACK =
   'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"';
 
+const HARMONY_STACK =
+  '"HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif';
+
 const SANS_STACK =
   'system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif';
 
@@ -16,6 +19,7 @@ const KAI_STACK = '"Kaiti SC", KaiTi, "STKaiti", serif';
 
 export const FONT_PRESET_STACKS: Record<string, string> = {
   system: SYSTEM_STACK,
+  harmony: HARMONY_STACK,
   sans: SANS_STACK,
   serif: SERIF_STACK,
   song: SONG_STACK,

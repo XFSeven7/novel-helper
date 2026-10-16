@@ -10,6 +10,7 @@ const {
 describe("fontStorage", () => {
   it("resolves presets", () => {
     expect(resolveFontFamily("system")).toContain("system-ui");
+    expect(resolveFontFamily("harmony")).toContain("HarmonyOS Sans SC");
     expect(resolveFontFamily("serif")).toContain("ui-serif");
     expect(resolveFontFamily("song")).toMatch(/SimSun|Songti/i);
   });
