@@ -36,6 +36,7 @@ export type UiPrefsFile = {
   bookShelfSortDesc?: boolean;
   chapterSortDesc?: boolean;
   themeId?: string;
+  fontId?: string;
   shelfTab?: string;
   mobileFontPx?: number;
   mobilePhoneW?: number;
@@ -180,6 +181,12 @@ export function normalizeUiPrefs(raw: unknown): UiPrefsFile {
     bookShelfSortDesc: asBool(o.bookShelfSortDesc),
     chapterSortDesc: asBool(o.chapterSortDesc),
     themeId: asString(o.themeId),
+    fontId: (() => {
+      const s = asString(o.fontId);
+      if (!s) return undefined;
+      const t = s.trim();
+      return t.length ? t : undefined;
+    })(),
     shelfTab: asString(o.shelfTab),
     mobileFontPx: fontPx === undefined ? undefined : clamp(fontPx, 14, 28),
     mobilePhoneW: phoneW === undefined ? undefined : clamp(phoneW, 280, 720),

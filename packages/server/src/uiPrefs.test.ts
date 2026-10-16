@@ -76,4 +76,15 @@ describe("uiPrefs", () => {
     expect(again.themeId).toBe("forest");
     expect(isUiPrefsEmpty(again)).toBe(false);
   });
+
+  it("patchUiPrefs persists fontId", async () => {
+    await patchUiPrefs({ fontId: "serif" });
+    const again = await readUiPrefs();
+    expect(again.fontId).toBe("serif");
+  });
+
+  it("normalize drops empty fontId", () => {
+    const next = mergeUiPrefs({ version: 1 }, { fontId: "  " as any });
+    expect(next.fontId).toBeUndefined();
+  });
 });

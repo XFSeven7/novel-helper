@@ -32,6 +32,7 @@ export type UiPrefsFile = {
   bookShelfSortDesc?: boolean;
   chapterSortDesc?: boolean;
   themeId?: string;
+  fontId?: string;
   shelfTab?: string;
   mobileFontPx?: number;
   mobilePhoneW?: number;
