@@ -8,8 +8,8 @@ import {
 } from "../../api";
 import { useUiPrefField } from "../../uiPrefs/UiPrefsContext";
 import {
-  applyFontToDocument,
   customFontIdFromFontId,
+  ensureCustomFontFaces,
   resolveFontFamily
 } from "../../utils/fontStorage";
 
@@ -45,6 +45,7 @@ export function SettingsAppearancePanel() {
   async function refresh() {
     const result = await listFonts();
     setPresets(result.presets);
+    ensureCustomFontFaces(result.custom.map((font) => font.id));
     setCustom(result.custom);
   }
 
@@ -52,13 +53,8 @@ export function SettingsAppearancePanel() {
     void refresh().catch((e) => setStatus(formatErr(e)));
   }, []);
 
-  useEffect(() => {
-    applyFontToDocument(fontId || "system");
-  }, [fontId]);
-
   function selectFont(id: string) {
     setFontId(id);
-    applyFontToDocument(id);
   }
 
   async function onUpload(file: File) {

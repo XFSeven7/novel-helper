@@ -1,4 +1,5 @@
 const STYLE_ID = "novel-helper-custom-font";
+const FACES_STYLE_ID = "novel-helper-custom-font-faces";
 
 const SYSTEM_STACK =
   'ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"';
@@ -43,6 +44,21 @@ function apiBase(): string {
 
 export function fontFileUrl(id: string): string {
   return `${apiBase()}/api/fonts/${encodeURIComponent(id)}/file`;
+}
+
+export function ensureCustomFontFaces(ids: string[]): void {
+  let styleEl = document.getElementById(FACES_STYLE_ID) as HTMLStyleElement | null;
+  if (!styleEl) {
+    styleEl = document.createElement("style");
+    styleEl.id = FACES_STYLE_ID;
+    document.head.appendChild(styleEl);
+  }
+  styleEl.textContent = [...new Set(ids.filter(Boolean))]
+    .map((id) => {
+      const family = customFontFamilyName(id);
+      return `@font-face{font-family:"${family}";src:url("${fontFileUrl(id)}");font-display:swap;}`;
+    })
+    .join("\n");
 }
 
 export function applyFontToDocument(fontId: string): void {
