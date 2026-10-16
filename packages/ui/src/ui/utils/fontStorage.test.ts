@@ -11,6 +11,9 @@ describe("fontStorage", () => {
   it("resolves presets", () => {
     expect(resolveFontFamily("system")).toContain("system-ui");
     expect(resolveFontFamily("harmony")).toContain("HarmonyOS Sans SC");
+    expect(resolveFontFamily("sourceHan")).toContain("Source Han Sans SC");
+    expect(resolveFontFamily("noto")).toContain("Noto Sans SC");
+    expect(resolveFontFamily("yahei")).toContain("Microsoft YaHei");
     expect(resolveFontFamily("serif")).toContain("ui-serif");
     expect(resolveFontFamily("song")).toMatch(/SimSun|Songti/i);
   });

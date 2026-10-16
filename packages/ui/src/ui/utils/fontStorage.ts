@@ -7,6 +7,14 @@ const SYSTEM_STACK =
 const HARMONY_STACK =
   '"HarmonyOS Sans SC", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif';
 
+const SOURCE_HAN_STACK =
+  '"Source Han Sans SC", "Source Han Sans CN", "Noto Sans CJK SC", "Noto Sans SC", "Microsoft YaHei", sans-serif';
+
+const NOTO_STACK =
+  '"Noto Sans SC", "Noto Sans CJK SC", "Source Han Sans SC", "Microsoft YaHei", sans-serif';
+
+const YAHEI_STACK = '"Microsoft YaHei", "微软雅黑", "PingFang SC", "Noto Sans SC", sans-serif';
+
 const SANS_STACK =
   'system-ui, -apple-system, "PingFang SC", "Microsoft YaHei", "Noto Sans SC", sans-serif';
 
@@ -20,6 +28,9 @@ const KAI_STACK = '"Kaiti SC", KaiTi, "STKaiti", serif';
 export const FONT_PRESET_STACKS: Record<string, string> = {
   system: SYSTEM_STACK,
   harmony: HARMONY_STACK,
+  sourceHan: SOURCE_HAN_STACK,
+  noto: NOTO_STACK,
+  yahei: YAHEI_STACK,
   sans: SANS_STACK,
   serif: SERIF_STACK,
   song: SONG_STACK,
