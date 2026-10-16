@@ -3586,8 +3586,16 @@ code {
   word-wrap: break-word;
   border: none;
   background: transparent;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-    monospace;
+  /* ponytail: 与正文 textarea 同栈，否则查找高亮错位；跟外观字体 */
+  font-family: var(
+    --app-font-family,
+    ui-serif,
+    "PingFang SC",
+    "Noto Serif SC",
+    "Songti SC",
+    "Source Han Serif SC",
+    serif
+  );
   font-size: 14px;
   line-height: 1.6;
   padding: 14px;
@@ -6596,8 +6604,15 @@ textarea:not(.mobileTextarea):not(.bookOverviewSynopsis):not(.modalTextarea):not
   outline: none;
   color: var(--text);
   background: transparent;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
-    monospace;
+  font-family: var(
+    --app-font-family,
+    ui-serif,
+    "PingFang SC",
+    "Noto Serif SC",
+    "Songti SC",
+    "Source Han Serif SC",
+    serif
+  );
 }
 
 /* 弹窗表单控件：须在章节编辑器 textarea 规则之后，避免 border 被覆盖 */
