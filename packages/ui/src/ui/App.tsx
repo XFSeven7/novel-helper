@@ -390,6 +390,7 @@ export function App() {
   >("boom");
 
   const chapterTitleInputRef = useRef<HTMLInputElement>(null);
+  const chapterTitleClickTimerRef = useRef<number | null>(null);
 
   const loadInspiration = useCallback(
     async (bookSlug: string) => {
@@ -4280,7 +4281,29 @@ export function App() {
                   <>
                     <div
                       className={`centerTitle ${canRenameChapterFilename ? "centerTitleEditable" : ""}`}
+                      onClick={() => {
+                        // ponytail: 展示是 id；复制只要纯标题，剥「0001_」「第N章 」前缀
+                        const id = selectedChapterMeta.id.trim();
+                        const m = id.match(/^\d+_(.+)$/);
+                        let name = (m ? m[1] : selectedChapterMeta.title || id).trim();
+                        name = name.replace(/^第\s*\d+\s*章\s+/, "").trim();
+                        if (!name) return;
+                        if (chapterTitleClickTimerRef.current != null) {
+                          window.clearTimeout(chapterTitleClickTimerRef.current);
+                        }
+                        chapterTitleClickTimerRef.current = window.setTimeout(() => {
+                          chapterTitleClickTimerRef.current = null;
+                          void navigator.clipboard.writeText(name).then(
+                            () => setStatus("已复制章节名。"),
+                            () => setStatus("复制章节名失败。")
+                          );
+                        }, canRenameChapterFilename ? 320 : 0);
+                      }}
                       onDoubleClick={() => {
+                        if (chapterTitleClickTimerRef.current != null) {
+                          window.clearTimeout(chapterTitleClickTimerRef.current);
+                          chapterTitleClickTimerRef.current = null;
+                        }
                         if (!canRenameChapterFilename || !selectedChapterMeta || busy) return;
                         setChapterRenameDraft(selectedChapterMeta.title);
                         setChapterTitleEditing(true);
@@ -4290,7 +4313,9 @@ export function App() {
                         });
                       }}
                       title={
-                        canRenameChapterFilename ? "双击修改标题(回车确认,Esc 取消)" : undefined
+                        canRenameChapterFilename
+                          ? "单击复制章节名，双击修改标题(回车确认,Esc 取消)"
+                          : "单击复制章节名"
                       }
                     >
                       {selectedChapterMeta.id}

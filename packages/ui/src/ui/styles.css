@@ -2859,7 +2859,7 @@ code {
 }
 
 .centerTitleEditable {
-  cursor: text;
+  cursor: pointer;
 }
 
 .titleAutosave {
